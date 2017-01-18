@@ -2,19 +2,15 @@
 
 ###########################################################################################
 #                                                                                         #
-#  ffs-Monitoring.py                                                                      #
+#  class_ffMeshNet.py                                                                     #
 #                                                                                         #
-#  Segment-Assignment of Nodes is monitored and corrected automatically if neccessary.    #
+#  Combining and analysing Data from Nodes and Gateways to find Mesh-Clouds.              #
 #                                                                                         #
 #                                                                                         #
-#  Needed json-Files:                                                                     #
+#  Needed Python Classes:                                                                 #
 #                                                                                         #
-#       raw.json             -> Node Names and Information                                #
-#       nodesdb.json         -> Region = Segment                                          #
-#       alfred-json-158.json -> Nodeinfos                                                 #
-#       alfred-json-159.json -> VPN-Uplinks                                               #
-#       alfred-json-160.json -> Neighbors                                                 #
-#       fastd-clean.json     -> fastd-Keys (live Data)                                    #
+#      class_ffNodeInfo     -> Node Names and Information                                 #
+#      class_ffGatewayInfo  -> Keys and Segment Information                               #
 #                                                                                         #
 ###########################################################################################
 
@@ -332,12 +328,12 @@ class ffMeshNet:
                 else:
                     if len(ActiveSegDict) == 0:
                         print('!! No VPN Uplink:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                        
+
                     if len(FixedSegList) == 0:
                         self.__HandleGeoLocation(CloudID,ActiveSegDict,DesiredSegDict)
                     else:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                        
+
         print('... done.')
         print()
         return
@@ -602,4 +598,3 @@ class ffMeshNet:
         NeighborOutFile.close()
         print()
         return
-

@@ -2,19 +2,14 @@
 
 ###########################################################################################
 #                                                                                         #
-#  ffs-Monitoring.py                                                                      #
+#  class_ffGatewayInfo.py                                                                 #
 #                                                                                         #
-#  Segment-Assignment of Nodes is monitored and corrected automatically if neccessary.    #
+#  Analyse fastd-Keys from Git and fastd-Status-Info from Gateways.                       #
 #                                                                                         #
 #                                                                                         #
 #  Needed json-Files:                                                                     #
 #                                                                                         #
-#       raw.json             -> Node Names and Information                                #
-#       nodesdb.json         -> Region = Segment                                          #
-#       alfred-json-158.json -> Nodeinfos                                                 #
-#       alfred-json-159.json -> VPN-Uplinks                                               #
-#       alfred-json-160.json -> Neighbors                                                 #
-#       fastd-clean.json     -> fastd-Keys (live Data)                                    #
+#       fastd/vpn??.json     -> fastd-Keys (live Data) from Gateways                      #
 #                                                                                         #
 ###########################################################################################
 
@@ -58,7 +53,7 @@ class ffGatewayInfo:
     def __init__(self,GitPath):
 
         # public Attributes
-        self.FastdKeyDict = {}        # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
+        self.FastdKeyDict = {}          # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
 
         # private Attributes
         self.__GitPath = GitPath
@@ -69,6 +64,7 @@ class ffGatewayInfo:
         # Initializations
         self.__LoadKeysFromGit()
         self.__LoadFastdStatusInfos()
+        return
 
 
     #-----------------------------------------------------------------------
@@ -85,7 +81,8 @@ class ffGatewayInfo:
         PeerKey = ''
         SegMode = 'auto'
 
-        PeerInFile = open(self.__GitPath+SegDir+'/peers/'+KeyFileName, 'r', 1, 'utf-8')
+        KeyFilePath = os.path.join(SegDir,'peers',KeyFileName)
+        PeerInFile  = open(os.path.join(self.__GitPath,KeyFilePath), 'r', 1, 'utf-8')
 
         for PeerData in PeerInFile:
             PeerLine = PeerData.rstrip('\n')
@@ -95,9 +92,9 @@ class ffGatewayInfo:
                     PeerMAC = PeerLine[6:23]
                 elif NodeIdTemplate.match(PeerLine[6:18]):
                     PeerMAC = PeerLine[6:8] + ':' + PeerLine[8:10] + ':' + PeerLine[10:12] + ':' + PeerLine[12:14] + ':' + PeerLine[14:16] + ':' + PeerLine[16:18]
-                    print('++ Peer MAC invalid Format:', SegDir + '/peers/' + KeyFileName, '=', PeerMAC)
+                    print('++ Peer MAC invalid Format:', KeyFilePath, '=', PeerMAC)
                 else:
-                    print('++ Peer MAC invalid contents:', SegDir + '/peers/' + KeyFileName, '=', PeerLine)
+                    print('++ Peer MAC invalid contents:', KeyFilePath, '=', PeerLine)
             elif PeerLine[:11].lower() == '#hostname: ':
                 PeerName = PeerLine[11:]
             elif PeerLine[:10].lower() == '#segment: ':
@@ -108,7 +105,7 @@ class ffGatewayInfo:
         PeerInFile.close()
 
         if not FastdKeyTemplate.match(PeerKey):
-            print('++ Invalid PeerKey:', SegDir + '/peers/' + KeyFileName, '=', PeerKey, PeerMAC, PeerName.encode('utf-8'))
+            print('++ Invalid PeerKey:', KeyFilePath, '=', PeerKey, PeerMAC, PeerName.encode('utf-8'))
             return
 
         PeerFileMAC = ''
@@ -122,21 +119,21 @@ class ffGatewayInfo:
             if MacAdrTemplate.match(PeerName):
                 PeerMAC = PeerName
                 PeerName = ''
-                print('++ PeerHostName is PeerMAC:', SegDir + '/peers/' + KeyFileName, '=', PeerMAC, PeerName)
+                print('++ PeerHostName is PeerMAC:', KeyFilePath, '=', PeerMAC, PeerName)
             elif PeerTemplate1.match(PeerName):
                 PeerMAC = PeerName[4:6] + ':' + PeerName[6:8] + ':' + PeerName[8:10] + ':' + PeerName[10:12] + ':' + PeerName[12:14] + ':' + PeerName[14:16]
                 if PeerFileMAC != '' and PeerMAC != PeerFileMAC:
-                    print('++ MAC of KeyFileName doesn\'t match Hostname #1:', SegDir + '/peers/' + KeyFileName, '=', PeerMAC, PeerName)
+                    print('++ MAC of KeyFileName doesn\'t match Hostname \#1:', KeyFilePath, '=', PeerMAC, PeerName)
             elif PeerTemplate2.match(PeerName):
                 PeerMAC = PeerName[3:5] + ':' + PeerName[5:7] + ':' + PeerName[7:9] + ':' + PeerName[9:11] + ':' + PeerName[11:13] + ':' + PeerName[13:15]
                 if PeerFileMAC != '' and PeerMAC != PeerFileMAC:
-                    print('++ MAC of KeyFileName doesn\'t match Hostname #2:', SegDir + '/peers/' + KeyFileName, '=', PeerMAC, PeerName)
+                    print('++ MAC of KeyFileName doesn\'t match Hostname \#2:', KeyFilePath, '=', PeerMAC, PeerName)
             elif PeerFileMAC != '':
                 PeerMAC = PeerFileMAC
             else:
-                print('++ No PeerMAC found:', SegDir + '/peers/' + KeyFileName)
+                print('++ No PeerMAC found:', KeyFilePath)
         elif PeerFileMAC != '' and PeerFileMAC != PeerMAC:
-            print('++ KeyFileName doesn\'t match PeerMAC:', SegDir + '/peers/' + KeyFileName, '=', PeerMAC, PeerName)
+            print('++ KeyFileName doesn\'t match PeerMAC:', KeyFilePath, '=', PeerMAC, PeerName)
 
         if KeyFileName in self.FastdKeyDict:
             print('!! Duplicate KeyFile:',KeyFileName,'=',SegDir,'+',self.FastdKeyDict[KeyFileName]['SegDir'])
@@ -189,19 +186,16 @@ class ffGatewayInfo:
 
             if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
                 self.__SegmentList.append(int(SegDir[3:]))
+                VpnPeerPath = os.path.join(SegPath,'peers')
 
-                for VpnTypeDir in os.listdir(SegPath):
-                    VpnTypePath = os.path.join(SegPath,VpnTypeDir)
+                for KeyFileName in os.listdir(VpnPeerPath):
+                    if not PeerTemplate.match(KeyFileName):
+                        print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName))
 
-                    if os.path.isdir(VpnTypePath) and VpnTypeDir == 'peers':
-                        for KeyFileName in os.listdir(VpnTypePath):
-                            if not PeerTemplate.match(KeyFileName):
-                                print('++ Invalid Key Filename:', SegDir + '/peers/' + KeyFileName)
-
-                            if GwNameTemplate.match(KeyFileName):
-                                print('++ GW in peer folder:', SegDir + '/peers/' + KeyFileName)
-                            else:
-                                self.__LoadKeyFile(SegDir,KeyFileName)
+                    if GwNameTemplate.match(KeyFileName):
+                        print('++ GW in peer folder:',os.path.join(SegDir,'peers',KeyFileName))
+                    else:
+                        self.__LoadKeyFile(SegDir,KeyFileName)
 
         print('... done.')
         print()
@@ -225,9 +219,6 @@ class ffGatewayInfo:
             if FastdPeersDict[PeerKey]['name'] is not None and FastdPeersDict[PeerKey]['connection'] is not None:
 
                 if FastdPeersDict[PeerKey]['name'] in self.FastdKeyDict:
-
-#                    if FastdPeersDict[PeerKey]['name'] == 'ffs-14cc20e7c04e':
-#                        print('***',PeerKey,FastdPeersDict[PeerKey])
 
                     if PeerKey != self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['PeerKey']:
                         print('!! PeerKey mismatch to Git:',FastdPeersDict[PeerKey]['name'],'=',PeerKey,'<>',self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['PeerKey'])

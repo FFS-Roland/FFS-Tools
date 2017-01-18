@@ -2,9 +2,9 @@
 
 ###########################################################################################
 #                                                                                         #
-#  ffs-Monitoring.py                                                                      #
+#  class_ffNodeInfo.py                                                                    #
 #                                                                                         #
-#  Segment-Assignment of Nodes is monitored and corrected automatically if neccessary.    #
+#  Loading and analysing Data of all Nodes.                                               #
 #                                                                                         #
 #                                                                                         #
 #  Needed json-Files:                                                                     #
@@ -14,7 +14,6 @@
 #       alfred-json-158.json -> Nodeinfos                                                 #
 #       alfred-json-159.json -> VPN-Uplinks                                               #
 #       alfred-json-160.json -> Neighbors                                                 #
-#       fastd-clean.json     -> fastd-Keys (live Data)                                    #
 #                                                                                         #
 ###########################################################################################
 
@@ -216,7 +215,7 @@ class ffNodeInfo:
             GluonMacList = self.__GenerateGluonMACsNew(MainMAC)
 
             knownMAC = False
-            
+
             for NewMAC in GluonMacList:
                 if NewMAC in self.MAC2NodeIDDict:
                     knownMAC = True
@@ -749,7 +748,7 @@ class ffNodeInfo:
             if MacAdrTemplate.match(ffNode['VpnMAC']):
                 if ffNode['VpnMAC'] in self.MAC2NodeIDDict:
                     ffNode['PeerMAC'] = self.MAC2NodeIDDict[ffNode['VpnMAC']]
-            
+
         if MacAdrTemplate.match(ffNode['PeerMAC']):
             if not ffNode['PeerMAC'] in self.ffNodeDict:
 
