@@ -20,7 +20,7 @@ import time
 import datetime
 import json
 import re
-import hashlib
+import dns.resolver
 
 from class_ffNodeInfo import *
 from class_ffGatewayInfo import *
@@ -381,6 +381,30 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
+    # private function "GetSegFromDNS"
+    #
+    #
+    #-----------------------------------------------------------------------
+    def __GetSegFromDNS(self,DnsNodeID,DnsResolver):
+
+        Hostname = DnsNodeID + '.segassign.freifunk-stuttgart.de.'
+        SegFromDNS = None
+
+        try:
+            DnsAnswer = DnsResolver.query(Hostname,'aaaa')
+
+            for IPv6 in DnsAnswer:
+                if IPv6.to_text()[:14] == '2001:2:0:711::':
+                    SegFromDNS = 'vpn'+IPv6.to_text()[14:].zfill(2)
+
+        except:
+            print('++ Error on DNS-Query:',Hostname)
+            exit(1)
+
+        return SegFromDNS
+
+
+    #-----------------------------------------------------------------------
     # private function "CheckConsistency"
     #
     #
@@ -388,6 +412,11 @@ class ffMeshNet:
     def __CheckConsistency(self):
 
         print('Check Consistency of Data ...')
+
+        DnsServer = 'dns1.lihas.de'
+        DnsResolver = dns.resolver.Resolver()
+        DnsIP = DnsResolver.query('%s.' % (DnsServer),'a')[0].to_text()
+        DnsResolver.nameservers = [DnsIP]
 
         ffSegmentList = self.__GwInfos.Segments()
 
@@ -430,6 +459,14 @@ class ffMeshNet:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].lower():
                         print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
                               '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
+
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn00':
+                        SegFromDNS = self.__GetSegFromDNS(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']+'-'+self.__NodeInfos.ffNodeDict[ffNodeMAC]['FastdKey'][:12],DnsResolver)
+
+                        if SegFromDNS is None:
+                            print('++ DNS Entry missing:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+                        elif SegFromDNS != self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir']:
+                            print('++ Segment in DNS <> Git:',ffNodeMAC,SegFromDNS,'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
 
         print('... done.')
         print()
@@ -548,7 +585,7 @@ class ffMeshNet:
                     if self.__NodeInfos.ffNodeDict[ffnb]['Status'] == 'V':
                         TotalUplinks += 1
 
-            NeighborOutFile.write('\n         Total Nodes / Clients / Uplinks = %3d / %3d / %3d\n' % (TotalNodes,TotalClients,TotalUplinks))
+                NeighborOutFile.write('\n         Total Nodes / Clients / Uplinks = %3d / %3d / %3d\n' % (TotalNodes,TotalClients,TotalUplinks))
 
         print('\nWriting out Single Nodes ...')
 
