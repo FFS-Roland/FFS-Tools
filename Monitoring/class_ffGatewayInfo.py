@@ -19,6 +19,7 @@ import time
 import datetime
 import json
 import re
+import fcntl
 
 
 
@@ -44,7 +45,6 @@ FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
 
 
 
-
 class ffGatewayInfo:
 
     #==========================================================================
@@ -65,6 +65,7 @@ class ffGatewayInfo:
         self.__LoadKeysFromGit()
         self.__LoadFastdStatusInfos()
         return
+
 
 
     #-----------------------------------------------------------------------
@@ -342,3 +343,54 @@ class ffGatewayInfo:
     #=========================================================================
     def FastdKeys(self):
         return self.FastdKeyDict
+
+
+    #=========================================================================
+    # Method "WriteFastdDB"
+    #
+    #   Writes FastdDB (json) with Fastd Key <-> MAC
+    #
+    #=========================================================================
+    def WriteFastdDB(self,Path):
+
+        print('Creating Fastd Databases ...')
+
+        Key2MacDict = {}
+        Mac2KeyDict = {}
+
+        for KeyFileName in self.FastdKeyDict:
+            if self.FastdKeyDict[KeyFileName]['PeerKey'] != '':
+                Key2MacDict[self.FastdKeyDict[KeyFileName]['PeerKey']] = {
+                    'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
+                    'KeyFileName':KeyFileName,
+                    'PeerMAC':self.FastdKeyDict[KeyFileName]['PeerMAC']
+                }
+
+            if self.FastdKeyDict[KeyFileName]['PeerMAC'] != '':
+                Mac2KeyDict[self.FastdKeyDict[KeyFileName]['PeerMAC']] = {
+                    'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
+                    'KeyFileName':KeyFileName,
+                    'PeerKey':self.FastdKeyDict[KeyFileName]['PeerKey']
+                }
+
+        try:
+            LockFile = open(os.path.join(Path,'.KeyDB.lock'), mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
+            print('Writing Fastd Databases as json-File ...')
+
+            Key2MacJsonFile = open(os.path.join(Path,'Key2Mac.json'), mode='w')
+            json.dump(Key2MacDict,Key2MacJsonFile)
+            Key2MacJsonFile.close()
+
+            Mac2KeyJsonFile = open(os.path.join(Path,'Mac2Key.json'), mode='w')
+            json.dump(Mac2KeyDict,Mac2KeyJsonFile)
+            Mac2KeyJsonFile.close()
+
+        except:
+            print('\n!! Error on Writing Fastd Databases as json-Files!\n')
+
+        finally:
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
+
+        return

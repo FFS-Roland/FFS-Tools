@@ -10,6 +10,7 @@
 #                                                                                         #
 #       --gitrepo  = Git Repository with KeyFiles                                         #
 #       --logs     = Path to LogFiles                                                     #
+#       --keydb    = Database with fastd-Keys (json Files)                                #
 #                                                                                         #
 #  Needed json-Files:                                                                     #
 #                                                                                         #
@@ -23,12 +24,8 @@
 ###########################################################################################
 
 import os
-import urllib.request
 import time
 import datetime
-import json
-import re
-import hashlib
 import argparse
 
 from class_ffGatewayInfo import *
@@ -72,13 +69,22 @@ RawJsonAccess = {
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
+parser.add_argument('--keydb', dest='KEYDB', action='store', required=False, help='optional Path to KeyDatabase')
 args = parser.parse_args()
 
 
-print('Step 1 = Setup ...')
+print('Setting up basic data ...')
 
 ffsNodes = ffNodeInfo(AlfredURL,RawJsonAccess)
 ffsGWs   = ffGatewayInfo(args.GITREPO)
+
+if not args.KEYDB is None:
+    print('Writing Key Databases ...')
+    ffsGWs.WriteFastdDB(args.KEYDB)
+
+
+print('Setting up Mesh Net Info ...')
+
 ffsNet   = ffMeshNet(ffsNodes,ffsGWs)
 
 

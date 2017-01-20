@@ -15,11 +15,11 @@
 ###########################################################################################
 
 import os
-import urllib.request
+# import urllib.request
 import time
 import datetime
-import json
-import re
+# import json
+# import re
 import dns.resolver
 
 from class_ffNodeInfo import *
