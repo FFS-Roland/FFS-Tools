@@ -3,7 +3,7 @@
 date >> /var/freifunk/logs/establishedkey
 echo start $PEER_KEY >> /var/freifunk/logs/establishedkey
 
-/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman bat00 --peerkey $PEER_KEY --gitrepo /var/freifunk/peers-ffs --blacklist /etc/fastd/$INTERFACE/blacklist
+/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman bat00 --peerkey $PEER_KEY --gitrepo /var/freifunk/peers-ffs --keydb /var/freifunk/KeyDB --blacklist /etc/fastd/$INTERFACE/blacklist
 
 if [ $? != 0 ]; then
     date >> /var/freifunk/logs/establishedkey

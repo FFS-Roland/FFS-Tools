@@ -12,7 +12,32 @@
 #      --batman    = batman-Interface (e.g. bat00)                                        #
 #      --peerkey   = fastd-Key from Peer                                                  #
 #      --gitrepo   = Git Repository with KeyFiles                                         #
+#      --keydb     = Path to Database with fastd Keys and MACs (json files)               #
 #      --blacklist = Folder for Blacklisting Files                                        #
+#                                                                                         #
+###########################################################################################
+#                                                                                         #
+#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  All rights reserved.                                                                   #
+#                                                                                         #
+#  Redistribution and use in source and binary forms, with or without                     #
+#  modification, are permitted provided that the following conditions are met:            #
+#    1. Redistributions of source code must retain the above copyright notice,            #
+#       this list of conditions and the following disclaimer.                             #
+#    2. Redistributions in binary form must reproduce the above copyright notice,         #
+#       this list of conditions and the following disclaimer in the documentation         #
+#       and/or other materials provided with the distribution.                            #
+#                                                                                         #
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"            #
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE              #
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE         #
+#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE           #
+#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL             #
+#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR             #
+#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER             #
+#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,          #
+#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE          #
+#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                   #
 #                                                                                         #
 ###########################################################################################
 
@@ -26,7 +51,18 @@ import socket
 import dns.resolver
 import urllib.request
 import json
+import fcntl
 import argparse
+
+
+
+#-------------------------------------------------------------
+# Global Variables
+#-------------------------------------------------------------
+
+Key2MacDict = {}    # PeerKey -> {'SegDir', 'KeyFileName', 'PeerMAC'}
+Mac2KeyDict = {}    # PeerMAC -> {'SegDir', 'KeyFileName', 'PeerKey'}
+
 
 
 #-----------------------------------------------------------------------
@@ -140,12 +176,12 @@ def getNodeInfos(LLA):
 #
 #-----------------------------------------------------------------------
 def checkDNS(NodeID):
-    SegFromDNS = ''
-#    DnsServer = 'dns1.lihas.de'
+    SegFromDNS = None
+    DnsServer = 'dns1.lihas.de'
     resolver = dns.resolver.Resolver()
-#    server_ip = resolver.query('%s.'%(DnsServer),'a')[0].to_text()
+    server_ip = resolver.query('%s.'%(DnsServer),'a')[0].to_text()
 
-#    resolver.nameservers = [server_ip]
+    resolver.nameservers = [server_ip]
 
     Hostname = NodeID + '.segassign.freifunk-stuttgart.de.'
     print('Hostname =',Hostname)
@@ -155,49 +191,127 @@ def checkDNS(NodeID):
 
         for rec in aaaaRecs:
             if rec.to_text()[:14] == '2001:2:0:711::':
-                SegFromDNS = rec.to_text()[14:].zfill(2)
+                SegFromDNS = 'vpn'+rec.to_text()[14:].zfill(2)
 
     except:
-        SegFromDNS = ''
+        SegFromDNS = None
 
     return SegFromDNS
 
 
 #-----------------------------------------------------------------------
-# function "getBatmanSegment"
+# function "LoadKeyDB"
 #
 #-----------------------------------------------------------------------
-def getBatmanSegment(BatmanIF,FastdIF):
-    Segment = ''
-    Retries = 20
+def LoadKeyDB(Path):
 
     try:
-        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
-        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
-        subprocess.run(['/sbin/ip','link','set',BatmanIF,'up'])
-    except:
-        pass
+        LockFile = open(os.path.join(Path,'.KeyDB.lock'), mode='w+')
+        fcntl.lockf(LockFile,fcntl.LOCK_EX)
+        print('Reading Fastd Databases json-Files ...')
 
-    while(Segment == '' and Retries > 0):
-        Retries -= 1
-        time.sleep(1)
+        Key2MacJsonFile = open(os.path.join(Path,'Key2Mac.json'), mode='r')
+        Key2MacDict = json.load(Key2MacJsonFile)
+        Key2MacJsonFile.close()
+
+        Mac2KeyJsonFile = open(os.path.join(Path,'Mac2Key.json'), mode='r')
+        Mac2KeyDict = json.load(Mac2KeyJsonFile)
+        Mac2KeyJsonFile.close()
+
+    except:
+        print('\n!! Error on Reading Fastd Database json-Files!\n')
+
+    finally:
+        fcntl.lockf(LockFile,fcntl.LOCK_UN)
+        LockFile.close()
+
+    return
+
+
+#-----------------------------------------------------------------------
+# function "getMeshSegment"
+#
+#-----------------------------------------------------------------------
+def getMeshSegment(NodeAddresses,BatmanIF,FastdIF):
+
+    MeshSeg = ''
+
+    for NodeIPv6 in NodeAddresses:
+        if NodeIPv6[0:12] == 'fd21:b4dc:4b':
+            MeshSeg = NodeIPv6[12:14]
+            break
+
+    if MeshSeg == '':   # No usable IPv6 Address on Status Page of Node
+        Retries = 20
 
         try:
-            BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
-            gwl = BatctlGwl.stdout.decode('utf-8')
-
-            for Gateway in gwl.split('\n'):
-                if Gateway[3:10] == '02:00:3':
-                    Segment = Gateway[12:14]
-                    break
-                elif Gateway[3:12] == '02:00:0a:':
-                    Segment = Gateway[15:17]
-                    break
-
+            subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
+            subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
+            subprocess.run(['/sbin/ip','link','set',BatmanIF,'up'])
         except:
-            Segment = ''
+            pass
+
+        while(Segment == '' and Retries > 0):
+            Retries -= 1
+            time.sleep(1)
+
+            try:
+                BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
+                gwl = BatctlGwl.stdout.decode('utf-8')
+
+                for Gateway in gwl.split('\n'):
+                    if Gateway[3:10] == '02:00:3':
+                        MeshSeg = Gateway[12:14]
+                        break
+                    elif Gateway[3:12] == '02:00:0a:':
+                        MeshSeg = Gateway[15:17]
+                        break
+            except:
+                MeshSeg = ''
+
+    if MeshSeg == '':
+        Segment = None
+    else:
+        Segment = 'vpn'+MeshSeg
 
     return Segment
+
+
+#-----------------------------------------------------------------------
+# function "__TestAddNode"
+#
+#-----------------------------------------------------------------------
+def __TestAddNode(NodeJson,Segment,PeerKey,LogPath):
+
+    if Segment is None:
+        Segment = 'vpn99'
+
+    try:
+        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeJson['node_id']), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
+                      (NodeJson['network']['mac'],NodeJson['hostname'],Segment,PeerKey))
+        KeyFile.close()
+    except:
+        return False
+
+    return True
+
+
+#-----------------------------------------------------------------------
+# function "__TestDelNode"
+#
+#-----------------------------------------------------------------------
+def __TestDelNode(NodeJson,Segment,PeerKey,LogPath):
+
+    try:
+        KeyFile = open(os.path.join(LogPath,'old_peers','ffs-'+NodeJson['node_id']), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
+                      (NodeJson['network']['mac'],NodeJson['hostname'],Segment,PeerKey))
+        KeyFile.close()
+    except:
+        return False
+
+    return True
 
 
 #-----------------------------------------------------------------------
@@ -254,6 +368,7 @@ parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help
 parser.add_argument('--batman', dest='BATIF', action='store', required=True, help='Batman Interface')
 parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, help='Fastd PeerKey')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
+parser.add_argument('--keydb', dest='KEYDB', action='store', required=True, help='Path to Database with Keys and MACs')
 parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=True, help='Blacklist Folder')
 args = parser.parse_args()
 
@@ -273,26 +388,44 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+NIC
             NodeJson = getNodeInfos(NodeLLA)
 
-            if 'node_id' in NodeJson:
-                Segment = checkDNS('ffs-'+NodeJson['node_id']+'-'+PeerKey[:12])
+            if 'node_id' in NodeJson and 'network' in NodeJson and 'mac' in NodeJson['network']:
+            #----- Required Data of Node is available -----
+                LoadKeyDB(args.KEYDB)
+                PeerMAC = NodeJson['network']['mac']
+                DnsSegment  = checkDNS('ffs-'+NodeJson['node_id']+'-'+PeerKey[:12])    # -> 'vpn??'
+                MeshSegment = getMeshSegment(NodeJson['network']['addresses'],args.BATIF,args.VPNIF)
 
-                if Segment == '':  # Node is not registered
-                    for NodeAddr in NodeJson['network']['addresses']:
-                        if NodeAddr[0:12] == 'fd21:b4dc:4b':
-                            Segment = NodeAddr[12:14]
-                            break
+                if DnsSegment is None:  # Node is not registered in DNS
 
-                    if Segment == '':   # No IPv6 Address on Status Page of Node
-                        Segment = getBatmanSegment(args.BATIF,args.VPNIF)
+                    if PeerKey in Key2MacDict:
+                        print('++ Key is already in use:',PeerKey,NodeJson['node_id'],'/',NodeJson['network']['mac'],'->',
+                              Key2MacDict[PeerKey]['PeerMAC'],'=',Key2MacDict[PeerKey]['SegDir'],'/',Key2MacDict[PeerKey]['KeyFileName'])
 
-                    if RegisterNode(NodeJson,Segment,PeerKey,args.GITREPO):
+                    if PeerMAC in Mac2KeyDict:
+                        print('++ MAC is already in use:',PeerKey,NodeJson['node_id'],'/',PeerMAC,'->',
+                              Mac2KeyDict[PeerMAC]['SegDir'],'/',Mac2KeyDict[PeerMAC]['KeyFileName'],'=',Mac2KeyDict[PeerMAC]['PeerKey'])
+
+
+#                    if RegisterNode(NodeJson,MeshSegment,PeerKey,args.GITREPO):
+                    if __TestAddNode(NodeJson,MeshSegment,PeerKey,args.KEYDB):
                         setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
-                else:  # Node is already registered
-                    setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+                else:  # Node is already registered in DNS
+                    if PeerKey in Key2MacDict:
 
-# else:
-#   print('++ ERROR: This must not happen!',args.PEERKEY)
+                        if Key2MacDict['PeerMAC'] != PeerMAC:
+                            print('!! Mismatch between DNS and Git:',PeerKey,'->',Key2MacDict['PeerMAC'],'<>',PeerMAC)
+                        else:  # DNS == Git
+                            if MeshSegment != DnsSegment:
+                                print('++ Node must be moved to other Segment:',PeerKey,'=',PeerMAC,'->',MeshSegment,'<>',DnsSegment)
+                            else:
+                                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+
+                    else:  # Node is in DNS but not in Git
+                        print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
+
+#else:
+#    print('++ ERROR: This must not happen!',args.PEERKEY)
 
 detachPeers(PID)
 exit(0)
