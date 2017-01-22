@@ -48,6 +48,7 @@ import datetime
 import json
 import re
 import hashlib
+import fcntl
 
 
 
@@ -55,17 +56,19 @@ import hashlib
 # Global Constants
 #-------------------------------------------------------------
 
-MaxInactiveTime    = 10 * 86400   # 10 Days (in Seconds)
-MaxOfflineTime     = 30 * 60      # 30 Minutes (in Seconds)
+MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
+MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
+MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
 
-OnlineStates       = [' ','V']    # online, online with VPN-Uplink
-
+OnlineStates       = [' ','V']      # online, online with VPN-Uplink
 
 
 NodesDbName    = 'nodesdb.json'
 Alfred158Name  = 'alfred-json-158.json'
 Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
+
+StatFileName   = 'SegStatistics.json'
 
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
@@ -105,6 +108,7 @@ class ffNodeInfo:
         # public Attributes
         self.MAC2NodeIDDict = {}        # Dictionary of all Nodes' MAC-Addresses and related Main Address
         self.ffNodeDict = {}            # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
+        self.SegmentLoadDict = {}       # Dictionary of Segments with their load (Nodes + Clients)
 
         # private Attributes
         self.__AlfredURL = AlfredURL
@@ -324,12 +328,17 @@ class ffNodeInfo:
                             # correct version alredy stored
                             continue
 
+                    if 'clients' in jsonDbDict[DbIndex]:
+                        TotalClients = jsonDbDict[DbIndex]['clients']['total']
+                    else:
+                        TotalClients = 0
+
                     self.ffNodeDict[ffNodeMAC] = {
                         'RawKey':None,
                         'Name':jsonDbDict[DbIndex]['hostname'],
                         'Status':'#',
                         'last_online':jsonDbDict[DbIndex]['last_online'],
-                        'Clients':jsonDbDict[DbIndex]['clients']['total'],
+                        'Clients':TotalClients,
                         'Region':'??',
                         'DestSeg':99,
                         'oldGluon':'?',
@@ -491,10 +500,10 @@ class ffNodeInfo:
                                         if InterfaceType in ['tunnel','wireless','other']:
                                             for MeshMAC in json158Dict[jsonIndex]['network']['mesh']['bat0']['interfaces'][InterfaceType]:
                                                 if not MeshMAC in self.MAC2NodeIDDict:
-                                                    print('++ Mesh MAC missing:',MeshMAC,'->',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
+                                                    print('++ Mesh MAC added:',MeshMAC,'->',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
                                                     self.MAC2NodeIDDict[MeshMAC] = NodeMAC
                                                 elif self.MAC2NodeIDDict[MeshMAC] != NodeMAC:
-                                                    print('!! Mesh MAC missing:',MeshMAC,'->',NodeMAC,'<>',self.MAC2NodeIDDict[MeshMAC])
+                                                    print('!! Mesh MAC mismatch:',MeshMAC,'->',NodeMAC,'<>',self.MAC2NodeIDDict[MeshMAC])
 
         print('... done.')
         print()
@@ -715,7 +724,11 @@ class ffNodeInfo:
 
                     self.ffNodeDict[ffNodeMAC]['RawKey'] = ffNodeKey
                     self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
-                    self.ffNodeDict[ffNodeMAC]['Clients'] = RawJsonDict[ffNodeKey]['statistics']['clients']['total']
+
+                    if 'clients' in RawJsonDict[ffNodeKey]['statistics']:
+                        self.ffNodeDict[ffNodeMAC]['Clients'] = RawJsonDict[ffNodeKey]['statistics']['clients']['total']
+                    else:
+                        self.ffNodeDict[ffNodeMAC]['Clients'] = 0
 
                     if self.ffNodeDict[ffNodeMAC]['Name'] != RawJsonDict[ffNodeKey]['nodeinfo']['hostname']:
                         print('++ Hostname mismatch:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('utf-8'))
@@ -732,10 +745,15 @@ class ffNodeInfo:
                         elif GwNewMacTemplate.match(RawJsonDict[ffNodeKey]['statistics']['gateway']):
                             self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][10:11])
 
-                    for IFtype in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces']:
-                        for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces'][IFtype]:
+                    if 'mesh_interfaces' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
+                        for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh_interfaces']:
                             self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
                             self.__AddGluonMACs(ffNodeMAC,MeshMAC)
+                    elif 'mesh' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
+                        for InterfaceType in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces']:
+                            for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
+                                self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
+                                self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
                     if 'neighbours' in RawJsonDict[ffNodeKey]:
                         for InterfaceType in ['batadv','wifi']:
@@ -864,5 +882,62 @@ class ffNodeInfo:
             MacTableFile.write('%-20s -> %-20s\n' % (ffNodeMAC, self.MAC2NodeIDDict[ffNodeMAC]))
 
         MacTableFile.close()
+        print('... done.\n')
+        return
+
+
+    #==============================================================================
+    # Method "UpdateStatistikDB"
+    #
+    #   Write updates Statistik-json
+    #==============================================================================
+    def UpdateStatistikDB(self,Path):
+
+        print('Update Statistik-DB ...')
+
+        StatisticsJsonName = os.path.join(Path,StatFileName)
+
+        for ffNodeMAC in self.ffNodeDict.keys():
+            if ((self.ffNodeDict[ffNodeMAC]['Status'] in OnlineStates) and
+                (self.ffNodeDict[ffNodeMAC]['Segment'] is not None)):
+
+                if self.ffNodeDict[ffNodeMAC]['Segment'] not in self.SegmentLoadDict:
+                    self.SegmentLoadDict[str(self.ffNodeDict[ffNodeMAC]['Segment'])] = { 'Sum':0, 'Count':1 }
+
+                self.SegmentLoadDict[str(self.ffNodeDict[ffNodeMAC]['Segment'])]['Sum'] += self.ffNodeDict[ffNodeMAC]['Clients'] + 1
+
+        try:
+            LockFile = open(os.path.join(Path,'.SegStatistics.lock'), mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
+
+            if os.path.exists(StatisticsJsonName):
+                StatisticsJsonFile = open(StatisticsJsonName, mode='r')
+                StatisticsJsonDict = json.load(StatisticsJsonFile)
+                StatisticsJsonFile.close()
+
+                for Segment in StatisticsJsonDict.keys():
+                    if not Segment in self.SegmentLoadDict:
+                        self.SegmentLoadDict[Segment] = { 'Sum':StatisticsJsonDict[Segment]['Sum'], 'Count':StatisticsJsonDict[Segment]['Count'] }
+                    else:
+                        self.SegmentLoadDict[Segment]['Sum']   += StatisticsJsonDict[Segment]['Sum']
+                        self.SegmentLoadDict[Segment]['Count'] += StatisticsJsonDict[Segment]['Count']
+
+                    if self.SegmentLoadDict[Segment]['Count'] > MaxStatisticsData:
+                        self.SegmentLoadDict[Segment]['Sum']   -= int(CurrentSegStatistics[Segment]['Sum'] / CurrentSegStatistics[Segment]['Count'])
+                        self.SegmentLoadDict[Segment]['Count'] -= 1
+
+            print('Writing Statistik-DB as json-File ...')
+
+            StatisticsJsonFile = open(StatisticsJsonName, mode='w')
+            json.dump(self.SegmentLoadDict,StatisticsJsonFile)
+            StatisticsJsonFile.close()
+
+        except:
+            print('\n!! Error on Updating Statistics Databases as json-File!\n')
+
+        finally:
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
+
         print('... done.\n')
         return

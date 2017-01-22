@@ -102,8 +102,10 @@ class ffMeshNet:
         self.__GwInfos = GwInfos
 
         self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict = {}         # Dictionary of Segments with their Number of Nodes and Clients
+        self.__SegmentDict = {}         # Dictionary of Segments with their Number of Nodes and Clients and Weights
         self.__NodeMoveDict = {}        # Git Moves of Nodes from one Segment to another
+
+        self.__DefaultTarget = 1        # Target Segment to use if no better Data available
 
         return
 
@@ -150,6 +152,34 @@ class ffMeshNet:
                         self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] = CloudID
 
                 del self.__MeshCloudDict[oldCloudID]
+
+        return
+
+
+    #-----------------------------------------------------------------------
+    # private function "__SetSegmentWeight"
+    #
+    #   Set Weight of Segment (Average Sum of Nodes + Clients)
+    #
+    # __SegmentDict[Segment][Weight]
+    #-----------------------------------------------------------------------
+    def __SetSegmentWeight(self):
+
+        for Segment in self.__NodeInfos.SegmentLoadDict.keys():
+            if Segment in self.__SegmentDict:
+                self.__SegmentDict[Segment]['Weight'] = int(self.__NodeInfos.SegmentLoadDict['Segment']['Sum'] / self.__NodeInfos.SegmentLoadDict['Segment']['Count'])
+
+        for Segment in self.__SegmentDict.keys():
+            if self.__SegmentDict[Segment]['Weight'] == 9999:
+                self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
+
+        SegWeight = 9999
+
+        for Segment in self.__SegmentDict.keys():
+            if Segment > 0 and Segment < 5:  #....................................... must be changed later !!
+                if self.__SegmentDict[Segment]['Weight'] < SegWeight:
+                    SegWeight = self.__SegmentDict[Segment]['Weight']
+                    self.__DefaultTarget = Segment
 
         return
 
@@ -275,15 +305,9 @@ class ffMeshNet:
         TargetSeg = 99;   # 99 = unknown
 
         if len(DesiredSegDict) == 0:
-            # Check for Legacy Nodes only
-            if 0 in ActiveSegDict:
-                SegWeight = 9999
+            if 0 in ActiveSegDict:  # Check for Legacy Nodes only
+                TargetSeg = self.__DefaultTarget
 
-                for Segment in self.__SegmentDict.keys():
-                    if Segment > 0:
-                        if (self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']) < SegWeight:
-                            SegWeight = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
-                            TargetSeg = Segment
         else:
             for Segment in DesiredSegDict.keys():
                 if DesiredSegDict[Segment] > SegWeight:
@@ -374,16 +398,10 @@ class ffMeshNet:
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == 0 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
                 (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto')):
 
-                SegWeight = 9999
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
                 if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
-
-                    for Segment in self.__SegmentDict.keys():
-                        if Segment > 0:
-                            if (self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']) < SegWeight:
-                                SegWeight = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
-                                TargetSeg = Segment
+                    TargetSeg = self.__DefaultTarget
 
                 if TargetSeg < 99:
                     if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
@@ -436,7 +454,7 @@ class ffMeshNet:
 
                     if ffSeg in self.__GwInfos.Segments():
                         if not ffSeg in self.__SegmentDict:
-                            self.__SegmentDict[ffSeg] = { 'Nodes':0, 'Clients':0, 'Uplinks':0 }
+                            self.__SegmentDict[ffSeg] = { 'Nodes':0, 'Clients':0, 'Uplinks':0, 'Weight':9999 }
 
                         self.__SegmentDict[ffSeg]['Nodes'] += 1
                         self.__SegmentDict[ffSeg]['Clients'] += self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
@@ -482,6 +500,7 @@ class ffMeshNet:
     #==============================================================================
     def CheckSegments(self):
 
+        self.__SetSegmentWeight()
         self.__CreateMeshCloudList()
         self.__CheckMeshClouds()
         self.__CheckSingleNodes()
@@ -557,7 +576,12 @@ class ffMeshNet:
                         print('++ ERROR KeyDir:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'=',CurrentVPN,'<>',self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'])
                         CurrentError = '*'
 
-                    NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = %s (%s = %s)\n' % (CurrentError,self.__NodeInfos.ffNodeDict[ffnb]['Status'],self.__NodeInfos.ffNodeDict[ffnb]['Segment'],
+                    if self.__NodeInfos.ffNodeDict[ffnb]['Segment'] is None:
+                        Segment = 99
+                    else:
+                    	Segment = self.__NodeInfos.ffNodeDict[ffnb]['Segment']
+
+                    NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = %s (%s = %s)\n' % (CurrentError,self.__NodeInfos.ffNodeDict[ffnb]['Status'],Segment,
                                                                                                     self.__NodeInfos.ffNodeDict[ffnb]['Clients'],ffnb,self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],
                                                                                                     self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),
                                                                                                     self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['Region']))
@@ -586,8 +610,13 @@ class ffMeshNet:
                               self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['SegMode'])
                         CurrentError = '>'
 
+                if self.__NodeInfos.ffNodeDict[ffnb]['Segment'] is None:
+                    Segment = 99
+                else:
+                    Segment = self.__NodeInfos.ffNodeDict[ffnb]['Segment']
+
                 NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = %s (%s = %s)\n' % (CurrentError,self.__NodeInfos.ffNodeDict[ffnb]['Status'],
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Segment'],self.__NodeInfos.ffNodeDict[ffnb]['Clients'],ffnb,
+                                                                                                Segment,self.__NodeInfos.ffNodeDict[ffnb]['Clients'],ffnb,
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['Region']))

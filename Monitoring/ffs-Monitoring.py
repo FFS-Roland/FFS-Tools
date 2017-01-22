@@ -10,9 +10,9 @@
 #                                                                                         #
 #       --gitrepo  = Git Repository with KeyFiles                                         #
 #       --logs     = Path to LogFiles                                                     #
-#       --keydb    = Database with fastd-Keys (json Files)                                #
+#       --json     = Path to json-Files (Databases with fastd-Keys and Statistics)        #
 #                                                                                         #
-#  Needed json-Files:                                                                     #
+#  Needed json-Files from Webserver:                                                      #
 #                                                                                         #
 #       raw.json             -> Node Names and Information                                #
 #       nodesdb.json         -> Region = Segment                                          #
@@ -93,7 +93,7 @@ RawJsonAccess = {
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
-parser.add_argument('--keydb', dest='KEYDB', action='store', required=False, help='optional Path to KeyDatabase')
+parser.add_argument('--json', dest='JSONPATH', action='store', required=False, help='optional Path to KeyDatabase')
 args = parser.parse_args()
 
 
@@ -103,9 +103,9 @@ ffsGWs = ffGatewayInfo(args.GITREPO)
 
 isOK = ffsGWs.VerifyDNS()	# Check DNS against keys from Git
 
-if not args.KEYDB is None:
+if not args.JSONPATH is None:
     print('Writing Key Databases ...')
-    ffsGWs.WriteFastdDB(args.KEYDB)
+    ffsGWs.WriteFastdDB(args.JSONPATH)
 
 ffsNodes = ffNodeInfo(AlfredURL,RawJsonAccess)
 
@@ -120,6 +120,7 @@ print('Merging Data from GW-Infos to Node-Infos  ...')
 ffsNet.MergeData()
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
+ffsNodes.UpdateStatistikDB(args.JSONPATH)
 
 
 print('\nCheck Segments ...')
