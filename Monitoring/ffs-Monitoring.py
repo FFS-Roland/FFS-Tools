@@ -51,6 +51,9 @@ import os
 import time
 import datetime
 import argparse
+import smtplib
+
+from email.mime.text import MIMEText
 
 from class_ffGatewayInfo import *
 from class_ffNodeInfo import *
@@ -73,15 +76,60 @@ NodeMoveFile      = 'NodeMoves.lst'
 
 MaxOfflineDays    = 10 * 86400
 
+AccountsFileName  = 'Accounts.json'
+AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
 
-AlfredURL  = 'http://netinfo.freifunk-stuttgart.de/json/'
+MailReceipient    = 'roland.volkmann@t-online.de'
 
-RawJsonAccess = {
-    'URL':'http://map.freifunk-stuttgart.de/json/raw.json',
-    'Username':'freifunk',
-    'Password':'json'
-    }
 
+
+#-----------------------------------------------------------------------
+# Function "__LoadAccounts"
+#
+#   Load Accounts from Accounts.json into AccountsDict
+#
+#-----------------------------------------------------------------------
+def __LoadAccounts(AccountFile):
+
+    try:
+        AccountJsonFile = open(AccountFile, mode='r')
+        AccountsDict = json.load(AccountJsonFile)
+        AccountJsonFile.close()
+
+    except:
+        print('\n!! Error on Reading Accounts json-File!\n')
+        AccountsDict = None
+
+    return AccountsDict
+
+
+#-----------------------------------------------------------------------
+# Function "__SendEmail"
+#
+#   Sending an Email
+#
+#-----------------------------------------------------------------------
+def __SendEmail(Subject,Recipient,MailBody,Account):
+
+    if MailBody != '':
+        try:
+            Email = MIMEText(MailBody)
+
+            Email['Subject'] = Subject
+            Email['From']    = Account['Username']
+            Email['To']      = Recipient
+
+            server = smtplib.SMTP(Account['Server'])
+            server.starttls()
+            server.login(Account['Username'],Account['Password'])
+            server.send_message(Email)
+            server.quit()
+            print('\nEmail was sent to',Recipient)
+
+        except:
+            print('!! ERROR on sending Email to',Recipient)
+
+    return
 
 
 
@@ -97,7 +145,15 @@ parser.add_argument('--json', dest='JSONPATH', action='store', required=False, h
 args = parser.parse_args()
 
 
-print('Setting up basic data ...')
+AccountsDict = __LoadAccounts(os.path.join(args.JSONPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
+
+if AccountsDict is None:
+    print('!! FATAL ERROR: Accounts not available!')
+    exit(1)
+
+
+
+print('Setting up basic Data ...')
 
 ffsGWs = ffGatewayInfo(args.GITREPO)
 
@@ -107,29 +163,39 @@ if not args.JSONPATH is None:
     print('Writing Key Databases ...')
     ffsGWs.WriteFastdDB(args.JSONPATH)
 
-ffsNodes = ffNodeInfo(AlfredURL,RawJsonAccess)
+ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
 
-print('Setting up Mesh Net Info ...')
+
+print('Setting up Mesh Net Info and Checking Segments ...')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
-
-
-print('Merging Data from GW-Infos to Node-Infos  ...')
 
 ffsNet.MergeData()
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 ffsNodes.UpdateStatistikDB(args.JSONPATH)
 
-
-print('\nCheck Segments ...')
-
 ffsNet.CheckSegments()
+
+
+
+print('\nWriting Logs and Informing Admin if Errors ...')
 
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 ffsNet.WriteMoveList(os.path.join(args.LOGPATH,NodeMoveFile))
 
+MailBody = ''
+
+for Alert in ffsGWs.Alerts:
+    MailBody += Alert+'\n'
+
+for Alert in ffsNodes.Alerts:
+    MailBody += Alert+'\n'
+
+for Alert in ffsNet.Alerts:
+    MailBody += Alert+'\n'
+
+__SendEmail('Alerts from ffs-Monitor',MailReceipient,MailBody,AccountsDict['SMTP'])
 
 print('OK.\n')
-

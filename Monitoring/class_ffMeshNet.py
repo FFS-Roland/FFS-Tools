@@ -97,13 +97,16 @@ class ffMeshNet:
     #==========================================================================
     def __init__(self,NodeInfos,GwInfos):
 
+        # public Attributes
+        self.Alerts          = []       # List of  Alert-Messages
+
         # private Attributes
         self.__NodeInfos = NodeInfos
         self.__GwInfos = GwInfos
 
         self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict = {}         # Dictionary of Segments with their Number of Nodes and Clients and Weights
-        self.__NodeMoveDict = {}        # Git Moves of Nodes from one Segment to another
+        self.__SegmentDict   = {}       # Dictionary of Segments with their Number of Nodes and Clients and Weights
+        self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
         self.__DefaultTarget = 1        # Target Segment to use if no better Data available
 
@@ -176,7 +179,7 @@ class ffMeshNet:
         SegWeight = 9999
 
         for Segment in self.__SegmentDict.keys():
-            if Segment > 0 and Segment < 5:  #....................................... must be changed later !!
+            if Segment > 0 and Segment < 9:  #....................................... must be changed later !!
                 if self.__SegmentDict[Segment]['Weight'] < SegWeight:
                     SegWeight = self.__SegmentDict[Segment]['Weight']
                     self.__DefaultTarget = Segment
@@ -265,6 +268,7 @@ class ffMeshNet:
         if len(FixedSegList) > 0:
             if len(FixedSegList) > 1:
                 print('!! ALARM - Multiple Segments with fixed Nodes:',FixedSegList,self.__MeshCloudDict[CloudID])
+                self.Alerts.append('!! Shortcut - ALARM: Multiple Segments with fixed Nodes !!!')
 
             else:   #----- exactly one Segment with fixed Nodes
                 for Segment in FixedSegList:
@@ -289,6 +293,7 @@ class ffMeshNet:
 
         if TargetSeg < 99:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
+            self.Alerts.append('!! Shortcut detected !!!')
 
         return
 

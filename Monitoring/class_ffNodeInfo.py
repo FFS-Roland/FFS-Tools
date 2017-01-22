@@ -106,17 +106,18 @@ class ffNodeInfo:
     def __init__(self,AlfredURL,RawAccess):
 
         # public Attributes
-        self.MAC2NodeIDDict = {}        # Dictionary of all Nodes' MAC-Addresses and related Main Address
-        self.ffNodeDict = {}            # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
+        self.MAC2NodeIDDict  = {}       # Dictionary of all Nodes' MAC-Addresses and related Main Address
+        self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
         self.SegmentLoadDict = {}       # Dictionary of Segments with their load (Nodes + Clients)
+        self.Alerts          = []       # List of  Alert-Messages
 
         # private Attributes
         self.__AlfredURL = AlfredURL
         self.__RawAccess = RawAccess
 
         self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict = {}         # Dictionary of Segments with their Number of Nodes and Clients
-        self.__NodeMoveDict = {}        # Git Moves of Nodes from one Segment to another
+        self.__SegmentDict   = {}       # Dictionary of Segments with their Number of Nodes and Clients
+        self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
         # Initializations
         self.__LoadNodesDbJson()        # ffNodeDict[ffNodeMAC] -> all Infos of ffNode
@@ -298,16 +299,16 @@ class ffNodeInfo:
 
             if StatusAge.total_seconds() > 900:
                 NodesDbJsonHTTP.close()
-                print('+++ ERROR: nodesdb.json is too old !!!')
+                print('++ ERROR: nodesdb.json is too old !!!')
+                self.Alerts.append('nodesdb.json is too old !!!')
                 return
-                exit(1)
 
             jsonDbDict = json.loads(NodesDbJsonHTTP.read().decode('utf-8'))
             NodesDbJsonHTTP.close()
         except:
-            print('+++ ERROR on loading nodesdb.json !!!')
+            print('++ ERROR on loading nodesdb.json !!!')
+            self.Alerts.append('Error on loading nodesdb.json !!!')
             return
-            exit(2)
 
         print('Analysing nodesdb.json ...')
 
@@ -449,15 +450,15 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred158HTTP.close()
                 print('+++ ERROR: alfred-json-158.json is too old !!!')
+                self.Alerts.append('alfred-json-158.json is too old !!!')
                 return
-                exit(1)
 
             json158Dict = json.loads(Afred158HTTP.read().decode('utf-8'))
             Afred158HTTP.close()
         except:
             print('+++ ERROR on loading alfred-json-158.json !!!')
+            self.Alerts.append('Error on loading alfred-json-158.json !!!')
             return
-            exit(2)
 
         print('Analysing alfred-json-158.json ...')
 
@@ -530,15 +531,15 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred159HTTP.close()
                 print('+++ ERROR: alfred-json-159.json is too old !!!')
+                self.Alerts.append('alfred-json-159.json is too old !!!')
                 return
-                exit(1)
 
             json159Dict = json.loads(Afred159HTTP.read().decode('utf-8'))
             Afred159HTTP.close()
         except:
             print('+++ ERROR on loading alfred-json-159.json !!!')
+            self.Alerts.append('Error on loading alfred-json-159.json !!!')
             return
-            exit(2)
 
         print('Analysing alfred-json-159.json ...')
 
@@ -590,15 +591,15 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred160HTTP.close()
                 print('+++ ERROR: alfred-json-160.json is too old !!!')
+                self.Alerts.append('alfred-json-160.json is too old !!!')
                 return
-                exit(1)
 
             json160 = json.loads(Afred160HTTP.read().decode('utf-8'))
             Afred160HTTP.close()
         except:
             print('+++ ERROR on loading alfred-json-160.json !!!')
+            self.Alerts.append('Error on loading alfred-json-160.json !!!')
             return
-            exit(2)
 
         print('Analysing alfred-json-160.json ...')
 
@@ -655,8 +656,8 @@ class ffNodeInfo:
             RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
             RawJsonHTTP.close()
         except:
-            print('+++ ERROR on loading raw.json !!!')
-            print()
+            print('+++ ERROR on loading raw.json !!!\n')
+            self.Alerts.append('Error on loading raw.json !!!')
             return
 
         print('Analysing raw.json ...')
@@ -907,7 +908,7 @@ class ffNodeInfo:
                 self.SegmentLoadDict[str(self.ffNodeDict[ffNodeMAC]['Segment'])]['Sum'] += self.ffNodeDict[ffNodeMAC]['Clients'] + 1
 
         try:
-            LockFile = open(os.path.join(Path,'.SegStatistics.lock'), mode='w+')
+            LockFile = open('/tmp/.SegStatistics.lock', mode='w+')
             fcntl.lockf(LockFile,fcntl.LOCK_EX)
 
             if os.path.exists(StatisticsJsonName):
@@ -934,6 +935,7 @@ class ffNodeInfo:
 
         except:
             print('\n!! Error on Updating Statistics Databases as json-File!\n')
+            self.Alerts.append('Error on Updating Statistics Databases as json-File!')
 
         finally:
             fcntl.lockf(LockFile,fcntl.LOCK_UN)

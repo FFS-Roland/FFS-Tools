@@ -78,6 +78,7 @@ class ffGatewayInfo:
 
         # public Attributes
         self.FastdKeyDict = {}          # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
+        self.Alerts       = []          # List of  Alert-Messages
 
         # private Attributes
         self.__GitPath = GitPath
@@ -332,6 +333,9 @@ class ffGatewayInfo:
             print('   GW%02d ...' % (ffGW))
 
             for GwInstance in range(0,8):
+                if ffGW == 5 and GwInstance == 1:
+                    continue
+#
                 for ffSeg in self.__SegmentList:
 
                     FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/fastd/vpn%02d.json' % (ffGW,GwInstance,ffSeg)
@@ -367,6 +371,7 @@ class ffGatewayInfo:
 
         except:
             print('++ Error on DNS-Query:',Hostname)
+            self.Alerts.append('Error on DNS-Query:'+Hostname)
 
         return SegFromDNS
 
@@ -401,6 +406,7 @@ class ffGatewayInfo:
                     isOK = False
                 elif SegFromDNS != self.FastdKeyDict[KeyFileName]['SegDir']:
                     print('++ Segment in DNS <> Git:',KeyFileName,'->',self.FastdKeyDict[KeyFileName]['PeerMAC'],SegFromDNS,'<>',self.FastdKeyDict[KeyFileName]['SegDir'],'=',self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
+                    self.Alerts.append('Segment in DNS <> Git:'+KeyFileName)
                     isOK = False
 
         print('... done.\n')
@@ -456,7 +462,7 @@ class ffGatewayInfo:
                 }
 
         try:
-            LockFile = open(os.path.join(Path,'.KeyDB.lock'), mode='w+')
+            LockFile = open('/tmp/.KeyDB.lock', mode='w+')
             fcntl.lockf(LockFile,fcntl.LOCK_EX)
             print('Writing Fastd Databases as json-File ...')
 
