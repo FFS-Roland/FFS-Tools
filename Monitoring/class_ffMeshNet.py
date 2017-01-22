@@ -534,6 +534,9 @@ class ffMeshNet:
             NodeMoveFile.close()
             print('... done.\n')
 
+        elif os.path.exists(FileName):
+            os.remove(FileName)
+
         return
 
 
