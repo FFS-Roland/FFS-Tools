@@ -76,10 +76,11 @@ NodeMoveFile      = 'NodeMoves.lst'
 
 MaxOfflineDays    = 10 * 86400
 
-AccountsFileName  = 'Accounts.json'
 AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
 
-MailReceipient    = 'roland.volkmann@t-online.de'
+AccountsFileName  = 'Accounts.json'
+MailToFileName    = 'MailRecipients.json'
+
 
 
 
@@ -101,6 +102,31 @@ def __LoadAccounts(AccountFile):
         AccountsDict = None
 
     return AccountsDict
+
+
+
+#-----------------------------------------------------------------------
+# Function "__LoadMailRecipients"
+#
+#   Load Mail Recipients from MailRecipients.json
+#
+#-----------------------------------------------------------------------
+def __LoadMailRecipients(RecipientsFile):
+
+    COMMASPACE = ', '
+
+    try:
+        RecipientsJsonFile = open(RecipientsFile, mode='r')
+        RecipientsList = json.load(RecipientsJsonFile)
+        RecipientsJsonFile.close()
+
+        MailRecipients = COMMASPACE.join(RecipientsList)
+
+    except:
+        print('\n!! Error on Reading Recipients json-File!\n')
+        MailRecipients = None
+
+    return MailRecipients
 
 
 #-----------------------------------------------------------------------
@@ -144,7 +170,6 @@ parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, hel
 parser.add_argument('--json', dest='JSONPATH', action='store', required=False, help='optional Path to KeyDatabase')
 args = parser.parse_args()
 
-
 AccountsDict = __LoadAccounts(os.path.join(args.JSONPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
 
 if AccountsDict is None:
@@ -185,6 +210,12 @@ print('\nWriting Logs and Informing Admin if Errors ...')
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 ffsNet.WriteMoveList(os.path.join(args.LOGPATH,NodeMoveFile))
 
+MailRecipients = __LoadMailRecipients(os.path.join(args.JSONPATH,MailToFileName))  # List of Mail Recipients
+
+if MailRecipients is None:
+    print('!! ERROR: No Mail Recipients available!')
+    exit(1)
+
 MailBody = ''
 
 for Alert in ffsGWs.Alerts:
@@ -196,6 +227,6 @@ for Alert in ffsNodes.Alerts:
 for Alert in ffsNet.Alerts:
     MailBody += Alert+'\n'
 
-__SendEmail('Alerts from ffs-Monitor',MailReceipient,MailBody,AccountsDict['SMTP'])
+__SendEmail('Alerts from ffs-Monitor',MailReceipients,MailBody,AccountsDict['SMTP'])
 
 print('OK.\n')
