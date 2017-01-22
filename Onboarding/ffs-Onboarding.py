@@ -12,7 +12,7 @@
 #      --batman    = batman-Interface (e.g. bat00)                                        #
 #      --peerkey   = fastd-Key from Peer                                                  #
 #      --gitrepo   = Git Repository with KeyFiles                                         #
-#      --keydb     = Path to Database with fastd Keys and MACs (json files)               #
+#      --json      = Path to json files with data of nodes                                #
 #      --blacklist = Folder for Blacklisting Files                                        #
 #                                                                                         #
 ###########################################################################################
@@ -200,10 +200,13 @@ def checkDNS(NodeID):
 
 
 #-----------------------------------------------------------------------
-# function "LoadKeyDB"
+# function "LoadKeyData"
 #
 #-----------------------------------------------------------------------
-def LoadKeyDB(Path):
+def LoadKeyData(Path):
+
+    global Key2MacDict
+    global Mac2KeyDict
 
     try:
         LockFile = open(os.path.join(Path,'.KeyDB.lock'), mode='w+')
@@ -251,7 +254,7 @@ def getMeshSegment(NodeAddresses,BatmanIF,FastdIF):
         except:
             pass
 
-        while(Segment == '' and Retries > 0):
+        while(MeshSeg == '' and Retries > 0):
             Retries -= 1
             time.sleep(1)
 
@@ -338,6 +341,7 @@ def RegisterNode(NodeJson,Segment,PeerKey,GitRepo):
 #
 #-----------------------------------------------------------------------
 def setBlacklistFile(BlacklistFile):
+
     try:
         OutFile = open(BlacklistFile, mode='w')
         OutFile.write('%d\n' % (int(time.time())))
@@ -353,8 +357,11 @@ def setBlacklistFile(BlacklistFile):
 #
 #-----------------------------------------------------------------------
 def detachPeers(pid):
+
     os.kill(pid,signal.SIGHUP)
     os.kill(pid,signal.SIGUSR2)
+
+    return
 
 
 
@@ -368,7 +375,7 @@ parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help
 parser.add_argument('--batman', dest='BATIF', action='store', required=True, help='Batman Interface')
 parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, help='Fastd PeerKey')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
-parser.add_argument('--keydb', dest='KEYDB', action='store', required=True, help='Path to Database with Keys and MACs')
+parser.add_argument('--json', dest='JSONPATH', action='store', required=True, help='Path to Database with Keys and MACs')
 parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=True, help='Blacklist Folder')
 args = parser.parse_args()
 
@@ -390,7 +397,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
             if 'node_id' in NodeJson and 'network' in NodeJson and 'mac' in NodeJson['network']:
             #----- Required Data of Node is available -----
-                LoadKeyDB(args.KEYDB)
+                LoadKeyData(args.JSONPATH)
                 PeerMAC = NodeJson['network']['mac']
                 DnsSegment  = checkDNS('ffs-'+NodeJson['node_id']+'-'+PeerKey[:12])    # -> 'vpn??'
                 MeshSegment = getMeshSegment(NodeJson['network']['addresses'],args.BATIF,args.VPNIF)
@@ -407,7 +414,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
 
 #                    if RegisterNode(NodeJson,MeshSegment,PeerKey,args.GITREPO):
-                    if __TestAddNode(NodeJson,MeshSegment,PeerKey,args.KEYDB):
+                    if __TestAddNode(NodeJson,MeshSegment,PeerKey,args.JSONPATH):
                         setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
                 else:  # Node is already registered in DNS
