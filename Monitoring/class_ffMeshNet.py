@@ -520,15 +520,20 @@ class ffMeshNet:
     #==============================================================================
     def WriteMoveList(self,FileName):
 
-        print('Write out Node-Moves ...')
-        NodeMoveFile = open(FileName, mode='w')
+        if len(self.__NodeMoveDict) > 0:
+            print('Write out Node-Moves ...')
+            self.Alerts.append('++ There are Nodes to be moved:')
+            NodeMoveFile = open(FileName, mode='w')
 
-        for ffNodeMAC in sorted(self.__NodeMoveDict):
-            NodeMoveFile.write('git mv %s/peers/%s vpn%02d/peers/\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
-                                                                        self.__NodeMoveDict[ffNodeMAC]))
+            for ffNodeMAC in sorted(self.__NodeMoveDict):
+                MoveElement = 'git mv %s/peers/%s vpn%02d/peers/\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],self.__NodeMoveDict[ffNodeMAC])
 
-        NodeMoveFile.close()
-        print('... done.\n')
+                NodeMoveFile.write(MoveElement)
+                self.Alerts.append('   '+MoveElement)
+
+            NodeMoveFile.close()
+            print('... done.\n')
+
         return
 
 
