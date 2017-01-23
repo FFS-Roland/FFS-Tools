@@ -115,6 +115,20 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
+    # private function "__alert"
+    #
+    #   Store and print Message for Alert
+    #
+    #-----------------------------------------------------------------------
+    def __alert(self,Message):
+
+        self.Alerts.append(Message)
+        print(Message)
+        return
+
+
+
+    #-----------------------------------------------------------------------
     # private function "__AddNeighbour2Cloud"
     #
     #   Add Nodes to Mesh-Cloud-List
@@ -267,8 +281,8 @@ class ffMeshNet:
 
         if len(FixedSegList) > 0:
             if len(FixedSegList) > 1:
-                print('!! ALARM - Multiple Segments with fixed Nodes:',FixedSegList,self.__MeshCloudDict[CloudID])
-                self.Alerts.append('!! Shortcut - ALARM: Multiple Segments with fixed Nodes !!!')
+                self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
+                print('->',FixedSegList,self.__MeshCloudDict[CloudID])
 
             else:   #----- exactly one Segment with fixed Nodes
                 for Segment in FixedSegList:
@@ -293,7 +307,7 @@ class ffMeshNet:
 
         if TargetSeg < 99:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
-            self.Alerts.append('!! Shortcut detected !!!')
+            self.__alert('!! Shortcut detected !!!')
 
         return
 
@@ -521,18 +535,20 @@ class ffMeshNet:
     def WriteMoveList(self,FileName):
 
         if len(self.__NodeMoveDict) > 0:
-            print('Write out Node-Moves ...')
-            self.Alerts.append('++ There are Nodes to be moved:')
-            NodeMoveFile = open(FileName, mode='w')
+            if len(self.Alerts)+len(self.__NodeInfos.Alerts)+len(self.__GwInfos.Alerts) > 0:
+                self.__alert('!! There might be Nodes to be moved but cannot due to Alerts!')
+            else:
+                self.__alert('++ There are Nodes to be moved:')
+                NodeMoveFile = open(FileName, mode='w')
 
-            for ffNodeMAC in sorted(self.__NodeMoveDict):
-                MoveElement = 'git mv %s/peers/%s vpn%02d/peers/\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],self.__NodeMoveDict[ffNodeMAC])
+                for ffNodeMAC in sorted(self.__NodeMoveDict):
+                    MoveElement = 'git mv %s/peers/%s vpn%02d/peers/\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],self.__NodeMoveDict[ffNodeMAC])
 
-                NodeMoveFile.write(MoveElement)
-                self.Alerts.append('   '+MoveElement)
+                    NodeMoveFile.write(MoveElement)
+                    self.__alert('   '+MoveElement)
 
-            NodeMoveFile.close()
-            print('... done.\n')
+                NodeMoveFile.close()
+                print('... done.\n')
 
         elif os.path.exists(FileName):
             os.remove(FileName)

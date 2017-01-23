@@ -94,6 +94,20 @@ class ffGatewayInfo:
 
 
     #-----------------------------------------------------------------------
+    # private function "__alert"
+    #
+    #   Store and print Message for Alert
+    #
+    #-----------------------------------------------------------------------
+    def __alert(self,Message):
+
+        self.Alerts.append(Message)
+        print(Message)
+        return
+
+
+
+    #-----------------------------------------------------------------------
     # private function "__LoadKeyFile"
     #
     #   Load and analyse fastd-Keyfile from Git
@@ -183,7 +197,7 @@ class ffGatewayInfo:
         }
 
         if PeerKey != '' and PeerKey in self.__Key2FileNameDict:
-            print('!! Duplicate fastd-Key:',PeerKey,'=',self.__Key2FileNameDict[PeerKey]['SegDir'] + '/peers/' + self.__Key2FileNameDict[PeerKey]['KeyFile'],'->',SegDir + '/peers/' + KeyFileName)
+            self.__alert('!! Duplicate fastd-Key: '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+SegDir+'/peers/'+KeyFileName)
 
         self.__Key2FileNameDict[PeerKey] = {
             'SegDir':SegDir,
@@ -333,8 +347,8 @@ class ffGatewayInfo:
             print('   GW%02d ...' % (ffGW))
 
             for GwInstance in range(0,8):
-                if ffGW == 5 and GwInstance == 1:
-                    continue
+#                if ffGW == 5 and GwInstance == 1:
+#                    continue
 #
                 for ffSeg in self.__SegmentList:
 
@@ -370,8 +384,7 @@ class ffGatewayInfo:
                     SegFromDNS = 'vpn'+IPv6.to_text()[14:].zfill(2)
 
         except:
-            print('++ Error on DNS-Query:',Hostname)
-            self.Alerts.append('Error on DNS-Query:'+Hostname)
+            self.__alert('++ Error on DNS-Query: '+Hostname)
 
         return SegFromDNS
 
@@ -405,8 +418,7 @@ class ffGatewayInfo:
                     print('++ DNS Entry missing:',KeyFileName,'->',self.FastdKeyDict[KeyFileName]['PeerMAC'],'=',self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
                     isOK = False
                 elif SegFromDNS != self.FastdKeyDict[KeyFileName]['SegDir']:
-                    print('++ Segment in DNS <> Git:',KeyFileName,'->',self.FastdKeyDict[KeyFileName]['PeerMAC'],SegFromDNS,'<>',self.FastdKeyDict[KeyFileName]['SegDir'],'=',self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
-                    self.Alerts.append('Segment in DNS <> Git:'+KeyFileName)
+                    self.__alert('++ Segment in DNS <> Git: '+KeyFileName+' -> '+self.FastdKeyDict[KeyFileName]['PeerMAC']+SegFromDNS+' <> '+self.FastdKeyDict[KeyFileName]['SegDir']+' = '+self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
                     isOK = False
 
         print('... done.\n')
@@ -434,48 +446,43 @@ class ffGatewayInfo:
 
 
     #=========================================================================
-    # Method "WriteFastdDB"
+    # Method "WriteKeyData"
     #
-    #   Writes FastdDB (json) with Fastd Key <-> MAC
+    #   Writes Fastd Keys as json file with Fastd Key <-> MACC
     #
     #=========================================================================
-    def WriteFastdDB(self,Path):
+    def WriteKeyData(self,Path):
 
-        print('Creating Fastd Databases ...')
+        print('Creating Fastd Key Database ...')
 
-        Key2MacDict = {}
-        Mac2KeyDict = {}
+        KeyDataDict = { 'Key2Mac':{},'Mac2Key':{} }
 
         for KeyFileName in self.FastdKeyDict:
             if self.FastdKeyDict[KeyFileName]['PeerKey'] != '':
-                Key2MacDict[self.FastdKeyDict[KeyFileName]['PeerKey']] = {
+                KeyDataDict['Key2Mac'][self.FastdKeyDict[KeyFileName]['PeerKey'][:12]] = {
                     'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
-                    'KeyFileName':KeyFileName,
+                    'KeyFile':KeyFileName,
                     'PeerMAC':self.FastdKeyDict[KeyFileName]['PeerMAC']
                 }
 
             if self.FastdKeyDict[KeyFileName]['PeerMAC'] != '':
-                Mac2KeyDict[self.FastdKeyDict[KeyFileName]['PeerMAC']] = {
+                KeyDataDict['Mac2Key'][self.FastdKeyDict[KeyFileName]['PeerMAC']] = {
                     'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
-                    'KeyFileName':KeyFileName,
-                    'PeerKey':self.FastdKeyDict[KeyFileName]['PeerKey']
+                    'KeyFile':KeyFileName,
+                    'PeerKey':self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
                 }
 
         try:
-            LockFile = open('/tmp/.KeyDB.lock', mode='w+')
+            LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
             fcntl.lockf(LockFile,fcntl.LOCK_EX)
-            print('Writing Fastd Databases as json-File ...')
+            print('Writing Fastd Key Database as json-File ...')
 
-            Key2MacJsonFile = open(os.path.join(Path,'Key2Mac.json'), mode='w')
-            json.dump(Key2MacDict,Key2MacJsonFile)
-            Key2MacJsonFile.close()
-
-            Mac2KeyJsonFile = open(os.path.join(Path,'Mac2Key.json'), mode='w')
-            json.dump(Mac2KeyDict,Mac2KeyJsonFile)
-            Mac2KeyJsonFile.close()
+            KeyJsonFile = open(os.path.join(Path,'KeyData.json'), mode='w')
+            json.dump(KeyDataDict,KeyJsonFile)
+            KeyJsonFile.close()
 
         except:
-            print('\n!! Error on Writing Fastd Databases as json-Files!\n')
+            print('\n!! Error on Writing Fastd Key Database as json-File!\n')
 
         finally:
             fcntl.lockf(LockFile,fcntl.LOCK_UN)

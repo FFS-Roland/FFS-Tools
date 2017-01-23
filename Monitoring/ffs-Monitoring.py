@@ -185,8 +185,8 @@ ffsGWs = ffGatewayInfo(args.GITREPO)
 isOK = ffsGWs.VerifyDNS()	# Check DNS against keys from Git
 
 if not args.JSONPATH is None:
-    print('Writing Key Databases ...')
-    ffsGWs.WriteFastdDB(args.JSONPATH)
+    print('Writing Fastd Key Database ...')
+    ffsGWs.WriteKeyData(args.JSONPATH)
 
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
@@ -227,6 +227,6 @@ for Alert in ffsNodes.Alerts:
 for Alert in ffsNet.Alerts:
     MailBody += Alert+'\n'
 
-__SendEmail('Alerts from ffs-Monitor',MailReceipients,MailBody,AccountsDict['SMTP'])
+__SendEmail('Alert from ffs-Monitor',MailRecipients,MailBody,AccountsDict['SMTP'])
 
 print('OK.\n')

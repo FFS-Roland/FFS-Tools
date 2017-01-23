@@ -60,8 +60,9 @@ import argparse
 # Global Variables
 #-------------------------------------------------------------
 
-Key2MacDict = {}    # PeerKey -> {'SegDir', 'KeyFileName', 'PeerMAC'}
-Mac2KeyDict = {}    # PeerMAC -> {'SegDir', 'KeyFileName', 'PeerKey'}
+KeyDataDict = { 'Key2Mac':{},'Mac2Key':{} }
+# KeyDataDict[Key2Mac][PeerKey] -> {'SegDir', 'KeyFile', 'PeerMAC'}
+# KeyDataDict[Mac2Key][PeerMAC] -> {'SegDir', 'KeyFile', 'PeerKey'}
 
 
 
@@ -205,24 +206,19 @@ def checkDNS(NodeID):
 #-----------------------------------------------------------------------
 def LoadKeyData(Path):
 
-    global Key2MacDict
-    global Mac2KeyDict
+    global KeyDataDict
 
     try:
-        LockFile = open(os.path.join(Path,'.KeyDB.lock'), mode='w+')
+        LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
         fcntl.lockf(LockFile,fcntl.LOCK_EX)
-        print('Reading Fastd Databases json-Files ...')
+        print('Reading Fastd Key Database json-File ...')
 
-        Key2MacJsonFile = open(os.path.join(Path,'Key2Mac.json'), mode='r')
-        Key2MacDict = json.load(Key2MacJsonFile)
-        Key2MacJsonFile.close()
-
-        Mac2KeyJsonFile = open(os.path.join(Path,'Mac2Key.json'), mode='r')
-        Mac2KeyDict = json.load(Mac2KeyJsonFile)
-        Mac2KeyJsonFile.close()
+        KeyJsonFile = open(os.path.join(Path,'KeyData.json'), mode='r')
+        KeyDataDict = json.load(KeyJsonFile)
+        KeyJsonFile.close()
 
     except:
-        print('\n!! Error on Reading Fastd Database json-Files!\n')
+        print('\n!! Error on Reading Fastd Key Databas json-File!\n')
 
     finally:
         fcntl.lockf(LockFile,fcntl.LOCK_UN)
