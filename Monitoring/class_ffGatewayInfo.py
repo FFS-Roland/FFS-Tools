@@ -79,6 +79,7 @@ class ffGatewayInfo:
         # public Attributes
         self.FastdKeyDict = {}          # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
         self.Alerts       = []          # List of  Alert-Messages
+        self.AnalyseOnly  = False       # Blocking active Actions due to inconsistent Data
 
         # private Attributes
         self.__GitPath = GitPath
@@ -176,7 +177,8 @@ class ffGatewayInfo:
             print('++ KeyFileName doesn\'t match PeerMAC:', KeyFilePath, '=', PeerMAC, PeerName)
 
         if KeyFileName in self.FastdKeyDict:
-            print('!! Duplicate KeyFile:',KeyFileName,'=',SegDir,'+',self.FastdKeyDict[KeyFileName]['SegDir'])
+            self.__alert('!! Duplicate KeyFile: '+KeyFileName+' = '+SegDir+' + '+self.FastdKeyDict[KeyFileName]['SegDir'])
+            self.AnalyseOnly = True
 
             if self.FastdKeyDict[KeyFileName]['PeerMAC'] != PeerMAC:
                 print('!! Different PeerMAC:',KeyFileName,'=',PeerMAC,'<>',self.FastdKeyDict[KeyFileName]['PeerMAC'])
@@ -198,6 +200,7 @@ class ffGatewayInfo:
 
         if PeerKey != '' and PeerKey in self.__Key2FileNameDict:
             self.__alert('!! Duplicate fastd-Key: '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+SegDir+'/peers/'+KeyFileName)
+            self.AnalyseOnly = True
 
         self.__Key2FileNameDict[PeerKey] = {
             'SegDir':SegDir,
@@ -420,6 +423,7 @@ class ffGatewayInfo:
                 elif SegFromDNS != self.FastdKeyDict[KeyFileName]['SegDir']:
                     self.__alert('++ Segment in DNS <> Git: '+KeyFileName+' -> '+self.FastdKeyDict[KeyFileName]['PeerMAC']+SegFromDNS+' <> '+self.FastdKeyDict[KeyFileName]['SegDir']+' = '+self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
                     isOK = False
+                    self.AnalyseOnly = True
 
         print('... done.\n')
         return isOK

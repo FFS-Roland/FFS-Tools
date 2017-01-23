@@ -99,6 +99,7 @@ class ffMeshNet:
 
         # public Attributes
         self.Alerts          = []       # List of  Alert-Messages
+        self.AnalyseOnly     = False    # Blocking active Actions due to inkonsistent Data
 
         # private Attributes
         self.__NodeInfos = NodeInfos
@@ -283,6 +284,7 @@ class ffMeshNet:
             if len(FixedSegList) > 1:
                 self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
                 print('->',FixedSegList,self.__MeshCloudDict[CloudID])
+                self.AnalyseOnly = True
 
             else:   #----- exactly one Segment with fixed Nodes
                 for Segment in FixedSegList:
@@ -535,8 +537,8 @@ class ffMeshNet:
     def WriteMoveList(self,FileName):
 
         if len(self.__NodeMoveDict) > 0:
-            if len(self.Alerts)+len(self.__NodeInfos.Alerts)+len(self.__GwInfos.Alerts) > 0:
-                self.__alert('!! There might be Nodes to be moved but cannot due to Alerts!')
+            if self.AnalyseOnly or self.__NodeInfos.AnalyseOnly or self.__GwInfos.AnalyseOnly:
+                self.__alert('!! There might be Nodes to be moved but cannot due to inconsistent Data!')
             else:
                 self.__alert('++ There are Nodes to be moved:')
                 NodeMoveFile = open(FileName, mode='w')

@@ -110,6 +110,7 @@ class ffNodeInfo:
         self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
         self.SegmentLoadDict = {}       # Dictionary of Segments with their load (Nodes + Clients)
         self.Alerts          = []       # List of  Alert-Messages
+        self.AnalyseOnly     = False    # Locking automatic Actions due to inconsistent Data
 
         # private Attributes
         self.__AlfredURL = AlfredURL
@@ -314,12 +315,14 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 NodesDbJsonHTTP.close()
                 self.__alert('++ nodesdb.json is too old !!!')
+                self.AnalyseOnly = True
                 return
 
             jsonDbDict = json.loads(NodesDbJsonHTTP.read().decode('utf-8'))
             NodesDbJsonHTTP.close()
         except:
             self.__alert('Error on loading nodesdb.json !!!')
+            self.AnalyseOnly = True
             return
 
         print('Analysing nodesdb.json ...')
@@ -462,12 +465,14 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred158HTTP.close()
                 self.__alert('++ alfred-json-158.json is too old !!!')
+                self.AnalyseOnly = True
                 return
 
             json158Dict = json.loads(Afred158HTTP.read().decode('utf-8'))
             Afred158HTTP.close()
         except:
             self.__alert('++ Error on loading alfred-json-158.json !!!')
+            self.AnalyseOnly = True
             return
 
         print('Analysing alfred-json-158.json ...')
@@ -541,12 +546,14 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred159HTTP.close()
                 self.__alert('++ alfred-json-159.json is too old !!!')
+                self.AnalyseOnly = True
                 return
 
             json159Dict = json.loads(Afred159HTTP.read().decode('utf-8'))
             Afred159HTTP.close()
         except:
             self.__alert('++ Error on loading alfred-json-159.json !!!')
+            self.AnalyseOnly = True
             return
 
         print('Analysing alfred-json-159.json ...')
@@ -599,12 +606,14 @@ class ffNodeInfo:
             if StatusAge.total_seconds() > 900:
                 Afred160HTTP.close()
                 self.__alert('++ alfred-json-160.json is too old !!!')
+                self.AnalyseOnly = True
                 return
 
             json160 = json.loads(Afred160HTTP.read().decode('utf-8'))
             Afred160HTTP.close()
         except:
             self.__alert('++ Error on loading alfred-json-160.json !!!')
+            self.AnalyseOnly = True
             return
 
         print('Analysing alfred-json-160.json ...')
@@ -663,6 +672,7 @@ class ffNodeInfo:
             RawJsonHTTP.close()
         except:
             self.__alert('++ Error on loading raw.json !!!')
+            self.AnalyseOnly = True
             return
 
         print('Analysing raw.json ...')
