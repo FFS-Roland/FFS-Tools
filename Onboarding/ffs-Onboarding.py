@@ -56,16 +56,6 @@ import argparse
 
 
 
-#-------------------------------------------------------------
-# Global Variables
-#-------------------------------------------------------------
-
-KeyDataDict = { 'Key2Mac':{},'Mac2Key':{} }
-# KeyDataDict[Key2Mac][PeerKey] -> {'SegDir', 'KeyFile', 'PeerMAC'}
-# KeyDataDict[Mac2Key][PeerMAC] -> {'SegDir', 'KeyFile', 'PeerKey'}
-
-
-
 #-----------------------------------------------------------------------
 # function "getProcessID"
 #
@@ -115,10 +105,11 @@ def getSocket(pid):
 #
 #-----------------------------------------------------------------------
 def getMeshMAC(FastdStatusSocket):
-    MeshMAC = ''
+
+    MeshMAC = None
     Retries = 3
 
-    while(MeshMAC == '' and Retries > 0):
+    while(MeshMAC is None and Retries > 0):
         Retries -= 1
         StatusData = ''
         time.sleep(1)
@@ -145,7 +136,7 @@ def getMeshMAC(FastdStatusSocket):
                             for MeshMAC in FastdStatusJson['peers'][PeerKey]['connection']['mac_addresses']:
                                 break
         except:
-            MeshMAC = ''
+            MeshMAC = None
 
     return MeshMAC
 
@@ -166,7 +157,7 @@ def getNodeInfos(LLA):
             NodeHTTP.close()
         except:
             time.sleep(1)
-            NodeJson = {}
+            NodeJson = Node
             continue
 
     return NodeJson
@@ -206,7 +197,7 @@ def checkDNS(NodeID):
 #-----------------------------------------------------------------------
 def LoadKeyData(Path):
 
-    global KeyDataDict
+    KeyDataDict = {}
 
     try:
         LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
@@ -219,12 +210,13 @@ def LoadKeyData(Path):
 
     except:
         print('\n!! Error on Reading Fastd Key Databas json-File!\n')
+        KeyDataDict = None
 
     finally:
         fcntl.lockf(LockFile,fcntl.LOCK_UN)
         LockFile.close()
 
-    return
+    return KeyDataDict
 
 
 #-----------------------------------------------------------------------
@@ -318,6 +310,7 @@ def __TestDelNode(NodeJson,Segment,PeerKey,LogPath):
 #
 #-----------------------------------------------------------------------
 def RegisterNode(NodeJson,Segment,PeerKey,GitRepo):
+
     if Segment == '':
         Segment = '99'
 
@@ -385,28 +378,30 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
     if os.path.exists(FastdStatusSocket):
         MeshMAC = getMeshMAC(FastdStatusSocket)
+        KeyDataDict = LoadKeyData(args.JSONPATH)
 
-        if MeshMAC != '':
+        if not MeshMAC is None and not KeyDataDict is None:
             NIC = args.VPNIF
             NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+NIC
             NodeJson = getNodeInfos(NodeLLA)
 
             if 'node_id' in NodeJson and 'network' in NodeJson and 'mac' in NodeJson['network']:
             #----- Required Data of Node is available -----
-                LoadKeyData(args.JSONPATH)
                 PeerMAC = NodeJson['network']['mac']
                 DnsSegment  = checkDNS('ffs-'+NodeJson['node_id']+'-'+PeerKey[:12])    # -> 'vpn??'
                 MeshSegment = getMeshSegment(NodeJson['network']['addresses'],args.BATIF,args.VPNIF)
 
+                print('>> DNS / Mesh =',DnsSegment,'/',MeshSegment)
+
                 if DnsSegment is None:  # Node is not registered in DNS
 
-                    if PeerKey in Key2MacDict:
+                    if PeerKey[:12] in KeyDataDict['Key2Mac']:
                         print('++ Key is already in use:',PeerKey,NodeJson['node_id'],'/',NodeJson['network']['mac'],'->',
-                              Key2MacDict[PeerKey]['PeerMAC'],'=',Key2MacDict[PeerKey]['SegDir'],'/',Key2MacDict[PeerKey]['KeyFileName'])
+                              KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'=',KeyDataDict['Key2Mac'][PeerKey[:12]]['SegDir'],'/',KeyDataDict['Key2Mac'][PeerKey[:12]]['KeyFile'])
 
-                    if PeerMAC in Mac2KeyDict:
+                    if PeerMAC in KeyDataDict['Mac2Key']:
                         print('++ MAC is already in use:',PeerKey,NodeJson['node_id'],'/',PeerMAC,'->',
-                              Mac2KeyDict[PeerMAC]['SegDir'],'/',Mac2KeyDict[PeerMAC]['KeyFileName'],'=',Mac2KeyDict[PeerMAC]['PeerKey'])
+                              KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
 
 
 #                    if RegisterNode(NodeJson,MeshSegment,PeerKey,args.GITREPO):
@@ -414,10 +409,10 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
                 else:  # Node is already registered in DNS
-                    if PeerKey in Key2MacDict:
+                    if PeerKey[:12] in KeyDataDict['Key2Mac']:
 
-                        if Key2MacDict['PeerMAC'] != PeerMAC:
-                            print('!! Mismatch between DNS and Git:',PeerKey,'->',Key2MacDict['PeerMAC'],'<>',PeerMAC)
+                        if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
+                            print('!! Mismatch between DNS and Git:',PeerKey,'->',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
                         else:  # DNS == Git
                             if MeshSegment != DnsSegment:
                                 print('++ Node must be moved to other Segment:',PeerKey,'=',PeerMAC,'->',MeshSegment,'<>',DnsSegment)
