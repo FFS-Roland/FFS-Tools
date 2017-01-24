@@ -52,41 +52,47 @@ from class_ffGatewayInfo import *
 #-------------------------------------------------------------
 
 RegionSegDict = {
+    'Stuttgart':'vpn01',
+
     'Alb-Donau-Kreis':'vpn02',
     'Bayern':'vpn02',
     'Biberach':'vpn02',
     'Bodenseekreis':'vpn02',
+    'Esslingen':'vpn02',
+    'Konstanz':'vpn02',
+    'Ravensburg':'vpn02',
+    'Reutlingen':'vpn02',
+    'Sigmaringen':'vpn02',
+    'Tuebingen':'vpn02',
+    'Zollernalbkreis':'vpn02',
+
+    'Goeppingen':'vpn03',
+    'Hohenlohekreis':'vpn03',
+    'Mecklenburg-Vorpommern':'vpn03',
+    'Ostalbkreis':'vpn03',
+    'Rems-Murr-Kreis':'vpn03',
+    'Schwaebisch-Hall':'vpn03',
+
     'Boeblingen':'vpn04',
     'Calw':'vpn04',
-    'Esslingen':'vpn02',
     'Frankreich':'vpn04',
-    'Goeppingen':'vpn03',
     'Heilbronn':'vpn04',
     'Hessen':'vpn04',
-    'Hohenlohekreis':'vpn03',
     'Karlsruhe':'vpn04',
-    'Konstanz':'vpn02',
     'Ludwigsburg':'vpn04',
-    'Mecklenburg-Vorpommern':'vpn03',
     'Neckar-Odenwald-Kreis':'vpn04',
     'Nordrhein-Westfalen':'vpn04',
     'Ortenaukreis':'vpn04',
-    'Ostalbkreis':'vpn03',
     'Pforzheim':'vpn04',
     'Rastatt':'vpn04',
-    'Ravensburg':'vpn02',
-    'Rems-Murr-Kreis':'vpn03',
-    'Reutlingen':'vpn02',
     'Rheinland-Pfalz':'vpn04',
     'Rottweil':'vpn04',
-    'Schwaebisch-Hall':'vpn03',
-    'Schwarzwald-Baar-Kreis':'vpn04',
-    'Sigmaringen':'vpn02',
-    'Stuttgart':'vpn01',
-    'Tuebingen':'vpn02',
-    'Zollernalbkreis':'vpn02'
+    'Saarland':'vpn04',
+    'Schwarzwald-Baar-Kreis':'vpn04'
 }
 
+
+NoRegionList = [ '??','No Location','Outside' ]
 
 
 
@@ -453,22 +459,26 @@ class ffMeshNet:
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?':
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is None:
+                if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' or self.__NodeInfos.IsOnline(ffNodeMAC)) and
+                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is None)):
                     print('!! Segment is None:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
-                elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.IsOnline(ffNodeMAC):
-                    if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
-                        print('!! KeyDir doesn\'t match Segment:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
-                    print('++ Wrong Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
-                elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto':
-                    print('++ Segment Assign:  ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
+                    print('!! KeyDir doesn\'t match Segment:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
+
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in RegionSegDict:
                     if int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']:
                         print('++ DestSeg Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]),'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
-                elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] != '??' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] != 'No Location' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99:
-                    print('++ Missing Region:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in NoRegionList:
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
+                else:
+                    self.__alert('++ Missing Region: '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status']+' '+ffNodeMAC+' = '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']+' -> vpn'+self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
+
+
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
+                    print('++ Wrong Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+
 
                 if self.__NodeInfos.IsOnline(ffNodeMAC):
                     ffSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']
