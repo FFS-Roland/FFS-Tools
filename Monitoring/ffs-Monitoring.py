@@ -61,6 +61,7 @@ from class_ffMeshNet import *
 
 
 
+
 #-------------------------------------------------------------
 # LogFile Names
 #-------------------------------------------------------------
@@ -127,6 +128,7 @@ def __LoadMailRecipients(RecipientsFile):
         MailRecipients = None
 
     return MailRecipients
+
 
 
 #-----------------------------------------------------------------------
@@ -227,6 +229,11 @@ for Alert in ffsNodes.Alerts:
 for Alert in ffsNet.Alerts:
     MailBody += Alert+'\n'
 
-__SendEmail('Alert from ffs-Monitor',MailRecipients,MailBody,AccountsDict['SMTP'])
+if MailBody != '':
+    __SendEmail('Alert from ffs-Monitor',MailRecipients,MailBody,AccountsDict['SMTP'])
+else:
+    TimeInfo = datetime.datetime.now()
+    if TimeInfo.hour == 12 and TimeInfo.minute < 5:
+        __SendEmail('Hello from ffs-Monitor',MailRecipients,'ffs-Monitor is alive. No Alerts right now.',AccountsDict['SMTP'])
 
 print('OK.\n')
