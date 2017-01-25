@@ -78,8 +78,8 @@ MaxOfflineDays    = 10 * 86400
 
 AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
 
-AccountsFileName  = 'Accounts.json'
-MailToFileName    = 'MailRecipients.json'
+AccountsFileName  = '.Accounts.json'
+MailToFileName    = '.MailRecipients.json'
 
 
 
