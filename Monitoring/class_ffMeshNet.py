@@ -96,6 +96,7 @@ NoRegionList = [ '??','No Location','Outside' ]
 
 
 
+
 class ffMeshNet:
 
     #==========================================================================
@@ -180,6 +181,7 @@ class ffMeshNet:
         return
 
 
+
     #-----------------------------------------------------------------------
     # private function "__SetSegmentWeight"
     #
@@ -206,6 +208,7 @@ class ffMeshNet:
                     self.__DefaultTarget = Segment
 
         return
+
 
 
     #-----------------------------------------------------------------------
@@ -274,6 +277,7 @@ class ffMeshNet:
         return
 
 
+
     #-----------------------------------------------------------------------
     # private function "__HandleShortcut"
     #
@@ -320,6 +324,7 @@ class ffMeshNet:
         return
 
 
+
     #-----------------------------------------------------------------------
     # private function "__HandleGeoLocation"
     #
@@ -345,6 +350,7 @@ class ffMeshNet:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
 
         return
+
 
 
     #-----------------------------------------------------------------------
@@ -405,8 +411,7 @@ class ffMeshNet:
                     else:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -439,8 +444,7 @@ class ffMeshNet:
                         print('>> git mv %s/peers/%s vpn%02d/peers/  = %s'%( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
                                                                              TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8') ))
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -500,8 +504,7 @@ class ffMeshNet:
                         print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
                               '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -517,7 +520,6 @@ class ffMeshNet:
         for KeyIndex in self.__GwInfos.FastdKeyDict.keys():
             self.__NodeInfos.AddNode(KeyIndex,self.__GwInfos.FastdKeyDict[KeyIndex])
 
-        self.__NodeInfos.AddNeighbours()
         self.__CheckConsistency()
         return
 
@@ -566,6 +568,7 @@ class ffMeshNet:
             os.remove(FileName)
 
         return
+
 
 
     #==============================================================================

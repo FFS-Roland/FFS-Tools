@@ -121,9 +121,11 @@ class ffNodeInfo:
         self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
         # Initializations
-        self.__LoadNodesDbJson()        # ffNodeDict[ffNodeMAC] -> all Infos of ffNode
+        self.__LoadNodesDbJson()        # ffNodeDict[ffNodeMAC] -> all Alfred-Infos of ffNode
         self.__LoadAlfred158Json()      # verify Infos of Nodes
         self.__LoadAlfred159Json()      # check for VPN-Uplinks of Nodes
+        self.__LoadAlfred160Json()      # get the Neighbours of the Nodes
+
         self.__LoadRawJson()            # add or update Info with Data from announced / respondd
 
         return
@@ -187,6 +189,7 @@ class ffNodeInfo:
         return GluonMacList
 
 
+
     #-----------------------------------------------------------------------
     # private function "__GenerateGluonMACsNew(MainMAC)"
     #
@@ -237,6 +240,7 @@ class ffNodeInfo:
             GluonMacList.append(m1to5New + hex((m6Main & 0xf8) + i)[2:].zfill(2))
 
         return GluonMacList
+
 
 
     #-------------------------------------------------------------
@@ -441,8 +445,7 @@ class ffNodeInfo:
                                     if jsonDbDict[DbIndex]['software']['firmware']['base'] == 'gluon-v2016.1.3' and 'status-page' in jsonDbDict[DbIndex]['software']:
                                         self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -521,8 +524,7 @@ class ffNodeInfo:
                                                 elif self.MAC2NodeIDDict[MeshMAC] != NodeMAC:
                                                     print('!! Mesh MAC mismatch:',MeshMAC,'->',NodeMAC,'<>',self.MAC2NodeIDDict[MeshMAC])
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -583,9 +585,9 @@ class ffNodeInfo:
                                                 GWlist.append(Uplink[2:])
                                                 self.ffNodeDict[NodeMAC]['Status'] = 'V'
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
+
 
 
     #-------------------------------------------------------------
@@ -640,6 +642,8 @@ class ffNodeInfo:
 
                                         if ffNeighbour not in self.MAC2NodeIDDict:
                                             print('++ Neigbour MAC unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ffNeighbour)
+            else:
+                print('++ Node unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
 
         print('... done.\n')
         return
@@ -793,7 +797,6 @@ class ffNodeInfo:
 
 
 
-
     #=========================================================================
     # Method "AddNode"
     #
@@ -828,9 +831,6 @@ class ffNodeInfo:
                     'Neighbours':[]
                 }
 
-#                if KeyIndex == 'ffs-b827eb7b231e':
-#                    print('*1*',KeyIndex,ffNode)
-
                 self.MAC2NodeIDDict[ffNode['PeerMAC']] = ffNode['PeerMAC']
                 self.__AddGluonMACs(ffNode['PeerMAC'],ffNode['VpnMAC'])
 
@@ -857,18 +857,6 @@ class ffNodeInfo:
 
 
     #==============================================================================
-    # Method "AddNeighbours"
-    #
-    #   Analysing Mesh Clouds for Segment Shortcuts
-    #
-    #==============================================================================
-    def AddNeighbours(self):
-
-        self.__LoadAlfred160Json()      # get the Neighbours of the Nodes
-        return
-
-
-    #==============================================================================
     # Method "IsOnline"
     #
     #   True = Node is Online
@@ -879,6 +867,7 @@ class ffNodeInfo:
             return False
 
         return (self.ffNodeDict[ffNodeMAC]['Status'] in OnlineStates)
+
 
 
     #==============================================================================
@@ -900,6 +889,7 @@ class ffNodeInfo:
         MacTableFile.close()
         print('... done.\n')
         return
+
 
 
     #==============================================================================

@@ -82,6 +82,7 @@ FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
 
 
 
+
 class ffGatewayInfo:
 
     #==========================================================================
@@ -254,8 +255,7 @@ class ffGatewayInfo:
                     else:
                         self.__LoadKeyFile(SegDir,KeyFileName)
 
-        print('... done.')
-        print()
+        print('... done.\n')
         return
 
 
@@ -304,6 +304,7 @@ class ffGatewayInfo:
         return
 
 
+
     #-----------------------------------------------------------------------
     # private function "__LoadFastdStatusFile"
     #
@@ -346,6 +347,7 @@ class ffGatewayInfo:
         return
 
 
+
     #--------------------------------------------------------------------------
     # private function "__LoadFastdStatusInfos"
     #
@@ -364,9 +366,6 @@ class ffGatewayInfo:
             print('   GW%02d ...' % (ffGW))
 
             for GwInstance in range(0,8):
-#                if ffGW == 5 and GwInstance == 1:
-#                    continue
-#
                 for ffSeg in self.__SegmentList:
 
                     FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/fastd/vpn%02d.json' % (ffGW,GwInstance,ffSeg)
@@ -478,6 +477,7 @@ class ffGatewayInfo:
         return self.__SegmentList
 
 
+
     #=========================================================================
     # Method "FastdKeys"
     #
@@ -486,6 +486,7 @@ class ffGatewayInfo:
     #=========================================================================
     def FastdKeys(self):
         return self.FastdKeyDict
+
 
 
     #=========================================================================

@@ -182,7 +182,7 @@ print('Setting up basic Data ...')
 
 ffsGWs = ffGatewayInfo(args.GITREPO)
 
-isOK = ffsGWs.VerifyDNS()	# Check DNS against keys from Git
+isOK = ffsGWs.VerifyDNS(AccountsDict['DNS'])	# Check DNS against keys from Git
 
 if not args.JSONPATH is None:
     print('Writing Fastd Key Database ...')
