@@ -1,7 +1,9 @@
 #!/bin/sh
 
-date >> /var/freifunk/logs/checkedkey
-echo $PEER_KEY >> /var/freifunk/logs/checkedkey 
+LOGFILE=/var/freifunk/logs/vpn00_verify.log
+
+date >> $LOGFILE
+echo $PEER_KEY >>  $LOGFILE
 
 if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
   LOCKTIME=`cat /etc/fastd/$INTERFACE/blacklist/$PEER_KEY`
@@ -10,12 +12,12 @@ if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
   if [ $DELTA -gt 300 ]; then
     rm /etc/fastd/$INTERFACE/blacklist/$PEER_KEY
   else
-    date >> /var/freifunk/logs/checkedkey
-    echo Blacklisted >> /var/freifunk/logs/checkedkey
+    date >>  $LOGFILE
+    echo Blacklisted >>  $LOGFILE
     exit 1
   fi
 fi
 
-date >> /var/freifunk/logs/checkedkey
-echo OK >> /var/freifunk/logs/checkedkey
+date >>  $LOGFILE
+echo OK >>  $LOGFILE
 exit 0
