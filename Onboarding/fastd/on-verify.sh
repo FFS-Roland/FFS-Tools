@@ -3,21 +3,21 @@
 LOGFILE=/var/freifunk/logs/vpn00_verify.log
 
 date >> $LOGFILE
-echo $PEER_KEY >>  $LOGFILE
+echo $PEER_KEY >> $LOGFILE
 
 if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
   LOCKTIME=`cat /etc/fastd/$INTERFACE/blacklist/$PEER_KEY`
   NOW=`date +%s`
   DELTA=$((NOW - LOCKTIME))
-  if [ $DELTA -gt 300 ]; then
+  if [ $DELTA -gt 600 ]; then
     rm /etc/fastd/$INTERFACE/blacklist/$PEER_KEY
+    echo Blocking removed. >> $LOGFILE
   else
-    date >>  $LOGFILE
-    echo Blacklisted >>  $LOGFILE
+    echo Blacklisted >> $LOGFILE
+    echo ----------- >> $LOGFILE
     exit 1
   fi
 fi
 
-date >>  $LOGFILE
-echo OK >>  $LOGFILE
+echo OK >> $LOGFILE
 exit 0

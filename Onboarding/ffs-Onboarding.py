@@ -13,7 +13,7 @@
 #      --peerkey   = fastd-Key from Peer                                                  #
 #      --gitrepo   = Git Repository with KeyFiles                                         #
 #      --json      = Path to json files with data of nodes                                #
-#      --blacklist = Folder for Blacklisting Files                                        #
+#      --blacklist = Path to Blacklisting Files                                           #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -150,6 +150,7 @@ def getNodeInfos(LLA):
     Retries = 3
 
     while(NodeJson == {} and Retries > 0):
+        print('... connecting to http://['+NodeLLA+']/cgi-bin/nodeinfo')
         Retries -= 1
         try:
             NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
@@ -157,7 +158,7 @@ def getNodeInfos(LLA):
             NodeHTTP.close()
         except:
             time.sleep(1)
-            NodeJson = Node
+            NodeJson = {}
             continue
 
     return NodeJson
@@ -366,14 +367,15 @@ parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, 
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
 parser.add_argument('--json', dest='JSONPATH', action='store', required=True, help='Path to Database with Keys and MACs')
 parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=True, help='Blacklist Folder')
-args = parser.parse_args()
 
+args = parser.parse_args()
+PeerKey = args.PEERKEY
 PID = getProcessID(args.VPNIF)
+
 if PID == 0:
     exit(1)
 
 if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
-    PeerKey = args.PEERKEY
     FastdStatusSocket = getSocket(PID)
 
     if os.path.exists(FastdStatusSocket):
@@ -381,6 +383,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
         KeyDataDict = LoadKeyData(args.JSONPATH)
 
         if not MeshMAC is None and not KeyDataDict is None:
+            print('... MeshMAC and KeyDataDict loaded.')
             NIC = args.VPNIF
             NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+NIC
             NodeJson = getNodeInfos(NodeLLA)
@@ -422,8 +425,14 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                     else:  # Node is in DNS but not in Git
                         print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
 
-#else:
-#    print('++ ERROR: This must not happen!',args.PEERKEY)
+
+            else:
+                print('++ Node is too old or data is missing:',PeerKey)
+                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+
+else:
+    print('++ Node is blacklisted:',PeerKey)
+
 
 detachPeers(PID)
 exit(0)
