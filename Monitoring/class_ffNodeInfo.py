@@ -439,6 +439,8 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
                                     elif jsonDbDict[DbIndex]['software']['firmware']['release'][:13] in GoodOldGluonList:
                                         self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
+                                    else:
+                                        self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix vpn00'
 
                             if 'base' in jsonDbDict[DbIndex]['software']['firmware']:
                                 if jsonDbDict[DbIndex]['software']['firmware']['base'] is not None:
@@ -598,7 +600,7 @@ class ffNodeInfo:
     #-------------------------------------------------------------
     def __LoadAlfred160Json(self):
 
-        print('\nLoading alfred-json-160.json ...')
+        print('Loading alfred-json-160.json ...')
 
         try:
             Afred160HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred160Name)
@@ -681,20 +683,26 @@ class ffNodeInfo:
 
         print('Analysing raw.json ...')
 
-        UtcTime = datetime.datetime.utcnow()
+        UtcTime  = datetime.datetime.utcnow()
         UnixTime = time.mktime(datetime.datetime.utcnow().timetuple())
 
         for ffNodeKey in RawJsonDict.keys():
-            if 'nodeinfo' in RawJsonDict[ffNodeKey] and 'statistics' in RawJsonDict[ffNodeKey]:
+            if 'nodeinfo' in RawJsonDict[ffNodeKey] and 'statistics' in RawJsonDict[ffNodeKey] and 'lastseen' in RawJsonDict[ffNodeKey]:
+
                 if RawJsonDict[ffNodeKey]['nodeinfo']['node_id'] != ffNodeKey or RawJsonDict[ffNodeKey]['statistics']['node_id'] != ffNodeKey:
                     print('++ NodeID-Mismatch:',RawJsonDict[ffNodeKey]['nodeinfo']['node_id'],ffNodeKey)
                     continue
 
-                ffNodeMAC = RawJsonDict[ffNodeKey]['nodeinfo']['network']['mac']
-                MACidx = ffNodeMAC[:2]+ ffNodeMAC[3:5] + ffNodeMAC[6:8] + ffNodeMAC[9:11] + ffNodeMAC[12:14] + ffNodeMAC[15:17]
+                ffNodeMAC = RawJsonDict[ffNodeKey]['nodeinfo']['network']['mac'][:17]
 
-                if MACidx != ffNodeKey:
-                    print('++ NodeID-MAC-Mismatch:',ffNodeMAC,'<>',ffNodeKey)
+                if not MacAdrTemplate.match(ffNodeMAC):
+                    print('!! Invalid MAC Format:',ffNodeKey,ffNodeMAC)
+                    continue
+
+                ffNodeID = ffNodeMAC[:2]+ ffNodeMAC[3:5] + ffNodeMAC[6:8] + ffNodeMAC[9:11] + ffNodeMAC[12:14] + ffNodeMAC[15:17]
+
+                if ffNodeID != ffNodeKey[:12]:
+                    print('++ NodeID-MAC-Mismatch:',ffNodeKey,'<->',ffNodeID,'=',ffNodeMAC)
                     continue
 
                 if not GwAllMacTemplate.match(ffNodeMAC):
@@ -791,6 +799,9 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # online
                     elif UnixTime - LastSeen > MaxInactiveTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # inactive
+
+            else:
+                print('** Invalid Record:',ffNodeKey)
 
         print('... done.\n')
         return

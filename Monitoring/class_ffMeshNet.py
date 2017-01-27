@@ -390,7 +390,7 @@ class ffMeshNet:
                         else:
                             DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto':
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] == '%':
                         if not self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] in FixedSegList:
                             FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
@@ -456,7 +456,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     def __CheckConsistency(self):
 
-        print('Check Consistency of Data ...')
+        print('\nCheck Consistency of Data ...')
 
         ffSegmentList = self.__GwInfos.Segments()
 
