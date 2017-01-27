@@ -335,7 +335,7 @@ class ffNodeInfo:
 
         for DbIndex in jsonDbDict:
             NodeNets  = jsonDbDict[DbIndex]['network']
-            ffNodeMAC = jsonDbDict[DbIndex]['network']['mac']
+            ffNodeMAC = jsonDbDict[DbIndex]['network']['mac'].strip()
 
             if not GwAllMacTemplate.match(DbIndex) and not GwAllMacTemplate.match(ffNodeMAC):
                 if not MacAdrTemplate.match(DbIndex) or not MacAdrTemplate.match(ffNodeMAC):
@@ -491,7 +491,7 @@ class ffNodeInfo:
                 print('!! Alfred-Json-158 Format Error:',jsonIndex)
 
             else:
-                NodeID = json158Dict[jsonIndex]['node_id']
+                NodeID = json158Dict[jsonIndex]['node_id'].strip()
                 NodeMAC = NodeID[0:2] + ':' + NodeID[2:4] + ':' + NodeID[4:6] + ':' + NodeID[6:8] + ':' + NodeID[8:10] + ':' + NodeID[10:12]
 
                 if not MacAdrTemplate.match(NodeMAC):
@@ -500,8 +500,8 @@ class ffNodeInfo:
                 elif not GwAllMacTemplate.match(NodeMAC):
                     if not 'mac' in json158Dict[jsonIndex]['network']:
                         print('++ No MAC in Alfred-158:',jsonIndex,'=',NodeMAC)
-                    elif json158Dict[jsonIndex]['network']['mac'] != NodeMAC:
-                        print('++ MAC Mismatch:',jsonIndex,'->',NodeMAC,'<>',json158Dict[jsonIndex]['network']['mac'])
+                    elif json158Dict[jsonIndex]['network']['mac'].strip() != NodeMAC:
+                        print('++ MAC Mismatch:',jsonIndex,'->',NodeMAC,'<>',json158Dict[jsonIndex]['network']['mac'].strip())
 
                     if NodeMAC not in self.ffNodeDict:
                         print('++ Node not in self.ffNodeDict:',NodeMAC)
@@ -563,7 +563,7 @@ class ffNodeInfo:
         print('Analysing alfred-json-159.json ...')
 
         for jsonIndex in json159Dict:
-            NodeID = json159Dict[jsonIndex]['node_id']
+            NodeID = json159Dict[jsonIndex]['node_id'].strip()
             NodeMAC = NodeID[0:2] + ':' + NodeID[2:4] + ':' + NodeID[4:6] + ':' + NodeID[6:8] + ':' + NodeID[8:10] + ':' + NodeID[10:12]
 
             if not GwAllMacTemplate.match(NodeMAC):
@@ -623,7 +623,7 @@ class ffNodeInfo:
         print('Analysing alfred-json-160.json ...')
 
         for NodeItem in json160:
-            ffNodeID = json160[NodeItem]['node_id']
+            ffNodeID = json160[NodeItem]['node_id'].strip()
             ffNodeMAC = ffNodeID[0:2] + ':' + ffNodeID[2:4] + ':' + ffNodeID[4:6] + ':' + ffNodeID[6:8] + ':' + ffNodeID[8:10] + ':' + ffNodeID[10:22]
 
             if ffNodeMAC in self.ffNodeDict and self.ffNodeDict[ffNodeMAC]['Status'] != '?':
@@ -645,7 +645,7 @@ class ffNodeInfo:
                                         if ffNeighbour not in self.MAC2NodeIDDict:
                                             print('++ Neigbour MAC unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ffNeighbour)
             else:
-                print('++ Node unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+                print('++ Node unknown:',ffNodeMAC)
 
         print('... done.\n')
         return
@@ -693,13 +693,13 @@ class ffNodeInfo:
                     print('++ NodeID-Mismatch:',RawJsonDict[ffNodeKey]['nodeinfo']['node_id'],ffNodeKey)
                     continue
 
-                ffNodeMAC = RawJsonDict[ffNodeKey]['nodeinfo']['network']['mac'][:17]
+                ffNodeMAC = RawJsonDict[ffNodeKey]['nodeinfo']['network']['mac'].strip()
 
                 if not MacAdrTemplate.match(ffNodeMAC):
                     print('!! Invalid MAC Format:',ffNodeKey,ffNodeMAC)
                     continue
 
-                ffNodeID = ffNodeMAC[:2]+ ffNodeMAC[3:5] + ffNodeMAC[6:8] + ffNodeMAC[9:11] + ffNodeMAC[12:14] + ffNodeMAC[15:17]
+                ffNodeID = ffNodeMAC.replace(':','')
 
                 if ffNodeID != ffNodeKey[:12]:
                     print('++ NodeID-MAC-Mismatch:',ffNodeKey,'<->',ffNodeID,'=',ffNodeMAC)
