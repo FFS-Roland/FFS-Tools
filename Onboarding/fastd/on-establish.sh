@@ -9,11 +9,11 @@ echo Start $PEER_KEY >>  $LOGFILE
 
 if [ $? != 0 ]; then
     date >>  $LOGFILE
-    echo ERROR $PEER_KEY >>  $LOGFILE
+    echo ++ ERROR >>  $LOGFILE
 #    /etc/init.d/fastd restart
 else
     date >>  $LOGFILE
-    echo OK $PEER_KEY >>  $LOGFILE
+    echo OK. >>  $LOGFILE
 fi
 
 echo ----------------------------------------  >> $LOGFILE

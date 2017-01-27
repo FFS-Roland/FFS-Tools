@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#exit 1
+
 LOGFILE=/var/freifunk/logs/vpn00_verify.log
 
 date >> $LOGFILE
@@ -20,4 +22,5 @@ if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
 fi
 
 echo OK >> $LOGFILE
+echo --------------------- >> $LOGFILE
 exit 0

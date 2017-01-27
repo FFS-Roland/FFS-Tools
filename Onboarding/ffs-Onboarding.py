@@ -55,13 +55,20 @@ import fcntl
 import argparse
 
 
+#----- Json-File with needed Accounts -----
+AccountFileName  = '.Accounts.json'
+
+
+
 
 #-----------------------------------------------------------------------
-# function "getProcessID"
+# function "getFastdProcessID"
 #
+#    > FastdInterface = 'vpn??'
 #-----------------------------------------------------------------------
-def getProcessID(segment):
-    pid = 0
+def getFastdProcessID(FastdInterface):
+
+    pid = None
     for proc in psutil.process_iter():
         try:
             pinfo = proc.as_dict(attrs=['pid', 'name',"cmdline"])
@@ -70,7 +77,7 @@ def getProcessID(segment):
         else:
             if pinfo['name'] == 'fastd':
                 config = pinfo['cmdline'][pinfo['cmdline'].index('--config')+1]
-                if os.path.dirname(config).rsplit('/',1)[1] == segment:
+                if os.path.dirname(config).rsplit('/',1)[1] == FastdInterface:
                     pid = pinfo['pid']
                     break
     return pid
@@ -78,25 +85,45 @@ def getProcessID(segment):
 
 
 #-----------------------------------------------------------------------
-# function "getSocket"
+# Function "LoadAccounts"
+#
+#   Load Accounts from Accounts.json into AccountsDict
 #
 #-----------------------------------------------------------------------
-def getSocket(pid):
-    fastdSocket = ''
-    p = psutil.Process(pid)
+def LoadAccounts(AccountFile):
+
+    AccountsDict = None
     try:
-        connections = p.get_connections(kind='unix')
+        AccountJsonFile = open(AccountFile, mode='r')
+        AccountsDict = json.load(AccountJsonFile)
+        AccountJsonFile.close()
+
     except:
-        pass
+        print('\n!! Error on Reading Accounts json-File!\n')
+        AccountsDict = None
+
+    return AccountsDict
+
+
+
+#-----------------------------------------------------------------------
+# function "getFastdStatusSocket"
+#
+#-----------------------------------------------------------------------
+def getFastdStatusSocket(pid):
+
+    fastdSocket = ''
+
     try:
+        p = psutil.Process(pid)
         connections = p.connections(kind='unix')
     except:
         pass
-
-    for f in connections:
-        if f.laddr.startswith("/var/run"):
-            fastdSocket = f.laddr
-            break
+    else:
+        for f in connections:
+            if f.laddr.startswith("/var/run"):
+                fastdSocket = f.laddr
+                break
 
     return fastdSocket
 
@@ -145,16 +172,109 @@ def getMeshMAC(FastdStatusSocket):
 
 
 #-----------------------------------------------------------------------
+# function "InfoFromGluonNodeinfoPage"
+#
+#    can be used on Gluon >= v2016.1
+#
+#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#-----------------------------------------------------------------------
+def InfoFromGluonNodeinfoPage(NodeLLA):
+
+    NodeInfoDict = None
+    NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
+    NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+    NodeHTTP.close()
+
+    if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
+        if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
+            if NodeJson['node_id'][:12] == NodeJson['network']['mac'][:17].replace(':',''):
+                NodeInfoDict = {
+                    'NodeType' : 'new',
+                    'NodeID'   : NodeJson['node_id'][:12],
+                    'MAC'      : NodeJson['network']['mac'][:17],
+                    'Hostname' : NodeJson['hostname'],
+                    'Segment'  : None
+                }
+
+                for NodeIPv6 in NodeJson['network']['addresses']:
+                    if NodeIPv6[0:12] == 'fd21:b4dc:4b':
+                        if NodeIPv6[12:14] == '1e':
+                             NodeInfoDict['Segment'] = 'vpn00'
+                        else:
+                            NodeInfoDict['Segment'] = 'vpn'+NodeIPv6[12:14]
+                        break
+
+    return NodeInfoDict
+
+
+
+#-----------------------------------------------------------------------
+# function "InfoFromGluonStatusPage"
+#
+#    must be used on Gluon >= v2016.1
+#
+#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#-----------------------------------------------------------------------
+def InfoFromGluonStatusPage(NodeLLA):
+
+    NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status')
+    NodeHTML = NodeHTTP.read().decode('utf-8')
+    NodeHTTP.close()
+
+    NodeInfoDict = {
+        'NodeType' : 'old',
+        'NodeID'   : None,
+        'MAC'      : None,
+        'Hostname' : None,
+        'Segment'  : None
+    }
+
+    pStart = NodeHTML.find('<body><h1>')
+    if pStart > 0:
+        pStart += 10
+        pStop = NodeHTML.find('</h1>',pStart)
+        if pStop > pStart:
+            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop]
+            print('>>> Hostname =',NodeHTML[pStart:pStop])
+
+    pStart = NodeHTML.find('link/ether ')
+    if pStart > 0:
+        pStart += 11
+        print('>>> link/ether =',NodeHTML[pStart:pStart+20])
+        pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
+        print(pStart,pStop)
+        if pStop >= pStart + 17:
+            NodeInfoDict['MAC'] = NodeHTML[pStart:pStart+17]
+            NodeInfoDict['NodeID'] =  NodeInfoDict['MAC'].replace(':','')
+            print('>>> MAC =',NodeHTML[pStart:pStop])
+
+    pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
+    if pStart > 0:
+        pStart += 18
+        pStop = NodeHTML.find('/64 scope global',pStart)
+        if pStop > pStart + 2:
+            if NodeHTML[pStart:pStart+2] == '1e':
+                NodeInfoDict['Segment'] = 'vpn00'
+            else:
+                NodeInfoDict['Segment'] = 'vpn'+NodeHTML[pStart:pStart+2]
+
+        print('>>> Segment =',NodeHTML[pStart:pStop])
+
+    return NodeInfoDict
+
+
+
+#-----------------------------------------------------------------------
 # function "getNodeInfos"
 #
 #-----------------------------------------------------------------------
-def getNodeInfos(LLA):
+def getNodeInfos(NodeLLA):
 
     NodeInfoDict = None
     Retries = 3
 
     while(Retries > 0):
-        print('... connecting to http://['+NodeLLA+']')
+        print('Connecting to http://['+NodeLLA+'] ...')
         Retries -= 1
         try:
             NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/')
@@ -163,78 +283,22 @@ def getNodeInfos(LLA):
 
             if NodeHTML[:15] == '<!DOCTYPE html>':
                 print('... new Gluon ...')
-                NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
-                NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
-                NodeHTTP.close()
-
-                if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
-                    if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
-                        NodeInfoDict = {
-                            'NodeID'   : NodeJson['node_id'],
-                            'MAC'      : NodeJson['network']['mac'],
-                            'Hostname' : NodeJson['hostname'],
-                            'Segment'  : None
-                        }
-
-                        for NodeIPv6 in NodeJson['network']['addresses']:
-                            if NodeIPv6[0:12] == 'fd21:b4dc:4b':
-                                NodeInfoDict['Segment'] = 'vpn'+NodeIPv6[12:14]
-                                break
-
+                NodeInfoDict = InfoFromGluonNodeinfoPage(NodeLLA)
             else:
                 print('... old Gluon ...')
-                NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status')
-                NodeHTML = NodeHTTP.read().decode('utf-8')
-                NodeHTTP.close()
-
-#                print(NodeHTML)
-
-                NodeInfoDict = {
-                    'NodeID'   : None,
-                    'MAC'      : None,
-                    'Hostname' : None,
-                    'Segment'  : None
-                }
-
-                pStart = NodeHTML.find('<body><h1>')
-                if pStart > 0:
-                    pStart += 10
-                    pStop = NodeHTML.find('</h1>',pStart)
-                    if pStop > pStart:
-                        NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop]
-                        print('>>> Hostname =',NodeHTML[pStart:pStop])
-
-                pStart = NodeHTML.find('link/ether ')
-                if pStart > 0:
-                    pStart += 11
-                    print('>>> link/ether =',NodeHTML[pStart:pStart+20])
-                    pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
-                    print(pStart,pStop)
-                    if pStop == pStart + 17:
-                        NodeInfoDict['MAC'] = NodeHTML[pStart:pStop]
-                        NodeInfoDict['NodeID'] = NodeHTML[pStart:pStop].replace(':','')
-                        print('>>> MAC =',NodeHTML[pStart:pStop])
-
-                pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
-                if pStart > 0:
-                    pStart += 18
-                    pStop = NodeHTML.find('/64 scope global',pStart)
-                    if pStop > pStart + 2:
-                        if NodeHTML[pStart:pStart+2] == '1e':
-                            NodeInfoDict['Segment'] = 'vpn00'
-                        else:
-                            NodeInfoDict['Segment'] = 'vpn'+NodeHTML[pStart:pStart+2]
-
-                    print('>>> Segment =',NodeHTML[pStart:pStop])
-
-                if NodeInfoDict['NodeID'] is None or NodeInfoDict['Hostname'] is None:
-                     NodeInfoDict = None
+                NodeInfoDict = InfoFromGluonStatusPage(NodeLLA)
 
             Retries = 0
         except:
             time.sleep(1)
             NodeInfoDict = None
             continue
+
+    if not NodeInfoDict is None:
+        if NodeInfoDict['NodeID'] is None or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
+            NodeInfoDict = None
+        elif len(NodeInfoDict['NodeID']) != 12 or  NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
+            NodeInfoDict = None
 
     return NodeInfoDict
 
@@ -244,23 +308,23 @@ def getNodeInfos(LLA):
 # function "checkDNS"
 #
 #-----------------------------------------------------------------------
-def checkDNS(NodeID):
-    SegFromDNS = None
-    DnsServer = 'dns1.lihas.de'
-    resolver = dns.resolver.Resolver()
-    server_ip = resolver.query('%s.'%(DnsServer),'a')[0].to_text()
+def checkDNS(NodeID,DnsServer):
 
-    resolver.nameservers = [server_ip]
+    SegFromDNS = None
+    DnsResolver = dns.resolver.Resolver()
+    DnsServerIP = DnsResolver.query('%s.'%(DnsServer),'a')[0].to_text()
+
+    DnsResolver.nameservers = [ DnsServerIP ]
 
     Hostname = NodeID + '.segassign.freifunk-stuttgart.de.'
     print('Hostname =',Hostname)
 
     try:
-        aaaaRecs = resolver.query(Hostname,'aaaa')
+        aaaaRecs = DnsResolver.query(Hostname,'aaaa')
 
-        for rec in aaaaRecs:
-            if rec.to_text()[:14] == '2001:2:0:711::':
-                SegFromDNS = 'vpn'+rec.to_text()[14:].zfill(2)
+        for IPv6 in aaaaRecs:
+            if IPv6.to_text()[:14] == '2001:2:0:711::':
+                SegFromDNS = 'vpn'+IPv6.to_text()[14:].zfill(2)
 
     except:
         SegFromDNS = None
@@ -443,22 +507,32 @@ parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=Tr
 
 args = parser.parse_args()
 PeerKey = args.PEERKEY
-PID = getProcessID(args.VPNIF)
 
-if PID == 0:
+print('Onboarding of',PeerKey,'started ...')
+FastdPID = getFastdProcessID(args.VPNIF)
+
+if FastdPID == 0:
+    print('!! FATAL ERROR: Fastd PID not available or Fastd not running!')
     exit(1)
 
-if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
-    FastdStatusSocket = getSocket(PID)
+
+print('... loading Account Data ...')
+AccountsDict = LoadAccounts(os.path.join(args.JSONPATH,AccountFileName))  # All needed Accounts for Accessing resricted Data
+
+if not AccountsDict is None and not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+    print('... getting Fastd Status Socket ...')
+    FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
     if os.path.exists(FastdStatusSocket):
+        print('... getting MeshMAC ...')
         MeshMAC = getMeshMAC(FastdStatusSocket)
+
+        print('... loading KeyDataDict ...')
         KeyDataDict = LoadKeyData(args.JSONPATH)
 
         if not MeshMAC is None and not KeyDataDict is None:
             print('... MeshMAC and KeyDataDict loaded.')
-            NIC = args.VPNIF
-            NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+NIC
+            NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
             NodeInfo = getNodeInfos(NodeLLA)
 
             if not NodeInfo is None:
@@ -466,52 +540,55 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                 PeerMAC = NodeInfo['MAC']
 
                 if NodeInfo['Segment'] is None:
+                    print('... getBatmanSegment ...')
                     NodeInfo['Segment'] = getBatmanSegment(args.BATIF,args.VPNIF)
 
-                DnsSegment  = checkDNS('ffs-'+NodeInfo['NodeID']+'-'+PeerKey[:12])    # -> 'vpn??'
-
+                DnsSegment  = checkDNS('ffs-'+NodeInfo['NodeID']+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
                 print('>> DNS / Mesh =',DnsSegment,'/',NodeInfo['Segment'])
 
                 if DnsSegment is None:  # Node is not registered in DNS
 
                     if PeerKey[:12] in KeyDataDict['Key2Mac']:
-                        print('++ Key is already in use:',PeerKey,NodeInfo['NodeID'],'/',PeerMAC,'->',
+                        print('++ Key is already in use:',NodeInfo['NodeID'],'/',PeerMAC,'->',
                               KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'=',KeyDataDict['Key2Mac'][PeerKey[:12]]['SegDir'],'/',KeyDataDict['Key2Mac'][PeerKey[:12]]['KeyFile'])
 
                     if PeerMAC in KeyDataDict['Mac2Key']:
-                        print('++ MAC is already in use:',PeerKey,NodeInfo['NodeID'],'/',PeerMAC,'->',
+                        print('++ MAC is already in use:',NodeInfo['NodeID'],'/',PeerMAC,'->',
                               KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
 
 
-#                    if RegisterNode(NodeInfo,PeerKey,args.GITREPO):
-                    if __TestAddNode(NodeInfo,PeerKey,args.JSONPATH):
-
-                        setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+#                   RegisterNode(NodeInfo,PeerKey,args.GITREPO)
+                    __TestAddNode(NodeInfo,PeerKey,args.JSONPATH)
 
                 else:  # Node is already registered in DNS
                     if PeerKey[:12] in KeyDataDict['Key2Mac']:
 
                         if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
-                            print('!! Mismatch between DNS and Git:',PeerKey,'->',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
+                            print('!! MAC Mismatch between Git and Peer:',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
                         else:  # DNS == Git
                             if NodeInfo['Segment'] != DnsSegment:
-                                print('++ Node must be moved to other Segment:',PeerKey,'=',PeerMAC,':',DnsSegment,'->',NodeInfo['Segment'])
-                                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+                                print('++ Node must be moved to other Segment:',PeerMAC,'/',DnsSegment,'->',NodeInfo['Segment'])
                             else:
-                                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+                                print('++ Node is already registered:',PeerMAC,'/',DnsSegment)
 
                     else:  # Node is in DNS but not in Git
                         print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
 
+                #endif (Handling of Registration)
 
             else:
-                print('++ Node is too old or data is missing:',PeerKey)
-                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+                print('++ Node status information not available:',PeerKey)
+
+        else:
+            print('++ MeshMAC (or KeyDataDict) is not available!',MeshMAC)
+
+    else:
+        print('!! ERROR: Fastd Status Socket not available!')
 
     setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 else:
-    print('++ Node is blacklisted:',PeerKey)
+    print('!! FATAL ERROR: Missing Accounts or Node is blacklisted:',PeerKey)
 
 
-detachPeers(PID)
+detachPeers(FastdPID)
 exit(0)
