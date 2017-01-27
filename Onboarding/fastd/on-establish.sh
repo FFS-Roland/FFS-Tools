@@ -15,3 +15,5 @@ else
     date >>  $LOGFILE
     echo OK $PEER_KEY >>  $LOGFILE
 fi
+
+echo ----------------------------------------  >> $LOGFILE

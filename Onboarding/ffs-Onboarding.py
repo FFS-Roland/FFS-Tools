@@ -76,6 +76,7 @@ def getProcessID(segment):
     return pid
 
 
+
 #-----------------------------------------------------------------------
 # function "getSocket"
 #
@@ -98,6 +99,7 @@ def getSocket(pid):
             break
 
     return fastdSocket
+
 
 
 #-----------------------------------------------------------------------
@@ -141,27 +143,101 @@ def getMeshMAC(FastdStatusSocket):
     return MeshMAC
 
 
+
 #-----------------------------------------------------------------------
 # function "getNodeInfos"
 #
 #-----------------------------------------------------------------------
 def getNodeInfos(LLA):
-    NodeJson = {}
+
+    NodeInfoDict = None
     Retries = 3
 
-    while(NodeJson == {} and Retries > 0):
-        print('... connecting to http://['+NodeLLA+']/cgi-bin/nodeinfo')
+    while(Retries > 0):
+        print('... connecting to http://['+NodeLLA+']')
         Retries -= 1
         try:
-            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
-            NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/')
+            NodeHTML = NodeHTTP.read().decode('utf-8')
             NodeHTTP.close()
+
+            if NodeHTML[:15] == '<!DOCTYPE html>':
+                print('... new Gluon ...')
+                NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
+                NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+                NodeHTTP.close()
+
+                if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
+                    if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
+                        NodeInfoDict = {
+                            'NodeID'   : NodeJson['node_id'],
+                            'MAC'      : NodeJson['network']['mac'],
+                            'Hostname' : NodeJson['hostname'],
+                            'Segment'  : None
+                        }
+
+                        for NodeIPv6 in NodeJson['network']['addresses']:
+                            if NodeIPv6[0:12] == 'fd21:b4dc:4b':
+                                NodeInfoDict['Segment'] = 'vpn'+NodeIPv6[12:14]
+                                break
+
+            else:
+                print('... old Gluon ...')
+                NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status')
+                NodeHTML = NodeHTTP.read().decode('utf-8')
+                NodeHTTP.close()
+
+#                print(NodeHTML)
+
+                NodeInfoDict = {
+                    'NodeID'   : None,
+                    'MAC'      : None,
+                    'Hostname' : None,
+                    'Segment'  : None
+                }
+
+                pStart = NodeHTML.find('<body><h1>')
+                if pStart > 0:
+                    pStart += 10
+                    pStop = NodeHTML.find('</h1>',pStart)
+                    if pStop > pStart:
+                        NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop]
+                        print('>>> Hostname =',NodeHTML[pStart:pStop])
+
+                pStart = NodeHTML.find('link/ether ')
+                if pStart > 0:
+                    pStart += 11
+                    print('>>> link/ether =',NodeHTML[pStart:pStart+20])
+                    pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
+                    print(pStart,pStop)
+                    if pStop == pStart + 17:
+                        NodeInfoDict['MAC'] = NodeHTML[pStart:pStop]
+                        NodeInfoDict['NodeID'] = NodeHTML[pStart:pStop].replace(':','')
+                        print('>>> MAC =',NodeHTML[pStart:pStop])
+
+                pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
+                if pStart > 0:
+                    pStart += 18
+                    pStop = NodeHTML.find('/64 scope global',pStart)
+                    if pStop > pStart + 2:
+                        if NodeHTML[pStart:pStart+2] == '1e':
+                            NodeInfoDict['Segment'] = 'vpn00'
+                        else:
+                            NodeInfoDict['Segment'] = 'vpn'+NodeHTML[pStart:pStart+2]
+
+                    print('>>> Segment =',NodeHTML[pStart:pStop])
+
+                if NodeInfoDict['NodeID'] is None or NodeInfoDict['Hostname'] is None:
+                     NodeInfoDict = None
+
+            Retries = 0
         except:
             time.sleep(1)
-            NodeJson = {}
+            NodeInfoDict = None
             continue
 
-    return NodeJson
+    return NodeInfoDict
+
 
 
 #-----------------------------------------------------------------------
@@ -192,6 +268,7 @@ def checkDNS(NodeID):
     return SegFromDNS
 
 
+
 #-----------------------------------------------------------------------
 # function "LoadKeyData"
 #
@@ -220,110 +297,105 @@ def LoadKeyData(Path):
     return KeyDataDict
 
 
+
 #-----------------------------------------------------------------------
-# function "getMeshSegment"
+# function "getBatmanSegment"
 #
 #-----------------------------------------------------------------------
-def getMeshSegment(NodeAddresses,BatmanIF,FastdIF):
+def getBatmanSegment(BatmanIF,FastdIF):
 
-    MeshSeg = ''
+    Retries = 20
+    MeshSeg = None
 
-    for NodeIPv6 in NodeAddresses:
-        if NodeIPv6[0:12] == 'fd21:b4dc:4b':
-            MeshSeg = NodeIPv6[12:14]
-            break
+    try:
+        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
+        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
+        subprocess.run(['/sbin/ip','link','set',BatmanIF,'up'])
+    except:
+        pass
 
-    if MeshSeg == '':   # No usable IPv6 Address on Status Page of Node
-        Retries = 20
+    while(Retries > 0):
+        Retries -= 1
+        time.sleep(1)
 
         try:
-            subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
-            subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
-            subprocess.run(['/sbin/ip','link','set',BatmanIF,'up'])
+            BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
+            gwl = BatctlGwl.stdout.decode('utf-8')
+
+            for Gateway in gwl.split('\n'):
+                if Gateway[3:10] == '02:00:3':
+                    MeshSeg = 'vpn'+Gateway[12:14]
+                    Retries = 0
+                    break
+                elif Gateway[3:12] == '02:00:0a:':
+                    MeshSeg = 'vpn'+Gateway[15:17]
+                    Retries = 0
+                    break
         except:
-            pass
+            MeshSeg = None
 
-        while(MeshSeg == '' and Retries > 0):
-            Retries -= 1
-            time.sleep(1)
+    return MeshSeg
 
-            try:
-                BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
-                gwl = BatctlGwl.stdout.decode('utf-8')
-
-                for Gateway in gwl.split('\n'):
-                    if Gateway[3:10] == '02:00:3':
-                        MeshSeg = Gateway[12:14]
-                        break
-                    elif Gateway[3:12] == '02:00:0a:':
-                        MeshSeg = Gateway[15:17]
-                        break
-            except:
-                MeshSeg = ''
-
-    if MeshSeg == '':
-        Segment = None
-    else:
-        Segment = 'vpn'+MeshSeg
-
-    return Segment
 
 
 #-----------------------------------------------------------------------
 # function "__TestAddNode"
 #
 #-----------------------------------------------------------------------
-def __TestAddNode(NodeJson,Segment,PeerKey,LogPath):
+def __TestAddNode(NodeInfo,PeerKey,LogPath):
 
-    if Segment is None:
-        Segment = 'vpn99'
+    if NodeInfo['Segment'] is None:
+        NodeInfo['Segment'] = 'vpn99'
 
     try:
-        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeJson['node_id']), mode='w')
+        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeInfo['NodeID']), mode='w')
         KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
-                      (NodeJson['network']['mac'],NodeJson['hostname'],Segment,PeerKey))
+                      (NodeInfo['MAC'],NodeInfo['Hostname'],NodeInfo['Segment'],PeerKey))
         KeyFile.close()
     except:
         return False
 
     return True
+
 
 
 #-----------------------------------------------------------------------
 # function "__TestDelNode"
 #
 #-----------------------------------------------------------------------
-def __TestDelNode(NodeJson,Segment,PeerKey,LogPath):
+def __TestDelNode(NodeInfo,PeerKey,LogPath):
 
     try:
-        KeyFile = open(os.path.join(LogPath,'old_peers','ffs-'+NodeJson['node_id']), mode='w')
+        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeInfo['NodeID']), mode='w')
         KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
-                      (NodeJson['network']['mac'],NodeJson['hostname'],Segment,PeerKey))
+                      (NodeInfo['MAC'],NodeInfo['Hostname'],NodeInfo['Segment'],PeerKey))
         KeyFile.close()
     except:
         return False
 
     return True
+
 
 
 #-----------------------------------------------------------------------
 # function "RegisterNode"
 #
 #-----------------------------------------------------------------------
-def RegisterNode(NodeJson,Segment,PeerKey,GitRepo):
+def RegisterNode(NodeInfo,PeerKey,GitRepo):
 
-    if Segment == '':
-        Segment = '99'
+    if NodeInfo['Segment'] is None:
+        NodeInfo['Segment'] = 'vpn99'    #......... remove later when we have correct segment
 
     try:
-        KeyFile = open(os.path.join(GitRepo,'vpn'+Segment,'peers','ffs-'+NodeJson['node_id']), mode='w')
-        KeyFile.write('#MAC: %s\n#Hostname: %s\nkey \"%s\";' %
-                      (NodeJson['network']['mac'],NodeJson['hostname'],PeerKey))
+        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeInfo['NodeID']), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
+                      (NodeInfo['MAC'],NodeInfo['Hostname'],NodeInfo['Segment'],PeerKey))
         KeyFile.close()
     except:
         return False
 
     return True
+
 
 
 #-----------------------------------------------------------------------
@@ -340,6 +412,7 @@ def setBlacklistFile(BlacklistFile):
         pass
 
     return
+
 
 
 #-----------------------------------------------------------------------
@@ -386,29 +459,33 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             print('... MeshMAC and KeyDataDict loaded.')
             NIC = args.VPNIF
             NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+NIC
-            NodeJson = getNodeInfos(NodeLLA)
+            NodeInfo = getNodeInfos(NodeLLA)
 
-            if 'node_id' in NodeJson and 'network' in NodeJson and 'mac' in NodeJson['network']:
+            if not NodeInfo is None:
             #----- Required Data of Node is available -----
-                PeerMAC = NodeJson['network']['mac']
-                DnsSegment  = checkDNS('ffs-'+NodeJson['node_id']+'-'+PeerKey[:12])    # -> 'vpn??'
-                MeshSegment = getMeshSegment(NodeJson['network']['addresses'],args.BATIF,args.VPNIF)
+                PeerMAC = NodeInfo['MAC']
 
-                print('>> DNS / Mesh =',DnsSegment,'/',MeshSegment)
+                if NodeInfo['Segment'] is None:
+                    NodeInfo['Segment'] = getBatmanSegment(args.BATIF,args.VPNIF)
+
+                DnsSegment  = checkDNS('ffs-'+NodeInfo['NodeID']+'-'+PeerKey[:12])    # -> 'vpn??'
+
+                print('>> DNS / Mesh =',DnsSegment,'/',NodeInfo['Segment'])
 
                 if DnsSegment is None:  # Node is not registered in DNS
 
                     if PeerKey[:12] in KeyDataDict['Key2Mac']:
-                        print('++ Key is already in use:',PeerKey,NodeJson['node_id'],'/',NodeJson['network']['mac'],'->',
+                        print('++ Key is already in use:',PeerKey,NodeInfo['NodeID'],'/',PeerMAC,'->',
                               KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'=',KeyDataDict['Key2Mac'][PeerKey[:12]]['SegDir'],'/',KeyDataDict['Key2Mac'][PeerKey[:12]]['KeyFile'])
 
                     if PeerMAC in KeyDataDict['Mac2Key']:
-                        print('++ MAC is already in use:',PeerKey,NodeJson['node_id'],'/',PeerMAC,'->',
+                        print('++ MAC is already in use:',PeerKey,NodeInfo['NodeID'],'/',PeerMAC,'->',
                               KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
 
 
-#                    if RegisterNode(NodeJson,MeshSegment,PeerKey,args.GITREPO):
-                    if __TestAddNode(NodeJson,MeshSegment,PeerKey,args.JSONPATH):
+#                    if RegisterNode(NodeInfo,PeerKey,args.GITREPO):
+                    if __TestAddNode(NodeInfo,PeerKey,args.JSONPATH):
+
                         setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
                 else:  # Node is already registered in DNS
@@ -417,8 +494,9 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
                             print('!! Mismatch between DNS and Git:',PeerKey,'->',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
                         else:  # DNS == Git
-                            if MeshSegment != DnsSegment:
-                                print('++ Node must be moved to other Segment:',PeerKey,'=',PeerMAC,'->',MeshSegment,'<>',DnsSegment)
+                            if NodeInfo['Segment'] != DnsSegment:
+                                print('++ Node must be moved to other Segment:',PeerKey,'=',PeerMAC,':',DnsSegment,'->',NodeInfo['Segment'])
+                                setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
                             else:
                                 setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
@@ -430,6 +508,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                 print('++ Node is too old or data is missing:',PeerKey)
                 setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
+    setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 else:
     print('++ Node is blacklisted:',PeerKey)
 

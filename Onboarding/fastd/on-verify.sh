@@ -13,8 +13,8 @@ if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
     rm /etc/fastd/$INTERFACE/blacklist/$PEER_KEY
     echo Blocking removed. >> $LOGFILE
   else
-    echo Blacklisted >> $LOGFILE
-    echo ----------- >> $LOGFILE
+    echo Node is blacklisted. >> $LOGFILE
+    echo --------------------- >> $LOGFILE
     exit 1
   fi
 fi
