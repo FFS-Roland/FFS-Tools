@@ -362,17 +362,17 @@ class ffGatewayInfo:
         print('-------------------------------------------------------')
         print('Loading fastd Status Infos ...')
 
-        for ffGW in [1, 5, 8]:
+        for ffGW in [1, 5, 6, 8]:
             print('   GW%02d ...' % (ffGW))
 
             for GwInstance in range(0,8):
                 for ffSeg in self.__SegmentList:
 
-                    FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/fastd/vpn%02d.json' % (ffGW,GwInstance,ffSeg)
+                    FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/data/vpn%02d.json' % (ffGW,GwInstance,ffSeg)
                     self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
                     if ffGW == 5:
-                        FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/fastd/vpn%02dip6.json' % (ffGW,GwInstance,ffSeg)
+                        FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/data/vpn%02dip6.json' % (ffGW,GwInstance,ffSeg)
                         self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
         self.__LoadFastdStatusFile('http://gw09.freifunk-stuttgart.de/fastd/ffs.status.json',0)

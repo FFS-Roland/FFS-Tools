@@ -428,7 +428,8 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == 0 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto')):
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto') and
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] != '%')):
 
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
@@ -566,6 +567,7 @@ class ffMeshNet:
 
         elif os.path.exists(FileName):
             os.remove(FileName)
+            print('... MoveList deleted.')
 
         return
 

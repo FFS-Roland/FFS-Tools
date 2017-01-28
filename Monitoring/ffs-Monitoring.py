@@ -63,8 +63,10 @@ from class_ffMeshNet import *
 
 
 #-------------------------------------------------------------
-# LogFile Names
+# Local File Names
 #-------------------------------------------------------------
+
+AccountsFileName  = '.Accounts.json'
 
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
@@ -78,9 +80,6 @@ NodeMoveFile      = 'NodeMoves.lst'
 MaxOfflineDays    = 10 * 86400
 
 AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
-
-AccountsFileName  = '.Accounts.json'
-MailToFileName    = '.MailRecipients.json'
 
 
 
@@ -107,37 +106,12 @@ def __LoadAccounts(AccountFile):
 
 
 #-----------------------------------------------------------------------
-# Function "__LoadMailRecipients"
-#
-#   Load Mail Recipients from MailRecipients.json
-#
-#-----------------------------------------------------------------------
-def __LoadMailRecipients(RecipientsFile):
-
-    COMMASPACE = ', '
-
-    try:
-        RecipientsJsonFile = open(RecipientsFile, mode='r')
-        RecipientsList = json.load(RecipientsJsonFile)
-        RecipientsJsonFile.close()
-
-        MailRecipients = COMMASPACE.join(RecipientsList)
-
-    except:
-        print('\n!! Error on Reading Recipients json-File!\n')
-        MailRecipients = None
-
-    return MailRecipients
-
-
-
-#-----------------------------------------------------------------------
 # Function "__SendEmail"
 #
 #   Sending an Email
 #
 #-----------------------------------------------------------------------
-def __SendEmail(Subject,Recipient,MailBody,Account):
+def __SendEmail(Subject,MailBody,Account):
 
     if MailBody != '':
         try:
@@ -145,17 +119,18 @@ def __SendEmail(Subject,Recipient,MailBody,Account):
 
             Email['Subject'] = Subject
             Email['From']    = Account['Username']
-            Email['To']      = Recipient
+            Email['To']      = Account['MailTo']
+            Email['Bcc']     = Account['MailBCC']
 
             server = smtplib.SMTP(Account['Server'])
             server.starttls()
             server.login(Account['Username'],Account['Password'])
             server.send_message(Email)
             server.quit()
-            print('\nEmail was sent to',Recipient)
+            print('\nEmail was sent to',Account['MailTo'])
 
         except:
-            print('!! ERROR on sending Email to',Recipient)
+            print('!! ERROR on sending Email to',Account['MailTo'])
 
     return
 
@@ -177,7 +152,6 @@ AccountsDict = __LoadAccounts(os.path.join(args.JSONPATH,AccountsFileName))  # A
 if AccountsDict is None:
     print('!! FATAL ERROR: Accounts not available!')
     exit(1)
-
 
 
 print('Setting up basic Data ...')
@@ -207,16 +181,14 @@ ffsNet.CheckSegments()
 
 
 
-print('\nWriting Logs and Informing Admin if Errors ...')
+print('\nWriting Logs ...')
 
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 ffsNet.WriteMoveList(os.path.join(args.LOGPATH,NodeMoveFile))
 
-MailRecipients = __LoadMailRecipients(os.path.join(args.JSONPATH,MailToFileName))  # List of Mail Recipients
 
-if MailRecipients is None:
-    print('!! ERROR: No Mail Recipients available!')
-    exit(1)
+
+print('\nPreparing Info to be sent by Email ...')
 
 MailBody = ''
 
@@ -230,10 +202,12 @@ for Alert in ffsNet.Alerts:
     MailBody += Alert+'\n'
 
 if MailBody != '':
-    __SendEmail('Alert from ffs-Monitor',MailRecipients,MailBody,AccountsDict['SMTP'])
+    print('\nSending Email to inform Admins on Errors ...')
+    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
 else:
     TimeInfo = datetime.datetime.now()
     if TimeInfo.hour == 12 and TimeInfo.minute < 5:
-        __SendEmail('Hello from ffs-Monitor',MailRecipients,'ffs-Monitor is alive. No Alerts right now.',AccountsDict['SMTP'])
+        print('\nSending Hello Mail to inform Admins beeing alive ...')
+        __SendEmail('Hello from ffs-Monitor','ffs-Monitor is alive. No Alerts right now.',AccountsDict['SMTP'])
 
-print('OK.\n')
+print('\nOK.\n')
