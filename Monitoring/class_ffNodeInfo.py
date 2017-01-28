@@ -665,18 +665,29 @@ class ffNodeInfo:
     def __LoadRawJson(self):
 
         print('Loading raw.json ...')
+        RawJsonDict = None
+        Retries = 3
 
-        try:
-            passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-            passman.add_password(None, self.__RawAccess['URL'], self.__RawAccess['Username'], self.__RawAccess['Password'])
-            authhandler = urllib.request.HTTPBasicAuthHandler(passman)
-            opener = urllib.request.build_opener(authhandler)
-            urllib.request.install_opener(opener)
+        while RawJsonDict is None and Retries > 0:
+            Retries -= 1
 
-            RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'])
-            RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
-            RawJsonHTTP.close()
-        except:
+            try:
+                passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+                passman.add_password(None, self.__RawAccess['URL'], self.__RawAccess['Username'], self.__RawAccess['Password'])
+                authhandler = urllib.request.HTTPBasicAuthHandler(passman)
+                opener = urllib.request.build_opener(authhandler)
+                urllib.request.install_opener(opener)
+
+                RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'])
+                RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
+                RawJsonHTTP.close()
+            except:
+                print('** need retry ...')
+                RawJsonDict = None
+                time.sleep(1)
+                pass
+
+        if RawJsonDict is None:
             self.__alert('++ Error on loading raw.json !!!')
             self.AnalyseOnly = True
             return

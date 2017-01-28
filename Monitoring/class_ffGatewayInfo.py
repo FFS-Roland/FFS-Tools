@@ -300,7 +300,7 @@ class ffGatewayInfo:
                     print('!! PeerKey not in Git:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
                     print()
 
-        print('... Active Keys =',ActiveKeyCount)
+#        print('... Active Keys =',ActiveKeyCount)
         return
 
 
@@ -338,7 +338,7 @@ class ffGatewayInfo:
                             return
 
                     self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
-                    print()
+#                    print()
                 else:
                     print('!! ERROR: Bad fastd status file!')
             else:
@@ -363,7 +363,7 @@ class ffGatewayInfo:
         print('Loading fastd Status Infos ...')
 
         for ffGW in [1, 5, 6, 8]:
-            print('   GW%02d ...' % (ffGW))
+            print('... GW%02d ...' % (ffGW))
 
             for GwInstance in range(0,8):
                 for ffSeg in self.__SegmentList:
