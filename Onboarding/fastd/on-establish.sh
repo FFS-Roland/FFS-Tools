@@ -3,8 +3,20 @@
 LOGFILE=/var/freifunk/logs/vpn00_established.log
 
 date >> $LOGFILE
-ps -e | grep "ffs-Onboarding" >> $LOGFILE
-echo Starting ... >> $LOGFILE
+
+while :
+do
+    ONBOARDINGPID=$(ps -e | grep "ffs-Onboarding" | cut -d " " -f1 | head -n1)
+    if [ "$MYPID" != "" ]; then
+        kill $ONBOARDINGPID
+        echo ++ Killed still running ffs-Onboarding Process $ONBOARDINGPID >> $LOGFILE
+        sleep 1
+    else
+        break
+    fi
+done
+
+echo Starting new ffs-Onboarding Process ... >> $LOGFILE
 
 /usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman bat00 --peerkey $PEER_KEY --gitrepo /var/freifunk/peers-ffs --json /var/freifunk/json --blacklist /etc/fastd/$INTERFACE/blacklist >> $LOGFILE
 

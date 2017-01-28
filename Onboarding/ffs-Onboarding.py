@@ -198,7 +198,7 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 
                 print('>>> NodeID   =',NodeInfoDict['NodeID'])
                 print('>>> MAC      =',NodeInfoDict['MAC'])
-                print('>>> Hostname =',NodeInfoDict['Hostname'])
+                print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
 
                 for NodeIPv6 in NodeJson['network']['addresses']:
                     print('>>> IPv6 =',NodeIPv6)
@@ -241,7 +241,7 @@ def InfoFromGluonStatusPage(NodeLLA):
         pStop = NodeHTML.find('</h1>',pStart)
         if pStop > pStart:
             NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop].strip()
-            print('>>> Hostname =',NodeHTML[pStart:pStop])
+            print('>>> Hostname =',NodeHTML[pStart:pStop].encode('utf-8'))
 
     pStart = NodeHTML.find('link/ether ')
     if pStart > 0:
@@ -323,7 +323,7 @@ def checkDNS(NodeID,DnsServer):
     DnsResolver.nameservers = [ DnsServerIP ]
 
     Hostname = NodeID + '.segassign.freifunk-stuttgart.de.'
-    print('Hostname =',Hostname)
+    print('DNS Query =',Hostname)
 
     try:
         aaaaRecs = DnsResolver.query(Hostname,'aaaa')
