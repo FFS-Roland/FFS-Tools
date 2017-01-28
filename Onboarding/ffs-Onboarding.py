@@ -187,22 +187,28 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 
     if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
         if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
-            if NodeJson['node_id'][:12] == NodeJson['network']['mac'][:17].replace(':',''):
+            if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
                 NodeInfoDict = {
                     'NodeType' : 'new',
-                    'NodeID'   : NodeJson['node_id'][:12],
-                    'MAC'      : NodeJson['network']['mac'][:17],
-                    'Hostname' : NodeJson['hostname'],
+                    'NodeID'   : NodeJson['node_id'].strip(),
+                    'MAC'      : NodeJson['network']['mac'].strip(),
+                    'Hostname' : NodeJson['hostname'].strip(),
                     'Segment'  : None
                 }
 
+                print('>>> NodeID   =',NodeInfoDict['NodeID'])
+                print('>>> MAC      =',NodeInfoDict['MAC'])
+                print('>>> Hostname =',NodeInfoDict['Hostname'])
+
                 for NodeIPv6 in NodeJson['network']['addresses']:
+                    print('>>> IPv6 =',NodeIPv6)
                     if NodeIPv6[0:12] == 'fd21:b4dc:4b':
                         if NodeIPv6[12:14] == '1e':
                              NodeInfoDict['Segment'] = 'vpn00'
                         else:
                             NodeInfoDict['Segment'] = 'vpn'+NodeIPv6[12:14]
                         break
+                print('>>> Segment =',NodeInfoDict['Segment'])
 
     return NodeInfoDict
 
@@ -234,7 +240,7 @@ def InfoFromGluonStatusPage(NodeLLA):
         pStart += 10
         pStop = NodeHTML.find('</h1>',pStart)
         if pStop > pStart:
-            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop]
+            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop].strip()
             print('>>> Hostname =',NodeHTML[pStart:pStop])
 
     pStart = NodeHTML.find('link/ether ')
@@ -344,7 +350,7 @@ def LoadKeyData(Path):
     try:
         LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
         fcntl.lockf(LockFile,fcntl.LOCK_EX)
-        print('Reading Fastd Key Database json-File ...')
+        print('... Reading Fastd Key Database json-File ...')
 
         KeyJsonFile = open(os.path.join(Path,'KeyData.json'), mode='r')
         KeyDataDict = json.load(KeyJsonFile)
@@ -516,14 +522,17 @@ if FastdPID == 0:
     exit(1)
 
 
-print('... loading Account Data ...')
-AccountsDict = LoadAccounts(os.path.join(args.JSONPATH,AccountFileName))  # All needed Accounts for Accessing resricted Data
+if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+    setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
-if not AccountsDict is None and not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+    print('... loading Account Data ...')
+    AccountsDict = LoadAccounts(os.path.join(args.JSONPATH,AccountFileName))  # All needed Accounts for Accessing resricted Data
+
     print('... getting Fastd Status Socket ...')
     FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
-    if os.path.exists(FastdStatusSocket):
+    if os.path.exists(FastdStatusSocket) and not AccountsDict is None:
+
         print('... getting MeshMAC ...')
         MeshMAC = getMeshMAC(FastdStatusSocket)
 
@@ -577,17 +586,16 @@ if not AccountsDict is None and not os.path.exists(args.BLACKLIST+'/'+args.PEERK
                 #endif (Handling of Registration)
 
             else:
-                print('++ Node status information not available:',PeerKey)
+                print('++ Node status information not available!')
 
         else:
             print('++ MeshMAC (or KeyDataDict) is not available!',MeshMAC)
 
     else:
-        print('!! ERROR: Fastd Status Socket not available!')
+        print('!! ERROR: Accounts or Fastd Status Socket not available!')
 
-    setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 else:
-    print('!! FATAL ERROR: Missing Accounts or Node is blacklisted:',PeerKey)
+    print('!! ERROR: Node is blacklisted:',PeerKey)
 
 
 detachPeers(FastdPID)
