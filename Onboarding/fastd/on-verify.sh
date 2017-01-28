@@ -8,8 +8,8 @@ date >> $LOGFILE
 echo $PEER_KEY >> $LOGFILE
 
 if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
-  LOCKTIME=`cat /etc/fastd/$INTERFACE/blacklist/$PEER_KEY`
-  NOW=`date +%s`
+  LOCKTIME=$(cat /etc/fastd/$INTERFACE/blacklist/$PEER_KEY)
+  NOW=$(date +%s)
   DELTA=$((NOW - LOCKTIME))
   if [ $DELTA -gt 600 ]; then
     rm /etc/fastd/$INTERFACE/blacklist/$PEER_KEY
@@ -20,6 +20,18 @@ if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
     exit 1
   fi
 fi
+
+while :
+do
+  ONBOARDINGPID=$(ps -e | grep "ffs-Onboarding" | cut -d " " -s -f1 | head -n1)
+  if [ "$ONBOARDINGPID" != "" ]; then
+    kill $ONBOARDINGPID
+    echo ++ Killed still running ffs-Onboarding Process $ONBOARDINGPID >> $LOGFILE
+    sleep 1
+  else
+    break
+  fi
+done
 
 echo OK >> $LOGFILE
 echo --------------------- >> $LOGFILE

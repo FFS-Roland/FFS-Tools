@@ -345,7 +345,7 @@ def checkDNS(NodeID,DnsServer):
 #-----------------------------------------------------------------------
 def LoadKeyData(Path):
 
-    KeyDataDict = {}
+    KeyDataDict = None
 
     try:
         LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
@@ -375,7 +375,7 @@ def LoadKeyData(Path):
 def getBatmanSegment(BatmanIF,FastdIF):
 
     Retries = 20
-    MeshSeg = None
+    BatSeg = None
 
     try:
         subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
@@ -394,17 +394,17 @@ def getBatmanSegment(BatmanIF,FastdIF):
 
             for Gateway in gwl.split('\n'):
                 if Gateway[3:10] == '02:00:3':
-                    MeshSeg = 'vpn'+Gateway[12:14]
+                    BatSeg = 'vpn'+Gateway[12:14]
                     Retries = 0
                     break
                 elif Gateway[3:12] == '02:00:0a:':
-                    MeshSeg = 'vpn'+Gateway[15:17]
+                    BatSeg = 'vpn'+Gateway[15:17]
                     Retries = 0
                     break
         except:
-            MeshSeg = None
+            BatSeg = None
 
-    return MeshSeg
+    return BatSeg
 
 
 
@@ -478,7 +478,9 @@ def setBlacklistFile(BlacklistFile):
         OutFile = open(BlacklistFile, mode='w')
         OutFile.write('%d\n' % (int(time.time())))
         OutFile.close()
+        print('... Blacklisting set ...')
     except:
+        print('++ ERROR on Blacklisting!')
         pass
 
     return
@@ -514,10 +516,10 @@ parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=Tr
 args = parser.parse_args()
 PeerKey = args.PEERKEY
 
-print('Onboarding of',PeerKey,'started ...')
+print('Onboarding with PID =',psutil.Process().pid,'of',PeerKey,'started ...')
 FastdPID = getFastdProcessID(args.VPNIF)
 
-if FastdPID == 0:
+if FastdPID is None:
     print('!! FATAL ERROR: Fastd PID not available or Fastd not running!')
     exit(1)
 
@@ -531,7 +533,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
     print('... getting Fastd Status Socket ...')
     FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
-    if os.path.exists(FastdStatusSocket) and not AccountsDict is None:
+    if os.path.exists(FastdStatusSocket) and AccountsDict is not None:
 
         print('... getting MeshMAC ...')
         MeshMAC = getMeshMAC(FastdStatusSocket)
@@ -539,12 +541,12 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
         print('... loading KeyDataDict ...')
         KeyDataDict = LoadKeyData(args.JSONPATH)
 
-        if not MeshMAC is None and not KeyDataDict is None:
+        if MeshMAC is not None and KeyDataDict is not None:
             print('... MeshMAC and KeyDataDict loaded.')
             NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
             NodeInfo = getNodeInfos(NodeLLA)
 
-            if not NodeInfo is None:
+            if NodeInfo is not None:
             #----- Required Data of Node is available -----
                 PeerMAC = NodeInfo['MAC']
 

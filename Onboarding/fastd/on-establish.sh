@@ -6,8 +6,8 @@ date >> $LOGFILE
 
 while :
 do
-    ONBOARDINGPID=$(ps -e | grep "ffs-Onboarding" | cut -d " " -f1 | head -n1)
-    if [ "$MYPID" != "" ]; then
+    ONBOARDINGPID=$(ps -e | grep "ffs-Onboarding" | cut -d " " -s -f1 | head -n1)
+    if [ "$ONBOARDINGPID" != "" ]; then
         kill $ONBOARDINGPID
         echo ++ Killed still running ffs-Onboarding Process $ONBOARDINGPID >> $LOGFILE
         sleep 1
