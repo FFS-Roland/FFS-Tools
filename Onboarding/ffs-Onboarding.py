@@ -138,7 +138,7 @@ def getMeshMAC(FastdStatusSocket):
     MeshMAC = None
     Retries = 3
 
-    while(MeshMAC is None and Retries > 0):
+    while MeshMAC is None and Retries > 0:
         Retries -= 1
         StatusData = ''
         time.sleep(1)
@@ -147,7 +147,7 @@ def getMeshMAC(FastdStatusSocket):
             FastdLiveStatus = socket.socket( socket.AF_UNIX, socket.SOCK_STREAM )
             FastdLiveStatus.connect(FastdStatusSocket)
 
-            while(True):
+            while True:
                 tmpData = FastdLiveStatus.recv(4096).decode('utf-8')
                 if tmpData == '':
                     break;
@@ -160,7 +160,7 @@ def getMeshMAC(FastdStatusSocket):
                 FastdStatusJson = json.loads(StatusData)
 
                 if PeerKey in FastdStatusJson['peers']:
-                    if not FastdStatusJson['peers'][PeerKey]['connection'] is None:
+                    if FastdStatusJson['peers'][PeerKey]['connection'] is not None:
                         if 'mac_addresses' in FastdStatusJson['peers'][PeerKey]['connection']:
                             for MeshMAC in FastdStatusJson['peers'][PeerKey]['connection']['mac_addresses']:
                                 break
@@ -181,9 +181,14 @@ def getMeshMAC(FastdStatusSocket):
 def InfoFromGluonNodeinfoPage(NodeLLA):
 
     NodeInfoDict = None
-    NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo')
-    NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
-    NodeHTTP.close()
+
+    try:
+        NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo',timeout=10)
+        NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+        NodeHTTP.close()
+    except:
+        print('++ Error on loading /cgi-bin/nodeinfo')
+        return None
 
     if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
         if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
@@ -223,9 +228,16 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 #-----------------------------------------------------------------------
 def InfoFromGluonStatusPage(NodeLLA):
 
-    NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status')
-    NodeHTML = NodeHTTP.read().decode('utf-8')
-    NodeHTTP.close()
+    NodeInfoDict = None
+    NodeHTML = None
+
+    try:
+        NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status',timeout=10)
+        NodeHTML = NodeHTTP.read().decode('utf-8')
+        NodeHTTP.close()
+    except:
+        print('++ Error on loading /cgi-bin/status')
+        return None
 
     NodeInfoDict = {
         'NodeType' : 'old',
@@ -277,34 +289,34 @@ def InfoFromGluonStatusPage(NodeLLA):
 def getNodeInfos(NodeLLA):
 
     NodeInfoDict = None
+    NodeHTML = None
     Retries = 3
 
-    while(Retries > 0):
+    while NodeHTML is None and Retries > 0:
         print('Connecting to http://['+NodeLLA+'] ...')
         Retries -= 1
         try:
-            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/')
+            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/',timeout=10)
             NodeHTML = NodeHTTP.read().decode('utf-8')
             NodeHTTP.close()
-
-            if NodeHTML[:15] == '<!DOCTYPE html>':
-                print('... new Gluon ...')
-                NodeInfoDict = InfoFromGluonNodeinfoPage(NodeLLA)
-            else:
-                print('... old Gluon ...')
-                NodeInfoDict = InfoFromGluonStatusPage(NodeLLA)
-
-            Retries = 0
         except:
+            NodeHTML = None
             time.sleep(1)
-            NodeInfoDict = None
-            continue
+            pass
 
-    if not NodeInfoDict is None:
-        if NodeInfoDict['NodeID'] is None or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
-            NodeInfoDict = None
-        elif len(NodeInfoDict['NodeID']) != 12 or  NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
-            NodeInfoDict = None
+    if NodeHTML is not None:
+        if NodeHTML[:15] == '<!DOCTYPE html>':
+            print('... new Gluon ...')
+            NodeInfoDict = InfoFromGluonNodeinfoPage(NodeLLA)
+        else:
+            print('... old Gluon ...')
+            NodeInfoDict = InfoFromGluonStatusPage(NodeLLA)
+
+        if NodeInfoDict is not None:
+            if NodeInfoDict['NodeID'] is None or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
+                NodeInfoDict = None
+            elif len(NodeInfoDict['NodeID']) != 12 or  NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
+                NodeInfoDict = None
 
     return NodeInfoDict
 
@@ -494,6 +506,7 @@ def setBlacklistFile(BlacklistFile):
 def detachPeers(pid):
 
     os.kill(pid,signal.SIGHUP)
+    time.sleep(1)
     os.kill(pid,signal.SIGUSR2)
 
     return
@@ -516,7 +529,7 @@ parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=Tr
 args = parser.parse_args()
 PeerKey = args.PEERKEY
 
-print('Onboarding with PID =',psutil.Process().pid,'of',PeerKey,'started ...')
+print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
 FastdPID = getFastdProcessID(args.VPNIF)
 
 if FastdPID is None:

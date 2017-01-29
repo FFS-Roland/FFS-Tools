@@ -21,17 +21,11 @@ if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
   fi
 fi
 
-while :
-do
-  ONBOARDINGPID=$(ps -e | grep "ffs-Onboarding" | cut -d " " -s -f1 | head -n1)
-  if [ "$ONBOARDINGPID" != "" ]; then
-    kill $ONBOARDINGPID
-    echo ++ Killed still running ffs-Onboarding Process $ONBOARDINGPID >> $LOGFILE
-    sleep 1
-  else
-    break
-  fi
-done
+if [ $(ps -e | grep "ffs-Onboarding") != "" ]; then
+  echo ++ Still running ffs-Onboarding Process >> $LOGFILE
+  echo --------------------- >> $LOGFILE
+  exit 1
+fi
 
 echo OK >> $LOGFILE
 echo --------------------- >> $LOGFILE
