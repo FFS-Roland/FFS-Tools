@@ -41,6 +41,7 @@
 import os
 import time
 import datetime
+import fcntl
 
 from class_ffNodeInfo import *
 from class_ffGatewayInfo import *
@@ -50,6 +51,11 @@ from class_ffGatewayInfo import *
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
+
+StatFileName   = 'SegStatistics.json'
+
+MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
+
 
 RegionSegDict = {
     'Stuttgart':'vpn01',
@@ -113,7 +119,7 @@ class ffMeshNet:
         self.__GwInfos = GwInfos
 
         self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict   = {}       # Dictionary of Segments with their Number of Nodes and Clients and Weights
+        self.__SegmentDict   = {}       # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
         self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
         self.__DefaultTarget = 1        # Target Segment to use if no better Data available
@@ -139,7 +145,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     # private function "__AddNeighbour2Cloud"
     #
-    #   Add Nodes to Mesh-Cloud-List
+    #   Add Nodes to Mesh-Cloud-List (recursive)
     #
     # MeshCloudDict[CloudID] -> List of Nodes in Mesh-Cloud
     #-----------------------------------------------------------------------
@@ -183,35 +189,6 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
-    # private function "__SetSegmentWeight"
-    #
-    #   Set Weight of Segment (Average Sum of Nodes + Clients)
-    #
-    # __SegmentDict[Segment][Weight]
-    #-----------------------------------------------------------------------
-    def __SetSegmentWeight(self):
-
-        for Segment in self.__NodeInfos.SegmentLoadDict.keys():
-            if Segment in self.__SegmentDict:
-                self.__SegmentDict[Segment]['Weight'] = int(self.__NodeInfos.SegmentLoadDict['Segment']['Sum'] / self.__NodeInfos.SegmentLoadDict['Segment']['Count'])
-
-        for Segment in self.__SegmentDict.keys():
-            if self.__SegmentDict[Segment]['Weight'] == 9999:
-                self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
-
-        SegWeight = 9999
-
-        for Segment in self.__SegmentDict.keys():
-            if Segment > 0 and Segment < 9:  #....................................... must be changed later !!
-                if self.__SegmentDict[Segment]['Weight'] < SegWeight:
-                    SegWeight = self.__SegmentDict[Segment]['Weight']
-                    self.__DefaultTarget = Segment
-
-        return
-
-
-
-    #-----------------------------------------------------------------------
     # private function "__CreateMeshCloudList"
     #
     #   Create Mesh-Cloud-List
@@ -220,6 +197,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     def __CreateMeshCloudList(self):
 
+        print('\nCreate Mesh Cloud List ...')
         CloudNumber = 0
         TotalNodes = 0
         TotalClients = 0
@@ -249,7 +227,8 @@ class ffMeshNet:
                 TotalClients += self.__MeshCloudDict[CloudID]['NumClients']
     #            print(CloudID,MeshCloudDict[CloudID]['NumNodes'],MeshCloudDict[CloudID]['Segments'])
 
-        print('\nNumber of Clouds / Nodes / Clients:',len(self.__MeshCloudDict),'/',TotalNodes,'/',TotalClients)
+        print('... Number of Clouds / Nodes / Clients:',len(self.__MeshCloudDict),'/',TotalNodes,'/',TotalClients)
+        print()
         return
 
 
@@ -510,6 +489,33 @@ class ffMeshNet:
 
 
 
+    #-----------------------------------------------------------------------
+    # private function "__SetSegmentWeight"
+    #
+    #   Set Weight of Segment (Average Sum of Nodes + Clients)
+    #
+    # __SegmentDict[Segment][Weight]
+    #-----------------------------------------------------------------------
+    def __SetSegmentWeight(self):
+
+        print('Set Segment weight ...')
+        SegWeight = 9999
+
+        for Segment in self.__SegmentDict.keys():
+            if self.__SegmentDict[Segment]['Weight'] is None:
+                self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
+
+            if Segment > 0 and Segment < 5:  #....................................... must be changed later !!
+                if self.__SegmentDict[Segment]['Weight'] < SegWeight:
+                    SegWeight = self.__SegmentDict[Segment]['Weight']
+                    self.__DefaultTarget = Segment
+
+        print('... Default Target =',self.__DefaultTarget)
+
+        return
+
+
+
     #==============================================================================
     # Method "MergeData"
     #
@@ -522,6 +528,63 @@ class ffMeshNet:
             self.__NodeInfos.AddNode(KeyIndex,self.__GwInfos.FastdKeyDict[KeyIndex])
 
         self.__CheckConsistency()
+        return
+
+
+
+    #==============================================================================
+    # Method "UpdateStatistikDB"
+    #
+    #   Write updates Statistik-json
+    #==============================================================================
+    def UpdateStatistikDB(self,Path):
+
+        print('Update Statistik-DB ...')
+        StatisticsJsonDict = {}
+        StatisticsJsonName = os.path.join(Path,StatFileName)
+
+        try:
+            LockFile = open('/tmp/.SegStatistics.lock', mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
+
+            if os.path.exists(StatisticsJsonName):
+                print('... reading Statistics-DB from Json File ...')
+                StatisticsJsonFile = open(StatisticsJsonName, mode='r')
+                StatisticsJsonDict = json.load(StatisticsJsonFile)
+                StatisticsJsonFile.close()
+            else:
+                StatisticsJsonDict = {}
+
+            print('... updateing statistics ...')
+            for Segment in self.__SegmentDict.keys():
+                JsonSegIdx = str(Segment)
+
+                if JsonSegIdx not in StatisticsJsonDict:
+                    StatisticsJsonDict[JsonSegIdx] = { 'Sum':0, 'Count':0 }
+
+                StatisticsJsonDict[JsonSegIdx]['Sum']   += self.__SegmentDict[Segment]['Nodes']+self.__SegmentDict[Segment]['Clients']
+                StatisticsJsonDict[JsonSegIdx]['Count'] += 1
+
+                if StatisticsJsonDict[JsonSegIdx]['Count'] > MaxStatisticsData:
+                    StatisticsJsonDict[JsonSegIdx]['Sum']   -= int(StatisticsJsonDict[JsonSegIdx]['Sum']/StatisticsJsonDict[JsonSegIdx]['Count'])
+                    StatisticsJsonDict[JsonSegIdx]['Count'] -= 1
+
+                self.__SegmentDict[Segment]['Weight'] = int(StatisticsJsonDict[JsonSegIdx]['Sum']/StatisticsJsonDict[JsonSegIdx]['Count'])
+
+            print('... writing Statistics-DB as json-File ...')
+
+            StatisticsJsonFile = open(StatisticsJsonName, mode='w+')
+            json.dump(StatisticsJsonDict,StatisticsJsonFile)
+            StatisticsJsonFile.close()
+
+        except:
+            self.__alert('\n!! Error on Updating Statistics Databases as json-File!')
+
+        finally:
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
+
+        print('... done.\n')
         return
 
 

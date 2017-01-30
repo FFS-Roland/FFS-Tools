@@ -77,8 +77,6 @@ NodeMoveFile      = 'NodeMoves.lst'
 # Global Constants
 #-------------------------------------------------------------
 
-MaxOfflineDays    = 10 * 86400
-
 AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
 
 
@@ -166,19 +164,19 @@ if not args.JSONPATH is None:
 
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
+ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
+
 
 
 print('Setting up Mesh Net Info and Checking Segments ...')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
-ffsNet.MergeData()
+ffsNet.MergeData()    # Merge Data from Gateways to NodeInfos and check consistency
 
-ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
-ffsNodes.UpdateStatistikDB(args.JSONPATH)
+ffsNet.UpdateStatistikDB(args.JSONPATH)
 
-ffsNet.CheckSegments()
-
+ffsNet.CheckSegments()    # Find Mesh-Clouds with anasysing for shortcuts
 
 
 print('\nWriting Logs ...')
@@ -203,7 +201,7 @@ for Alert in ffsNet.Alerts:
 
 if MailBody != '':
     print('\nSending Email to inform Admins on Errors ...')
-    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
+#    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
 else:
     TimeInfo = datetime.datetime.now()
     if TimeInfo.hour == 12 and TimeInfo.minute < 5:

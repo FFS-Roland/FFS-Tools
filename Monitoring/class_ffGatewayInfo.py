@@ -317,16 +317,16 @@ class ffGatewayInfo:
     def __LoadFastdStatusFile(self,URL,Segment):
 
         try:
-            FastdJsonHTTP = urllib.request.urlopen(URL)
+            FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
             HttpDate = datetime.datetime.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
             StatusAge = datetime.datetime.utcnow() - HttpDate
             jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
             FastdJsonHTTP.close()
         except:
-    #        print('++ ERROR fastd status connect!',FastdJsonURL)
+#            print('++ ERROR fastd status connect!',FastdJsonURL)
             return
         else:
-            print('Load and analyse',URL,'...')
+#            print('Load and analyse',URL,'...')
 
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
@@ -334,15 +334,15 @@ class ffGatewayInfo:
                 if 'peers' in jsonFastdDict:
                     if 'interface' in jsonFastdDict:
                         if int(jsonFastdDict['interface'][3:5]) != Segment:
-                            print('!! ERROR: Bad Interface in fastd status file:',jsonFastdDict['interface'],'->',Segment)
+                            print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
                             return
 
                     self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
 #                    print()
                 else:
-                    print('!! ERROR: Bad fastd status file!')
+                    print('!! Bad fastd status file!',URL)
             else:
-                print('++ ERROR fastd status to old!')
+                print('++ fastd status to old!',URL)
 
         return
 

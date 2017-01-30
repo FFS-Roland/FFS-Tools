@@ -48,7 +48,6 @@ import datetime
 import json
 import re
 import hashlib
-import fcntl
 
 
 
@@ -58,7 +57,6 @@ import fcntl
 
 MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
 MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
-MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
 
 OnlineStates       = [' ','V']      # online, online with VPN-Uplink
 
@@ -67,8 +65,6 @@ NodesDbName    = 'nodesdb.json'
 Alfred158Name  = 'alfred-json-158.json'
 Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
-
-StatFileName   = 'SegStatistics.json'
 
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
@@ -108,17 +104,13 @@ class ffNodeInfo:
         # public Attributes
         self.MAC2NodeIDDict  = {}       # Dictionary of all Nodes' MAC-Addresses and related Main Address
         self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
-        self.SegmentLoadDict = {}       # Dictionary of Segments with their load (Nodes + Clients)
+        self.SegmentLoadDict = {}       # Dictionary of Segments with their long term load (Nodes + Clients)
         self.Alerts          = []       # List of  Alert-Messages
         self.AnalyseOnly     = False    # Locking automatic Actions due to inconsistent Data
 
         # private Attributes
         self.__AlfredURL = AlfredURL
         self.__RawAccess = RawAccess
-
-        self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict   = {}       # Dictionary of Segments with their Number of Nodes and Clients
-        self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
         # Initializations
         self.__LoadNodesDbJson()        # ffNodeDict[ffNodeMAC] -> all Alfred-Infos of ffNode
@@ -312,7 +304,7 @@ class ffNodeInfo:
         print('Loading nodesdb.json ...')
 
         try:
-            NodesDbJsonHTTP = urllib.request.urlopen(self.__AlfredURL+NodesDbName)
+            NodesDbJsonHTTP = urllib.request.urlopen(self.__AlfredURL+NodesDbName,timeout=10)
             HttpDate = datetime.datetime.strptime(NodesDbJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
@@ -463,7 +455,7 @@ class ffNodeInfo:
         print('Loading alfred-json-158.json ...')
 
         try:
-            Afred158HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred158Name)
+            Afred158HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred158Name,timeout=10)
             HttpDate = datetime.datetime.strptime(Afred158HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
@@ -543,7 +535,7 @@ class ffNodeInfo:
         print('Loading alfred-json-159.json ...')
 
         try:
-            Afred159HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred159Name)
+            Afred159HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred159Name,timeout=10)
             HttpDate = datetime.datetime.strptime(Afred159HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
@@ -603,7 +595,7 @@ class ffNodeInfo:
         print('Loading alfred-json-160.json ...')
 
         try:
-            Afred160HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred160Name)
+            Afred160HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred160Name,timeout=10)
             HttpDate = datetime.datetime.strptime(Afred160HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
@@ -678,7 +670,7 @@ class ffNodeInfo:
                 opener = urllib.request.build_opener(authhandler)
                 urllib.request.install_opener(opener)
 
-                RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'])
+                RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'],timeout=10)
                 RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
                 RawJsonHTTP.close()
             except:
@@ -733,12 +725,12 @@ class ffNodeInfo:
                             if self.ffNodeDict[ffNodeMAC]['last_online'] > LastSeen:
                                 continue    # Alfred is newer
                             else:
-                                print('-+ Upd. from Alfred:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
+                                print('-+ Updating:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                         else:
                             if self.ffNodeDict[ffNodeMAC]['last_online'] > RawJsonDict[ffNodeKey]['lastseen']:
                                 continue    # newer Duplicate already in raw.json
                             else:
-                                print('-+ Upd. from RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
+                                print('-+ Upd. RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                     else:
                         print('++ New Node:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                         self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
@@ -909,63 +901,5 @@ class ffNodeInfo:
             MacTableFile.write('%-20s -> %-20s\n' % (ffNodeMAC, self.MAC2NodeIDDict[ffNodeMAC]))
 
         MacTableFile.close()
-        print('... done.\n')
-        return
-
-
-
-    #==============================================================================
-    # Method "UpdateStatistikDB"
-    #
-    #   Write updates Statistik-json
-    #==============================================================================
-    def UpdateStatistikDB(self,Path):
-
-        print('Update Statistik-DB ...')
-
-        StatisticsJsonName = os.path.join(Path,StatFileName)
-
-        for ffNodeMAC in self.ffNodeDict.keys():
-            if ((self.ffNodeDict[ffNodeMAC]['Status'] in OnlineStates) and
-                (self.ffNodeDict[ffNodeMAC]['Segment'] is not None)):
-
-                if self.ffNodeDict[ffNodeMAC]['Segment'] not in self.SegmentLoadDict:
-                    self.SegmentLoadDict[str(self.ffNodeDict[ffNodeMAC]['Segment'])] = { 'Sum':0, 'Count':1 }
-
-                self.SegmentLoadDict[str(self.ffNodeDict[ffNodeMAC]['Segment'])]['Sum'] += self.ffNodeDict[ffNodeMAC]['Clients'] + 1
-
-        try:
-            LockFile = open('/tmp/.SegStatistics.lock', mode='w+')
-            fcntl.lockf(LockFile,fcntl.LOCK_EX)
-
-            if os.path.exists(StatisticsJsonName):
-                StatisticsJsonFile = open(StatisticsJsonName, mode='r')
-                StatisticsJsonDict = json.load(StatisticsJsonFile)
-                StatisticsJsonFile.close()
-
-                for Segment in StatisticsJsonDict.keys():
-                    if not Segment in self.SegmentLoadDict:
-                        self.SegmentLoadDict[Segment] = { 'Sum':StatisticsJsonDict[Segment]['Sum'], 'Count':StatisticsJsonDict[Segment]['Count'] }
-                    else:
-                        self.SegmentLoadDict[Segment]['Sum']   += StatisticsJsonDict[Segment]['Sum']
-                        self.SegmentLoadDict[Segment]['Count'] += StatisticsJsonDict[Segment]['Count']
-
-                    if self.SegmentLoadDict[Segment]['Count'] > MaxStatisticsData:
-                        self.SegmentLoadDict[Segment]['Sum']   -= int(CurrentSegStatistics[Segment]['Sum'] / CurrentSegStatistics[Segment]['Count'])
-                        self.SegmentLoadDict[Segment]['Count'] -= 1
-
-            print('Writing Statistik-DB as json-File ...')
-
-            StatisticsJsonFile = open(StatisticsJsonName, mode='w')
-            json.dump(self.SegmentLoadDict,StatisticsJsonFile)
-            StatisticsJsonFile.close()
-
-        except:
-            self.__alert('\n!! Error on Updating Statistics Databases as json-File!')
-
-        finally:
-            fcntl.lockf(LockFile,fcntl.LOCK_UN)
-            LockFile.close()
-
         print('... done.\n')
         return
