@@ -8,6 +8,7 @@
 #                                                                                         #
 #  Parameter:                                                                             #
 #                                                                                         #
+#      --pid       = fastd-PID                                                            #
 #      --fastd     = fastd-Interface (e.g. vpn00)                                         #
 #      --batman    = batman-Interface (e.g. bat00)                                        #
 #      --peerkey   = fastd-Key from Peer                                                  #
@@ -58,29 +59,6 @@ import argparse
 #----- Json-File with needed Accounts -----
 AccountFileName  = '.Accounts.json'
 
-
-
-
-#-----------------------------------------------------------------------
-# function "getFastdProcessID"
-#
-#    > FastdInterface = 'vpn??'
-#-----------------------------------------------------------------------
-def getFastdProcessID(FastdInterface):
-
-    pid = None
-    for proc in psutil.process_iter():
-        try:
-            pinfo = proc.as_dict(attrs=['pid', 'name',"cmdline"])
-        except psutil.NoSuchProcess:
-            pass
-        else:
-            if pinfo['name'] == 'fastd':
-                config = pinfo['cmdline'][pinfo['cmdline'].index('--config')+1]
-                if os.path.dirname(config).rsplit('/',1)[1] == FastdInterface:
-                    pid = pinfo['pid']
-                    break
-    return pid
 
 
 
@@ -181,6 +159,7 @@ def getMeshMAC(FastdStatusSocket):
 def InfoFromGluonNodeinfoPage(NodeLLA):
 
     NodeInfoDict = None
+    print('Connecting to http://['+NodeLLA+']/cgi-bin/nodeinfo ...')
 
     try:
         NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo',timeout=10)
@@ -222,7 +201,7 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 #-----------------------------------------------------------------------
 # function "InfoFromGluonStatusPage"
 #
-#    must be used on Gluon >= v2016.1
+#    must be used on Gluon < v2016.1
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
@@ -230,6 +209,7 @@ def InfoFromGluonStatusPage(NodeLLA):
 
     NodeInfoDict = None
     NodeHTML = None
+    print('Connecting to http://['+NodeLLA+']/cgi-bin/status ...')
 
     try:
         NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status',timeout=10)
@@ -273,8 +253,6 @@ def InfoFromGluonStatusPage(NodeLLA):
         if pStop > pStart + 2:
             if NodeHTML[pStart:pStart+2] == '1e':
                 NodeInfoDict['Segment'] = 'vpn00'
-            else:
-                NodeInfoDict['Segment'] = 'vpn'+NodeHTML[pStart:pStart+2]
 
         print('>>> Segment =',NodeHTML[pStart:pStop])
 
@@ -293,24 +271,27 @@ def getNodeInfos(NodeLLA):
     Retries = 3
 
     while NodeHTML is None and Retries > 0:
+        time.sleep(1)
         print('Connecting to http://['+NodeLLA+'] ...')
         Retries -= 1
         try:
-            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/',timeout=10)
+            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/',timeout=15)
             NodeHTML = NodeHTTP.read().decode('utf-8')
             NodeHTTP.close()
         except:
             NodeHTML = None
-            time.sleep(1)
             pass
 
     if NodeHTML is not None:
-        if NodeHTML[:15] == '<!DOCTYPE html>':
-            print('... new Gluon ...')
+        if NodeHTML.find('/cgi-bin/nodeinfo') > 0:
+            print('... is new Gluon ...')
             NodeInfoDict = InfoFromGluonNodeinfoPage(NodeLLA)
-        else:
-            print('... old Gluon ...')
+        elif  NodeHTML.find('/cgi-bin/status') > 0:
+            print('... is old Gluon ...')
             NodeInfoDict = InfoFromGluonStatusPage(NodeLLA)
+        else:
+            print('+++ unknown System!')
+            NodeInfoDict =  None
 
         if NodeInfoDict is not None:
             if NodeInfoDict['NodeID'] is None or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
@@ -362,7 +343,6 @@ def LoadKeyData(Path):
     try:
         LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
         fcntl.lockf(LockFile,fcntl.LOCK_EX)
-        print('... Reading Fastd Key Database json-File ...')
 
         KeyJsonFile = open(os.path.join(Path,'KeyData.json'), mode='r')
         KeyDataDict = json.load(KeyJsonFile)
@@ -386,6 +366,7 @@ def LoadKeyData(Path):
 #-----------------------------------------------------------------------
 def getBatmanSegment(BatmanIF,FastdIF):
 
+    print('... get Segment via Batman Gateways ...')
     Retries = 20
     BatSeg = None
 
@@ -416,6 +397,7 @@ def getBatmanSegment(BatmanIF,FastdIF):
         except:
             BatSeg = None
 
+    print('... Segment =',BatSeg)
     return BatSeg
 
 
@@ -499,26 +481,13 @@ def setBlacklistFile(BlacklistFile):
 
 
 
-#-----------------------------------------------------------------------
-# function "detachPeers"
-#
-#-----------------------------------------------------------------------
-def detachPeers(pid):
-
-    os.kill(pid,signal.SIGHUP)
-    time.sleep(1)
-    os.kill(pid,signal.SIGUSR2)
-
-    return
-
-
-
 #=======================================================================
 #
 #  M a i n   P r o g r a m
 #
 #=======================================================================
 parser = argparse.ArgumentParser(description='Add or Modify Freifunk Node Registration')
+parser.add_argument('--pid', dest='FASTDPID', action='store', required=True, help='Fastd PID')
 parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help='Fastd Interface = Segment')
 parser.add_argument('--batman', dest='BATIF', action='store', required=True, help='Batman Interface')
 parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, help='Fastd PeerKey')
@@ -527,15 +496,10 @@ parser.add_argument('--json', dest='JSONPATH', action='store', required=True, he
 parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=True, help='Blacklist Folder')
 
 args = parser.parse_args()
-PeerKey = args.PEERKEY
+PeerKey  = args.PEERKEY
+FastdPID = int(args.FASTDPID)
 
 print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
-FastdPID = getFastdProcessID(args.VPNIF)
-
-if FastdPID is None:
-    print('!! FATAL ERROR: Fastd PID not available or Fastd not running!')
-    exit(1)
-
 
 if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
     setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
@@ -561,14 +525,14 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
             if NodeInfo is not None:
             #----- Required Data of Node is available -----
-                PeerMAC = NodeInfo['MAC']
+                PeerMAC  = NodeInfo['MAC']
+                PeerFile = 'ffs-'+NodeInfo['NodeID']
 
                 if NodeInfo['Segment'] is None:
-                    print('... getBatmanSegment ...')
                     NodeInfo['Segment'] = getBatmanSegment(args.BATIF,args.VPNIF)
 
-                DnsSegment  = checkDNS('ffs-'+NodeInfo['NodeID']+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
-                print('>> DNS / Mesh =',DnsSegment,'/',NodeInfo['Segment'])
+                DnsSegment  = checkDNS(PeerFile+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
+                print('>>> DNS / Mesh =',DnsSegment,'/',NodeInfo['Segment'])
 
                 if DnsSegment is None:  # Node is not registered in DNS
 
@@ -590,10 +554,10 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
                             print('!! MAC Mismatch between Git and Peer:',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
                         else:  # DNS == Git
-                            if NodeInfo['Segment'] != DnsSegment:
-                                print('++ Node must be moved to other Segment:',PeerMAC,'/',DnsSegment,'->',NodeInfo['Segment'])
+                            if NodeInfo['Segment'] is not None and NodeInfo['Segment'] != DnsSegment:
+                                print('++ Node must be moved to other Segment:',PeerFile,'/',DnsSegment,'->',NodeInfo['Segment'])
                             else:
-                                print('++ Node is already registered:',PeerMAC,'/',DnsSegment)
+                                print('++ Node is already registered:',PeerFile,'/',DnsSegment)
 
                     else:  # Node is in DNS but not in Git
                         print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
@@ -613,5 +577,6 @@ else:
     print('!! ERROR: Node is blacklisted:',PeerKey)
 
 
-detachPeers(FastdPID)
+os.kill(FastdPID,signal.SIGUSR2)    # reset fastd connections
+
 exit(0)
