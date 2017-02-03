@@ -64,7 +64,6 @@ RegionSegDict = {
     'Bayern':'vpn02',
     'Biberach':'vpn02',
     'Bodenseekreis':'vpn02',
-    'Esslingen':'vpn02',
     'Konstanz':'vpn02',
     'Ravensburg':'vpn02',
     'Reutlingen':'vpn02',
@@ -72,14 +71,11 @@ RegionSegDict = {
     'Tuebingen':'vpn02',
     'Zollernalbkreis':'vpn02',
 
-    'Goeppingen':'vpn03',
     'Hohenlohekreis':'vpn03',
     'Mecklenburg-Vorpommern':'vpn03',
     'Ostalbkreis':'vpn03',
-    'Rems-Murr-Kreis':'vpn03',
     'Schwaebisch-Hall':'vpn03',
 
-    'Boeblingen':'vpn04',
     'Calw':'vpn04',
     'Frankreich':'vpn04',
     'Heilbronn':'vpn04',
@@ -94,7 +90,14 @@ RegionSegDict = {
     'Rheinland-Pfalz':'vpn04',
     'Rottweil':'vpn04',
     'Saarland':'vpn04',
-    'Schwarzwald-Baar-Kreis':'vpn04'
+    'Schwarzwald-Baar-Kreis':'vpn04',
+
+    'Esslingen':'vpn05',
+    'Goeppingen':'vpn05',
+
+    'Boeblingen':'vpn06',
+
+    'Rems-Murr-Kreis':'vpn07'
 }
 
 
@@ -122,7 +125,7 @@ class ffMeshNet:
         self.__SegmentDict   = {}       # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
         self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget = 1        # Target Segment to use if no better Data available
+        self.__DefaultTarget = 8        # Target Segment to use if no better Data available
 
         return
 
@@ -250,7 +253,7 @@ class ffMeshNet:
                     self.__NodeMoveDict[ffNodeMAC] = TargetSeg
                     print('>> git mv %s/peers/%s vpn%02d/peers/  = %s'%( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
                                                                          TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8') ))
-                    print(self.__NodeInfos.ffNodeDict[ffNodeMAC])
+#                    print(self.__NodeInfos.ffNodeDict[ffNodeMAC])
                     print()
 
         return
@@ -263,11 +266,10 @@ class ffMeshNet:
     #   Handle Segment Shortcut
     #
     #-----------------------------------------------------------------------
-    def __HandleShortcut(self,CloudID,ActiveSegDict,DesiredSegDict,FixedSegList):
+    def __HandleShortcut(self,CloudID,UplinkSegList,DesiredSegDict,FixedSegList):
 
-        CommonSegList = []
         SegWeight = 0
-        TargetSeg = 99;   # 99 = unknown
+        TargetSeg = None  # Target where all nodes of this cloud must be moved to
 
         if len(FixedSegList) > 0:
             if len(FixedSegList) > 1:
@@ -280,25 +282,17 @@ class ffMeshNet:
                     TargetSeg = Segment
 
         else:   #----- No fixed Nodes -----
-            for Segment in ActiveSegDict.keys():
+            for Segment in UplinkSegList:
                 if Segment in DesiredSegDict:
-                    CommonSegList.append(Segment)
-
-            if len(CommonSegList) > 0:
-                for Segment in CommonSegList:
-                    if ActiveSegDict[Segment] > SegWeight:
-                        SegWeight = ActiveSegDict[Segment]
-                        TargetSeg = Segment
-
-            else:
-                for Segment in DesiredSegDict.keys():
                     if DesiredSegDict[Segment] > SegWeight:
                         SegWeight = DesiredSegDict[Segment]
                         TargetSeg = Segment
 
-        if TargetSeg < 99:
+        if TargetSeg is not None:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
             self.__alert('!! Shortcut detected !!!')
+            print(self.__MeshCloudDict[CloudID]['CloudMembers'])
+            print()
 
         return
 
@@ -307,16 +301,16 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     # private function "__HandleGeoLocation"
     #
-    #   Handling Geo-Location (Segments) of Mesh Clouds
+    #   Handling Geo-Location (Segments) of Mesh Cloud w/o shortcuts or fixes
     #
     #-----------------------------------------------------------------------
     def __HandleGeoLocation(self,CloudID,ActiveSegDict,DesiredSegDict):
 
         SegWeight = 0
-        TargetSeg = 99;   # 99 = unknown
+        TargetSeg = None
 
         if len(DesiredSegDict) == 0:
-            if 0 in ActiveSegDict:  # Check for Legacy Nodes only
+            if 0 in ActiveSegDict:  # Cloud in Legacy Segment
                 TargetSeg = self.__DefaultTarget
 
         else:
@@ -325,7 +319,7 @@ class ffMeshNet:
                     SegWeight = DesiredSegDict[Segment]
                     TargetSeg = Segment
 
-        if TargetSeg < 99:
+        if TargetSeg is not None:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
 
         return
@@ -344,51 +338,51 @@ class ffMeshNet:
 
         for CloudID in self.__MeshCloudDict:
             if self.__MeshCloudDict[CloudID]['NumNodes'] > 1:
-                ActiveSegDict = {}
-                DesiredSegDict = {}
-                FixedSegList = []
+                ActiveSegDict  = {}    # really used segments with number of nodes
+                DesiredSegDict = {}    # desired segments with number of nodes
+                UplinkSegList  = []    # List of segments from nodes with uplink
+                FixedSegList   = []    # List of segments from nodes with fixed segment assignment
 
+                #---------- Analysing used segments with their nodes and clients ----------
                 for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegDict:
+                        ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] = 1
+                    else:
+                        ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] += 1
+
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
                         VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
 
-                        if not VpnSeg in ActiveSegDict:
-                            ActiveSegDict[VpnSeg] = 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
-                        else:
-                            ActiveSegDict[VpnSeg] += 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
-                    else:
-                        if not self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] in ActiveSegDict:
-                            ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] = 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
-                        else:
-                            ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] += 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
+                        if VpnSeg not in UplinkSegList:
+                            UplinkSegList.append(VpnSeg)
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99:
-                        if not self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] in DesiredSegDict:
-                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] =  1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
+                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] =  1
                         else:
-                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += 1 + self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
+                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += 1
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] == '%':
-                        if not self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] in FixedSegList:
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegList:
                             FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
                             VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
 
-                            if not VpnSeg in FixedSegList:
+                            if VpnSeg not in FixedSegList:
                                 FixedSegList.append(VpnSeg)
 
-                if len(ActiveSegDict) > 1:
-                    self.__HandleShortcut(CloudID,ActiveSegDict,DesiredSegDict,FixedSegList)
+                #---------- Actions depending of situation in cloud ----------
+                if len(UplinkSegList) > 1:
+                    self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)
                 else:
-                    if len(ActiveSegDict) == 0:
-                        print('!! No VPN Uplink:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-
-                    if len(FixedSegList) == 0:
-                        self.__HandleGeoLocation(CloudID,ActiveSegDict,DesiredSegDict)
-                    else:
+                    if len(UplinkSegList) == 0 :
+                        print('++ No VPN Uplink:',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                    elif len(FixedSegList) > 0:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                    else:
+                        self.__HandleGeoLocation(CloudID,ActiveSegDict,DesiredSegDict)
 
         print('... done.\n')
         return
@@ -412,7 +406,8 @@ class ffMeshNet:
 
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
-                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
+#                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
+                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn01':
                     TargetSeg = self.__DefaultTarget
 
                 if TargetSeg < 99:
@@ -448,22 +443,27 @@ class ffMeshNet:
                     print('!! Segment is None:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
-                    print('!! KeyDir doesn\'t match Segment:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
+                    print('!! KeyDir <> Segment:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == '':
+                    print('!! Uplink w/o Key:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in RegionSegDict:
                     if int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']:
-                        print('++ DestSeg Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]),'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                        print('++ DestSeg Mismatch: ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],'->',int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]),self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:])  # Region has priority
                 elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in NoRegionList:
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
                 else:
-                    self.__alert('++ Missing Region: '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status']+' '+ffNodeMAC+' = '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']+' -> vpn'+self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
-
+                    self.__alert('++ Invalid Region: '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status']+' '+ffNodeMAC+' = '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']+' -> vpn'+self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
-                    print('++ Wrong Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                    print('++ Wrong Segment:    ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
 
 
+                #---------- calculate segment statistics ----------
                 if self.__NodeInfos.IsOnline(ffNodeMAC):
                     ffSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']
 
@@ -505,10 +505,10 @@ class ffMeshNet:
             if self.__SegmentDict[Segment]['Weight'] is None:
                 self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
 
-            if Segment > 0 and Segment < 5:  #....................................... must be changed later !!
+            if Segment > 0 and Segment < 9:  #....................................... must be changed later !!
                 if self.__SegmentDict[Segment]['Weight'] < SegWeight:
                     SegWeight = self.__SegmentDict[Segment]['Weight']
-                    self.__DefaultTarget = Segment
+#                    self.__DefaultTarget = Segment
 
         print('... Default Target =',self.__DefaultTarget)
 
