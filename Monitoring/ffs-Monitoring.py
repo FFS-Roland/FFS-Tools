@@ -152,22 +152,25 @@ if AccountsDict is None:
     exit(1)
 
 
-print('Setting up basic Data ...')
+#---------- Gateways ----------
+print('Setting up Gateway Data ...')
+ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
-ffsGWs = ffGatewayInfo(args.GITREPO)
-
-isOK = ffsGWs.VerifyDNS(AccountsDict['DNS'])	# Check DNS against keys from Git
+isOK = ffsGWs.CheckDNS()	# Check DNS entries of Nodes against keys from Git
 
 if not args.JSONPATH is None:
     print('Writing Fastd Key Database ...')
     ffsGWs.WriteKeyData(args.JSONPATH)
 
+
+#---------- Nodes ----------
+print('Setting up Node Data ...')
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
 
-
+#---------- FF-Network ----------
 print('Setting up Mesh Net Info and Checking Segments ...')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)

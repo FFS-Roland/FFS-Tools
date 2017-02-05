@@ -125,7 +125,7 @@ class ffMeshNet:
         self.__SegmentDict   = {}       # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
         self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget = 8        # Target Segment to use if no better Data available
+        self.__DefaultTarget = 3        # Target Segment to use if no better Data available
 
         return
 
@@ -246,7 +246,7 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
-                if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
+                if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn08':  #<<<<<<<<<<<<<<<<<<<
                     if ffNodeMAC in self.__NodeMoveDict:
                         print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
 
@@ -406,11 +406,10 @@ class ffMeshNet:
 
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
-#                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
-                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn01':
+                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
                     TargetSeg = self.__DefaultTarget
 
-                if TargetSeg < 99:
+                if TargetSeg < 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn08':  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                     if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                         if ffNodeMAC in self.__NodeMoveDict:
                             print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)

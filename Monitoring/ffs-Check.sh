@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#exit 0
+
 LOGFILE=/var/freifunk/logs/monitoring.log
 
 git -C /var/freifunk/peers-ffs pull --rebase=true

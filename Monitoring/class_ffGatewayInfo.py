@@ -59,26 +59,33 @@ from dns.rdatatype import *
 # Global Constants
 #-------------------------------------------------------------
 
-SegAssignDomain   = 'segassign.freifunk-stuttgart.de'
+FreifunkDomain      = 'freifunk-stuttgart.de'
+SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 
-DnsSegTemplate    = re.compile('^2001:2:0:711::[0-9][0-9]?$')
-DnsNodeTemplate   = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
+GwIgnoreList        = ['gw05n08','gw05n09']
 
-GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
-GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate  = re.compile('^02:00:(3[5-9])(:[0-9a-f]{2}){3}')
 
-MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
-NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
+DnsSegTemplate      = re.compile('^2001:2:0:711::[0-9][0-9]?$')
+DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
-PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
-PeerTemplate1     = re.compile('^ffs[-_][0-9a-f]{12}')
-PeerTemplate2     = re.compile('^ffs[0-9a-f]{12}')
+GwNameTemplate      = re.compile('^gw[01][0-9]{1,2}')
+GwsPerSegTemplate   = re.compile('^gw[0-9]{2}s[0-9]{2}$')
+GwInstanceTemplate  = re.compile('^gw[0-9]{2}n[0-9]{2}$')
 
-SegmentTemplate   = re.compile('^[0-9]{2}$')
+GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
+GwNewMacTemplate    = re.compile('^02:00:(3[5-9])(:[0-9a-f]{2}){3}')
 
-KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
-FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
+MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
+
+PeerTemplate        = re.compile('^ffs-[0-9a-f]{12}')
+PeerTemplate1       = re.compile('^ffs[-_][0-9a-f]{12}')
+PeerTemplate2       = re.compile('^ffs[0-9a-f]{12}')
+
+SegmentTemplate     = re.compile('^[0-9]{2}$')
+
+KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
+FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
 
 
 
@@ -88,7 +95,7 @@ class ffGatewayInfo:
     #==========================================================================
     # Constructor
     #==========================================================================
-    def __init__(self,GitPath):
+    def __init__(self,GitPath,DnsAccDict):
 
         # public Attributes
         self.FastdKeyDict = {}          # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
@@ -97,11 +104,14 @@ class ffGatewayInfo:
 
         # private Attributes
         self.__GitPath = GitPath
+        self.__DnsAccDict = DnsAccDict  # DNS Account
 
+        self.__GatewayIpDict = {}       # GatewayIpDict[GwName] -> List of IP-Addresses
         self.__Key2FileNameDict = {}    # Key2FileNameDict[PeerKey] -> SegDir, KeyFileName
         self.__SegmentList = []
 
         # Initializations
+        self.__GetGatewaysFromDNS()
         self.__LoadKeysFromGit()
         self.__LoadFastdStatusInfos()
         return
@@ -247,13 +257,14 @@ class ffGatewayInfo:
                 VpnPeerPath = os.path.join(SegPath,'peers')
 
                 for KeyFileName in os.listdir(VpnPeerPath):
-                    if not PeerTemplate.match(KeyFileName):
-                        print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName))
+                    if KeyFileName[:1] != '.':
+                        if not PeerTemplate.match(KeyFileName):
+                            print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName[:1]))
 
-                    if GwNameTemplate.match(KeyFileName):
-                        print('++ GW in peer folder:',os.path.join(SegDir,'peers',KeyFileName))
-                    else:
-                        self.__LoadKeyFile(SegDir,KeyFileName)
+                        if GwNameTemplate.match(KeyFileName):
+                            print('++ GW in peer folder:',os.path.join(SegDir,'peers',KeyFileName))
+                        else:
+                            self.__LoadKeyFile(SegDir,KeyFileName)
 
         print('... done.\n')
         return
@@ -362,17 +373,17 @@ class ffGatewayInfo:
         print('-------------------------------------------------------')
         print('Loading fastd Status Infos ...')
 
-        for ffGW in [1, 5, 6, 8]:
-            print('... GW%02d ...' % (ffGW))
+        for ffGW in sorted(self.__GatewayIpDict):
+            print('...',ffGW,'...')
 
-            for GwInstance in range(0,8):
+            if ffGW not in GwIgnoreList:
                 for ffSeg in self.__SegmentList:
 
-                    FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/data/vpn%02d.json' % (ffGW,GwInstance,ffSeg)
+                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (ffGW,FreifunkDomain,ffSeg)
                     self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
-                    if ffGW == 5:
-                        FastdJsonURL = 'http://gw%02dn%02d.freifunk-stuttgart.de/data/vpn%02dip6.json' % (ffGW,GwInstance,ffSeg)
+                    if ffGW[:4] == 5:
+                        FastdJsonURL = 'http://%s.%s/data/data/vpn%02dip6.json' % (ffGW,FreifunkDomain,ffSeg)
                         self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
         self.__LoadFastdStatusFile('http://gw09.freifunk-stuttgart.de/fastd/ffs.status.json',0)
@@ -383,84 +394,270 @@ class ffGatewayInfo:
 
 
 
+    #--------------------------------------------------------------------------
+    # private function "__GetIpFromCNAME"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __GetIpFromCNAME(self,DnsName,NameTemplate):
+
+        DnsResolver = None
+        IpList = []
+
+        try:
+            DnsResolver = dns.resolver.Resolver()
+        except:
+            DnsResolver = None
+
+        if DnsResolver is not None:
+            try:
+                GatewayIP = DnsResolver.query('%s.'%(Cname),'a')[0].to_text()
+                IpList.append(GatewayIP)
+            except:
+                GatewayIP = None
+
+            try:
+                GatewayIP = DnsResolver.query('%s.'%(Cname),'aaaa')[0].to_text()
+                IpList.append(GatewayIP)
+            except:
+                GatewayIP = None
+
+            try:
+                GwName = DnsResolver.query('%s.'%(Cname),'cname')[0].to_text()
+            except:
+                GwName = None
+
+            if GwName is not None:
+                IpList.append(self.__GetIpFromCNAME(GwName,NameTemplate))
+
+        return IpList
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetGwInstanceDNS"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __GetGwInstances(self,GwName,DnsResult):
+
+        if GwName not in self.__GatewayIpDict:
+            self.__GatewayIpDict[GwName] = []
+
+        for rds in DnsResult:
+            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
+                IpAddress = rds[0].to_text()
+
+                if IpAddress not in self.__GatewayIpDict[GwName]:
+                    self.__GatewayIpDict[GwName].append(IpAddress)
+
+            elif rds.rdtype == dns.rdatatype.CNAME:
+                Cname = rds[0].to_text()
+
+                IpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
+
+                for IpAddress in IpList:
+                    if IpAddress not in self.__GatewayIpDict[GwName]:
+                        self.__GatewayIpDict[GwName].append(IpAddress)
+
+        return
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetSegmentGWs"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __GetSegmentGWs(self,DnsResult):
+
+        IpList = []
+
+        for rds in DnsResult:
+            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
+                IpAddress = rds[0].to_text()
+
+                if IpAddress not in IpList:
+                    IpList.append(IpAddress)
+
+            elif rds.rdtype == dns.rdatatype.CNAME:
+                Cname = rds[0].to_text()
+
+                CnameIpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
+
+                for IpAddress in CnameIpList:
+                    if IpAddress not in IpList:
+                        IpList.append(IpAddress)
+
+        return IpList
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetGatewaysFromDNS"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __GetGatewaysFromDNS(self):
+
+        Seg2GwDict  = {}
+        Ip2GwDict   = {}
+        DnsZone     = None
+
+        print('\nChecking DNS for Gateways ...')
+
+        try:
+            DnsResolver = dns.resolver.Resolver()
+            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
+            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkDomain))
+        except:
+            self.__alert('!! ERROR on fetching Freifunk DNS Zone!')
+            DnsZone = None
+            self.AnalyseOnly = True
+
+
+        if DnsZone is not None:
+            for name, node in DnsZone.nodes.items():
+                GwName = name.to_text()
+
+                if GwInstanceTemplate.match(GwName):
+                    self.__GetGwInstances(GwName,node.rdatasets)
+
+                elif GwsPerSegTemplate.match(GwName):
+                    Segment = 'vpn'+GwName[5:]
+
+                    if Segment not in Seg2GwDict:
+                        Seg2GwDict[Segment] = { 'Names':[],'IPs':[] }
+
+                    for GwIP in self.__GetSegmentGWs(node.rdatasets):
+                        Seg2GwDict[Segment]['IPs'].append(GwIP)
+
+
+        #----- setting up GwIP to GwName -----
+        for GwName in self.__GatewayIpDict:
+            for SegIP in self.__GatewayIpDict[GwName]:
+                if SegIP not in Ip2GwDict:
+                    Ip2GwDict[SegIP] = GwName
+                else:
+                    print('!! Duplicate Gateway IP:',SegIP,'=',Ip2GwDict[SegIP],'<>',GwName)
+
+        #----- setting up Segment to GwName -----
+        for Segment in sorted(Seg2GwDict):
+            for SegIP in Seg2GwDict[Segment]['IPs']:
+                if SegIP in Ip2GwDict.keys():
+                    if Ip2GwDict[SegIP] not in Seg2GwDict[Segment]['Names']:
+                        Seg2GwDict[Segment]['Names'].append(Ip2GwDict[SegIP])
+                else:
+                    print('!! Unknown Gateway IP:',SegIP)
+
+            print(Segment,'->',sorted(Seg2GwDict[Segment]['Names']))
+
+        print('... done.\n')
+        return
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__CheckDNSvsGit"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __CheckDNSvsGit(self,DnsZone):
+
+        isOK = True
+
+        #---------- Check DNS against Git ----------
+        print('Checking DNS Entries against Keys in Git ...')
+        for DnsName, NodeData in DnsZone.nodes.items():
+            for DnsRecord in NodeData.rdatasets:
+                DnsPeerID = DnsName.to_text()
+
+                if DnsNodeTemplate.match(DnsPeerID) and DnsRecord.rdtype == dns.rdatatype.AAAA:
+                    PeerFileName = DnsPeerID[:16]
+                    PeerKeyID    = DnsPeerID[17:]
+                    SegFromDNS   = None
+
+                    for DnsAnswer in DnsRecord:
+                        IPv6 = DnsAnswer.to_text()
+
+                        if DnsSegTemplate.match(IPv6):
+                            if SegFromDNS is None:
+                                SegFromDNS = 'vpn'+IPv6[14:].zfill(2)
+                            else:
+                                self.__alert('!! Duplicate DNS Result: '+DnsPeerID+' = '+IPv6)
+                                self.AnalyseOnly = True
+                                isOK = False
+                        else:
+                            self.__alert('!! Invalid DNS IPv6 result: '+DnsPeerID+' = '+IPv6)
+                            isOK = False
+
+                    if PeerFileName in self.FastdKeyDict and not SegFromDNS is None:
+                        if self.FastdKeyDict[PeerFileName]['PeerKey'][:12] == PeerKeyID:
+                            self.FastdKeyDict[PeerFileName]['DnsSeg'] = SegFromDNS
+
+                            if SegFromDNS != self.FastdKeyDict[PeerFileName]['SegDir']:
+                                self.__alert('!! Segment mismatch DNS <> Git: '+DnsPeerID+' -> '+SegFromDNS+' <> '+self.FastdKeyDict[PeerFileName]['SegDir'])
+                                self.AnalyseOnly = True
+                                isOK = False
+                        else:
+                            self.__alert('!! Fastd-Key mismatch DNS <> Git: '+DnsPeerID+' -> '+PeerKeyID+' <> '+self.FastdKeyDict[PeerFileName]['PeerKey'][:12])
+                            isOK = False
+
+                    else:
+                        print('++ Unknown or old DNS Entry: '+DnsPeerID+' = '+IPv6)
+                        isOK = False
+
+                elif DnsPeerID != '@':
+                    self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
+                    isOK = False
+
+        #---------- Check Git for missing DNS entries ----------
+        print('Checking Keys from Git against DNS Entries ...')
+
+        for PeerFileName in self.FastdKeyDict:
+            if ((PeerTemplate.match(PeerFileName)) and
+                (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
+                (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
+                (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
+
+                print('++ DNS Entry missing:',PeerFileName,'->',self.FastdKeyDict[PeerFileName]['PeerMAC'],'=',self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
+                isOK = False
+
+        return isOK
+
+
+
     #=========================================================================
-    # Method "VerifyDNS"
+    # Method "CheckDNS"
     #
     #   Returns True if everything is OK
     #
     #=========================================================================
-    def VerifyDNS(self,DnsAccountDict):
+    def CheckDNS(self):
 
-        print('\nLoading DNS Zone for checking ...')
+        DnsZone     = None
+        isOK        = True
 
-        isOK = True
+        print('\nChecking DNS ...')
 
         try:
             DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (DnsAccountDict['Server']),'a')[0].to_text()
+            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
             DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,SegAssignDomain))
         except:
             self.__alert('!! ERROR on fetching DNS Zone!')
             self.AnalyseOnly = True
             isOK = False
 
-        if isOK:
-            #---------- Check DNS against Git ----------
-            print('Checking DNS Entries against Keys in Git ...')
-            for DnsName, NodeData in DnsZone.nodes.items():
-                for DnsRecord in NodeData.rdatasets:
-                    DnsPeerID = DnsName.to_text()
-
-                    if DnsNodeTemplate.match(DnsPeerID) and DnsRecord.rdtype == dns.rdatatype.AAAA:
-                        PeerFileName = DnsPeerID[:16]
-                        PeerKeyID    = DnsPeerID[17:]
-                        SegFromDNS   = None
-
-                        for DnsAnswer in DnsRecord:
-                            IPv6 = DnsAnswer.to_text()
-
-                            if DnsSegTemplate.match(IPv6):
-                                if SegFromDNS is None:
-                                    SegFromDNS = 'vpn'+IPv6[14:].zfill(2)
-                                else:
-                                    self.__alert('!! Duplicate DNS Result: '+DnsPeerID+' = '+IPv6)
-                                    self.AnalyseOnly = True
-                                    isOK = False
-                            else:
-                                self.__alert('!! Invalid DNS IPv6 result: '+DnsPeerID+' = '+IPv6)
-                                isOK = False
-
-                        if PeerFileName in self.FastdKeyDict and not SegFromDNS is None:
-                            if self.FastdKeyDict[PeerFileName]['PeerKey'][:12] == PeerKeyID:
-                                self.FastdKeyDict[PeerFileName]['DnsSeg'] = SegFromDNS
-
-                                if SegFromDNS != self.FastdKeyDict[PeerFileName]['SegDir']:
-                                    self.__alert('!! Segment mismatch DNS <> Git: '+DnsPeerID+' -> '+SegFromDNS+' <> '+self.FastdKeyDict[PeerFileName]['SegDir'])
-                                    self.AnalyseOnly = True
-                                    isOK = False
-                            else:
-                                self.__alert('!! Fastd-Key mismatch DNS <> Git: '+DnsPeerID+' -> '+PeerKeyID+' <> '+self.FastdKeyDict[PeerFileName]['PeerKey'][:12])
-                                isOK = False
-
-                        else:
-                            print('++ Unknown or old DNS Entry: '+DnsPeerID+' = '+IPv6)
-                            isOK = False
-
-                    elif DnsPeerID != '@':
-                        self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
-                        isOK = False
-
-            #---------- Check Git for missing DNS entries ----------
-            print('Checking Keys from Git against DNS Entries ...')
-
-            for PeerFileName in self.FastdKeyDict:
-                if ((PeerTemplate.match(PeerFileName)) and
-                    (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
-                    (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
-                    (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
-
-                    print('++ DNS Entry missing:',PeerFileName,'->',self.FastdKeyDict[PeerFileName]['PeerMAC'],'=',self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
-                    isOK = False
+        if DnsZone is not None:
+            isOK = self.__CheckDNSvsGit(DnsZone)
+        else:
+            isOK = False
 
         print('... done.\n')
         return isOK
