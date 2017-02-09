@@ -658,7 +658,7 @@ class ffNodeInfo:
 
         print('Loading raw.json ...')
         RawJsonDict = None
-        Retries = 3
+        Retries = 5
 
         while RawJsonDict is None and Retries > 0:
             Retries -= 1
@@ -670,14 +670,13 @@ class ffNodeInfo:
                 opener = urllib.request.build_opener(authhandler)
                 urllib.request.install_opener(opener)
 
-                RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'],timeout=10)
+                RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'],timeout=15)
                 RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
                 RawJsonHTTP.close()
             except:
                 print('** need retry ...')
                 RawJsonDict = None
-                time.sleep(1)
-                pass
+                time.sleep(2)
 
         if RawJsonDict is None:
             self.__alert('++ Error on loading raw.json !!!')

@@ -38,6 +38,7 @@
 ###########################################################################################
 
 import os
+import subprocess 
 import urllib.request
 import time
 import datetime
@@ -62,14 +63,14 @@ from dns.rdatatype import *
 FreifunkDomain      = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 
-GwIgnoreList        = ['gw05n08','gw05n09']
+GwIgnoreList        = ['gw05n08','gw05n09','gw08n04']
 
 
 DnsSegTemplate      = re.compile('^2001:2:0:711::[0-9][0-9]?$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
 GwNameTemplate      = re.compile('^gw[01][0-9]{1,2}')
-GwsPerSegTemplate   = re.compile('^gw[0-9]{2}s[0-9]{2}$')
+GwGroupTemplate     = re.compile('^gw[0-9]{2}s[0-9]{2}$')
 GwInstanceTemplate  = re.compile('^gw[0-9]{2}n[0-9]{2}$')
 
 GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
@@ -106,13 +107,14 @@ class ffGatewayInfo:
         self.__GitPath = GitPath
         self.__DnsAccDict = DnsAccDict  # DNS Account
 
-        self.__GatewayIpDict = {}       # GatewayIpDict[GwName] -> List of IP-Addresses
-        self.__Key2FileNameDict = {}    # Key2FileNameDict[PeerKey] -> SegDir, KeyFileName
-        self.__SegmentList = []
+        self.__GatewayDict = {}         # GatewayDict[GwInstanceName] -> IPs, Segments
+        self.__SegmentDict = {}         # SegmentDict[SegmentNumber]  -> DnsGwNames, BatGwNames, GwIPs
+        self.__Key2FileNameDict = {}    # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
 
         # Initializations
         self.__GetGatewaysFromDNS()
         self.__LoadKeysFromGit()
+        self.__GetGatewaysFromBatman()
         self.__LoadFastdStatusInfos()
         return
 
@@ -129,6 +131,263 @@ class ffGatewayInfo:
         self.Alerts.append(Message)
         print(Message)
         return
+
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetIpFromCNAME"
+    #
+    #    Returns True if everything is OK
+    #
+    #--------------------------------------------------------------------------
+    def __GetIpFromCNAME(self,DnsName,NameTemplate):
+
+        DnsResolver = None
+        IpList = []
+
+        try:
+            DnsResolver = dns.resolver.Resolver()
+        except:
+            DnsResolver = None
+
+        if DnsResolver is not None:
+            try:
+                GatewayIP = DnsResolver.query('%s.'%(Cname),'a')[0].to_text()
+                IpList.append(GatewayIP)
+            except:
+                GatewayIP = None
+
+            try:
+                GatewayIP = DnsResolver.query('%s.'%(Cname),'aaaa')[0].to_text()
+                IpList.append(GatewayIP)
+            except:
+                GatewayIP = None
+
+            try:
+                GwName = DnsResolver.query('%s.'%(Cname),'cname')[0].to_text()
+            except:
+                GwName = None
+
+            if GwName is not None:
+                IpList.append(self.__GetIpFromCNAME(GwName,NameTemplate))
+
+        return IpList
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetGwInstanceDNS"
+    #
+    #
+    #--------------------------------------------------------------------------
+    def __GetGwInstances(self,GwName,DnsResult):
+
+        for rds in DnsResult:
+            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
+                IpAddress = rds[0].to_text()
+
+                if IpAddress not in self.__GatewayDict[GwName]['IPs']:
+                    self.__GatewayDict[GwName]['IPs'].append(IpAddress)
+
+            elif rds.rdtype == dns.rdatatype.CNAME:
+                Cname = rds[0].to_text()
+
+                IpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
+
+                for IpAddress in IpList:
+                    if IpAddress not in self.__GatewayDict[GwName]['IPs']:
+                        self.__GatewayIpDict[GwName]['IPs'].append(IpAddress)
+
+        return
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetSegmentGwIPs"
+    #
+    #    Returns List of IPs
+    #
+    #--------------------------------------------------------------------------
+    def __GetSegmentGwIPs(self,DnsResult):
+
+        IpList = []
+
+        for rds in DnsResult:
+            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
+                IpAddress = rds[0].to_text()
+
+                if IpAddress not in IpList:
+                    IpList.append(IpAddress)
+
+            elif rds.rdtype == dns.rdatatype.CNAME:
+                Cname = rds[0].to_text()
+
+                CnameIpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
+
+                for IpAddress in CnameIpList:
+                    if IpAddress not in IpList:
+                        IpList.append(IpAddress)
+
+        return IpList
+
+
+
+    #==========================================================================
+    # private function "__GetGatewaysFromDNS"
+    #
+    #   Result = __GatewayDict[GwInstanceName] -> IPs and Segments for the GW
+    #
+    #--------------------------------------------------------------------------
+    def __GetGatewaysFromDNS(self):
+
+        Ip2GwDict   = {}
+        DnsZone     = None
+
+        print('\nChecking DNS for Gateways ...')
+
+        try:
+            DnsResolver = dns.resolver.Resolver()
+            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
+            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkDomain))
+        except:
+            self.__alert('!! ERROR on fetching Freifunk DNS Zone!')
+            DnsZone = None
+            self.AnalyseOnly = True
+
+
+        #----- get Gateways from Zone File -----
+        if DnsZone is not None:
+            for name, node in DnsZone.nodes.items():
+                GwName = name.to_text()
+
+                if GwInstanceTemplate.match(GwName):
+                    if GwName not in self.__GatewayDict:
+                        self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+
+                    self.__GetGwInstances(GwName,node.rdatasets)
+
+                elif GwGroupTemplate.match(GwName):
+                    Segment = int(GwName[5:])
+
+                    if Segment not in self.__SegmentDict:
+                        self.__SegmentDict[Segment] = { 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
+
+                    self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(node.rdatasets)
+
+
+        #----- setting up GwIP to GwInstanceName -----
+        for GwName in self.__GatewayDict:
+            for GwIP in self.__GatewayDict[GwName]['IPs']:
+                if GwIP not in Ip2GwDict:
+                    Ip2GwDict[GwIP] = GwName
+                else:
+                    print('!! Duplicate Gateway IP:',GwIP,'=',Ip2GwDict[GwIP],'<>',GwName)
+
+        #----- setting up Segment to GwInstanceNames -----
+        for Segment in sorted(self.__SegmentDict.keys()):
+            for GwIP in self.__SegmentDict[Segment]['GwIPs']:
+                if GwIP in Ip2GwDict:
+                    GwName = Ip2GwDict[GwIP]
+
+                    if GwName not in self.__SegmentDict[Segment]['GwDnsNames']:
+                        self.__SegmentDict[Segment]['GwDnsNames'].append(GwName)
+
+                        if Segment not in self.__GatewayDict[GwName]['Segments']:
+                            self.__GatewayDict[GwName]['Segments'].append(Segment)
+                        else:
+                            self.__alert('!! DNS entries are inconsistent: '+GwName+' -> '+str(Segment))
+                else:
+                    self.__alert('!! Unknown Gateway IP: '+GwIP)
+
+            print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
+
+            if Segment > 0 and Segment < 9 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
+                self.__alert('!! To few Gateways in Segment '+str(Segment).zfill(2)+' !')
+
+        print()
+        for GwName in sorted(self.__GatewayDict):
+            print(GwName,'->',self.__GatewayDict[GwName]['Segments'])
+
+        print('\n... done.\n')
+        return
+
+
+
+
+    #--------------------------------------------------------------------------
+    # private function "__GetSegmentGwListFromBatman"
+    #
+    #    Returns List of Gateways in given Segment
+    #
+    #--------------------------------------------------------------------------
+    def __GetSegmentGwListFromBatman(self,Segment):
+
+        BatmanIF  = 'bat%02d' % (Segment)
+        BatResult = None
+        GwList    = []
+
+        try:
+            BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
+            BatResult = BatctlGwl.stdout.decode('utf-8')
+        except:
+            print('!! ERROR on batctl -m',BatmanIF)
+            BatResult = None
+
+        if BatResult is not None:
+            for BatLine in BatResult.split('\n'):
+                GwMAC = BatLine.strip()[:17]
+
+                if GwNewMacTemplate.match(GwMAC):
+                    if int(GwMAC[9:11]) == Segment:
+                        GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
+
+                        if GwName not in GwList:
+                            GwList.append(GwName)
+                        else:
+                            self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                    else:
+                        self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                elif MacAdrTemplate.match(GwMAC):
+                    self.__alert('!! Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+
+        return GwList
+
+
+
+
+    #==========================================================================
+    # private function "__GetGatewaysFromBatman"
+    #
+    #   Result = __GatewayDict[GwInstanceName] -> IPs and Segments for the GW
+    #
+    #--------------------------------------------------------------------------
+    def __GetGatewaysFromBatman(self):
+
+        print('\nChecking Batman for Gateways ...\n')
+
+        for Segment in sorted(self.__SegmentDict):
+            if Segment > 0:
+                GwList = self.__GetSegmentGwListFromBatman(Segment)
+
+                for GwName in GwList:
+                    if GwName not in self.__GatewayDict:
+                        self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+                        print('++ Inofficial Gateway found:',GwName)
+
+                    if Segment not in self.__GatewayDict[GwName]['Segments']:
+                        self.__GatewayDict[GwName]['Segments'].append(Segment)
+
+                    if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
+                        self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
+
+                for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
+                    if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
+                        print('!! Gateway in DNS but not in Batman:',Segment,GwName)
+
+        print('\n... done.\n')
+        return
+
 
 
 
@@ -236,7 +495,8 @@ class ffGatewayInfo:
 
 
 
-    #-----------------------------------------------------------------------
+
+    #=======================================================================
     # private function "__LoadKeysFromGit"
     #
     #   Load and analyse fastd-Keys from Git
@@ -253,7 +513,12 @@ class ffGatewayInfo:
             SegPath = os.path.join(self.__GitPath,SegDir)
 
             if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
-                self.__SegmentList.append(int(SegDir[3:]))
+                Segment = int(SegDir[3:])
+
+                if Segment not in self.__SegmentDict:
+                    self.__SegmentDict[Segment] = { 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
+#                    print('>>> New Segment =',Segment)
+
                 VpnPeerPath = os.path.join(SegPath,'peers')
 
                 for KeyFileName in os.listdir(VpnPeerPath):
@@ -268,6 +533,7 @@ class ffGatewayInfo:
 
         print('... done.\n')
         return
+
 
 
 
@@ -359,7 +625,7 @@ class ffGatewayInfo:
 
 
 
-    #--------------------------------------------------------------------------
+    #==========================================================================
     # private function "__LoadFastdStatusInfos"
     #
     #   Load and analyse fastd-status.json
@@ -373,17 +639,16 @@ class ffGatewayInfo:
         print('-------------------------------------------------------')
         print('Loading fastd Status Infos ...')
 
-        for ffGW in sorted(self.__GatewayIpDict):
-            print('...',ffGW,'...')
+        for GwName in sorted(self.__GatewayDict):
+            print('...',GwName,'...')
 
-            if ffGW not in GwIgnoreList:
-                for ffSeg in self.__SegmentList:
-
-                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (ffGW,FreifunkDomain,ffSeg)
+            if GwName not in GwIgnoreList:
+                for ffSeg in self.__GatewayDict[GwName]['Segments']:
+                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
                     self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
-                    if ffGW[:4] == 5:
-                        FastdJsonURL = 'http://%s.%s/data/data/vpn%02dip6.json' % (ffGW,FreifunkDomain,ffSeg)
+                    if GwName[:4] == 5:
+                        FastdJsonURL = 'http://%s.%s/data/data/vpn%02dip6.json' % (GwName,FreifunkDomain,ffSeg)
                         self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
         self.__LoadFastdStatusFile('http://gw09.freifunk-stuttgart.de/fastd/ffs.status.json',0)
@@ -392,172 +657,6 @@ class ffGatewayInfo:
         print('-------------------------------------------------------')
         return
 
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetIpFromCNAME"
-    #
-    #    Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __GetIpFromCNAME(self,DnsName,NameTemplate):
-
-        DnsResolver = None
-        IpList = []
-
-        try:
-            DnsResolver = dns.resolver.Resolver()
-        except:
-            DnsResolver = None
-
-        if DnsResolver is not None:
-            try:
-                GatewayIP = DnsResolver.query('%s.'%(Cname),'a')[0].to_text()
-                IpList.append(GatewayIP)
-            except:
-                GatewayIP = None
-
-            try:
-                GatewayIP = DnsResolver.query('%s.'%(Cname),'aaaa')[0].to_text()
-                IpList.append(GatewayIP)
-            except:
-                GatewayIP = None
-
-            try:
-                GwName = DnsResolver.query('%s.'%(Cname),'cname')[0].to_text()
-            except:
-                GwName = None
-
-            if GwName is not None:
-                IpList.append(self.__GetIpFromCNAME(GwName,NameTemplate))
-
-        return IpList
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetGwInstanceDNS"
-    #
-    #    Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __GetGwInstances(self,GwName,DnsResult):
-
-        if GwName not in self.__GatewayIpDict:
-            self.__GatewayIpDict[GwName] = []
-
-        for rds in DnsResult:
-            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
-                IpAddress = rds[0].to_text()
-
-                if IpAddress not in self.__GatewayIpDict[GwName]:
-                    self.__GatewayIpDict[GwName].append(IpAddress)
-
-            elif rds.rdtype == dns.rdatatype.CNAME:
-                Cname = rds[0].to_text()
-
-                IpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
-
-                for IpAddress in IpList:
-                    if IpAddress not in self.__GatewayIpDict[GwName]:
-                        self.__GatewayIpDict[GwName].append(IpAddress)
-
-        return
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetSegmentGWs"
-    #
-    #    Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __GetSegmentGWs(self,DnsResult):
-
-        IpList = []
-
-        for rds in DnsResult:
-            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
-                IpAddress = rds[0].to_text()
-
-                if IpAddress not in IpList:
-                    IpList.append(IpAddress)
-
-            elif rds.rdtype == dns.rdatatype.CNAME:
-                Cname = rds[0].to_text()
-
-                CnameIpList = self.__GetIpFromCNAME(Cname,GwInstanceTemplate)
-
-                for IpAddress in CnameIpList:
-                    if IpAddress not in IpList:
-                        IpList.append(IpAddress)
-
-        return IpList
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetGatewaysFromDNS"
-    #
-    #    Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __GetGatewaysFromDNS(self):
-
-        Seg2GwDict  = {}
-        Ip2GwDict   = {}
-        DnsZone     = None
-
-        print('\nChecking DNS for Gateways ...')
-
-        try:
-            DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkDomain))
-        except:
-            self.__alert('!! ERROR on fetching Freifunk DNS Zone!')
-            DnsZone = None
-            self.AnalyseOnly = True
-
-
-        if DnsZone is not None:
-            for name, node in DnsZone.nodes.items():
-                GwName = name.to_text()
-
-                if GwInstanceTemplate.match(GwName):
-                    self.__GetGwInstances(GwName,node.rdatasets)
-
-                elif GwsPerSegTemplate.match(GwName):
-                    Segment = 'vpn'+GwName[5:]
-
-                    if Segment not in Seg2GwDict:
-                        Seg2GwDict[Segment] = { 'Names':[],'IPs':[] }
-
-                    for GwIP in self.__GetSegmentGWs(node.rdatasets):
-                        Seg2GwDict[Segment]['IPs'].append(GwIP)
-
-
-        #----- setting up GwIP to GwName -----
-        for GwName in self.__GatewayIpDict:
-            for SegIP in self.__GatewayIpDict[GwName]:
-                if SegIP not in Ip2GwDict:
-                    Ip2GwDict[SegIP] = GwName
-                else:
-                    print('!! Duplicate Gateway IP:',SegIP,'=',Ip2GwDict[SegIP],'<>',GwName)
-
-        #----- setting up Segment to GwName -----
-        for Segment in sorted(Seg2GwDict):
-            for SegIP in Seg2GwDict[Segment]['IPs']:
-                if SegIP in Ip2GwDict.keys():
-                    if Ip2GwDict[SegIP] not in Seg2GwDict[Segment]['Names']:
-                        Seg2GwDict[Segment]['Names'].append(Ip2GwDict[SegIP])
-                else:
-                    print('!! Unknown Gateway IP:',SegIP)
-
-            print(Segment,'->',sorted(Seg2GwDict[Segment]['Names']))
-
-        print('... done.\n')
-        return
 
 
 
@@ -632,13 +731,14 @@ class ffGatewayInfo:
 
 
 
+
     #=========================================================================
-    # Method "CheckDNS"
+    # Method "CheckNodesInDNS"
     #
     #   Returns True if everything is OK
     #
     #=========================================================================
-    def CheckDNS(self):
+    def CheckNodesInDNS(self):
 
         DnsZone     = None
         isOK        = True
@@ -671,7 +771,7 @@ class ffGatewayInfo:
     #
     #=========================================================================
     def Segments(self):
-        return self.__SegmentList
+        return self.__SegmentDict.keys()
 
 
 

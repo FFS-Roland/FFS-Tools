@@ -175,11 +175,9 @@ class ffMeshNet:
                 oldCloudID = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud']
     #            print('++ Merging Clouds:',ffNeighbourMAC,'=',ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),oldCloudID,'->',CloudID)
 
-                self.__MeshCloudDict[CloudID]['NumNodes']   += self.__MeshCloudDict[oldCloudID]['NumNodes']
-                self.__MeshCloudDict[CloudID]['NumClients'] += self.__MeshCloudDict[oldCloudID]['NumClients']
-
-                for ffNodeMAC in self.__MeshCloudDict[oldCloudID]['CloudMembers']:
-                    self.__MeshCloudDict[CloudID]['CloudMembers'].append(ffNodeMAC)
+                self.__MeshCloudDict[CloudID]['NumNodes']     += self.__MeshCloudDict[oldCloudID]['NumNodes']
+                self.__MeshCloudDict[CloudID]['NumClients']   += self.__MeshCloudDict[oldCloudID]['NumClients']
+                self.__MeshCloudDict[CloudID]['CloudMembers'] += self.__MeshCloudDict[oldCloudID]['CloudMembers']
 
                 for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == oldCloudID:

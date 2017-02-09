@@ -156,7 +156,7 @@ if AccountsDict is None:
 print('Setting up Gateway Data ...')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
-isOK = ffsGWs.CheckDNS()	# Check DNS entries of Nodes against keys from Git
+isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
 
 if not args.JSONPATH is None:
     print('Writing Fastd Key Database ...')
@@ -204,7 +204,7 @@ for Alert in ffsNet.Alerts:
 
 if MailBody != '':
     print('\nSending Email to inform Admins on Errors ...')
-#    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
+    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
 else:
     TimeInfo = datetime.datetime.now()
     if TimeInfo.hour == 12 and TimeInfo.minute < 5:
