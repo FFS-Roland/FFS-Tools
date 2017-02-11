@@ -38,7 +38,7 @@
 ###########################################################################################
 
 import os
-import subprocess 
+import subprocess
 import urllib.request
 import time
 import datetime
@@ -63,18 +63,19 @@ from dns.rdatatype import *
 FreifunkDomain      = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 
-GwIgnoreList        = ['gw05n08','gw05n09','gw08n04']
+GwIgnoreList        = ['gw05n08','gw05n09','gw07', 'gw08n04']
 
 
 DnsSegTemplate      = re.compile('^2001:2:0:711::[0-9][0-9]?$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
 GwNameTemplate      = re.compile('^gw[01][0-9]{1,2}')
-GwGroupTemplate     = re.compile('^gw[0-9]{2}s[0-9]{2}$')
-GwInstanceTemplate  = re.compile('^gw[0-9]{2}n[0-9]{2}$')
+GwGroupTemplate     = re.compile('^gw[01][0-9](s[0-9]{2})?$')
+GwInstanceTemplate  = re.compile('^gw[01][0-9](n[0-9]{2})?$')
 
 GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate    = re.compile('^02:00:(3[5-9])(:[0-9a-f]{2}){3}')
+GwNewMacTemplate    = re.compile('^02:00:3[5-9](:[0-9a-f]{2}){3}')
+GwOldMacTemplate    = re.compile('^02:00:0a:3[5-9]:00:[0-9a-f]{2}')
 
 MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
@@ -109,6 +110,7 @@ class ffGatewayInfo:
 
         self.__GatewayDict = {}         # GatewayDict[GwInstanceName] -> IPs, Segments
         self.__SegmentDict = {}         # SegmentDict[SegmentNumber]  -> DnsGwNames, BatGwNames, GwIPs
+        self.__GwAliasDict = {}         # GwAliasDict[LegacyName]     -> current newy Gateway
         self.__Key2FileNameDict = {}    # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
 
         # Initializations
@@ -267,8 +269,11 @@ class ffGatewayInfo:
 
                     self.__GetGwInstances(GwName,node.rdatasets)
 
-                elif GwGroupTemplate.match(GwName):
-                    Segment = int(GwName[5:])
+                if GwGroupTemplate.match(GwName):
+                    if len(GwName) == 7:
+                        Segment = int(GwName[5:])
+                    else:
+                        Segment = 0
 
                     if Segment not in self.__SegmentDict:
                         self.__SegmentDict[Segment] = { 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
@@ -282,9 +287,23 @@ class ffGatewayInfo:
                 if GwIP not in Ip2GwDict:
                     Ip2GwDict[GwIP] = GwName
                 else:
-                    print('!! Duplicate Gateway IP:',GwIP,'=',Ip2GwDict[GwIP],'<>',GwName)
+                    if Ip2GwDict[GwIP][:4] == GwName[:4] and len(GwName) != len(Ip2GwDict[GwIP]):
+                        print('++ Gateway Alias:',GwIP,'=',GwName,'=',Ip2GwDict[GwIP])
+
+                        if len(GwName) > len(Ip2GwDict[GwIP]):    # longer name is new name
+                            self.__GwAliasDict[Ip2GwDict[GwIP]] = GwName
+                            Ip2GwDict[GwIP] = GwName
+                        else:
+                            self.__GwAliasDict[GwName] = Ip2GwDict[GwIP]
+                    else:
+                        print('!! Duplicate Gateway IP:',GwIP,'=',Ip2GwDict[GwIP],'<>',GwName)
+
+        for GwName in self.__GwAliasDict:
+            del self.__GatewayDict[GwName]
+
 
         #----- setting up Segment to GwInstanceNames -----
+        print()
         for Segment in sorted(self.__SegmentDict.keys()):
             for GwIP in self.__SegmentDict[Segment]['GwIPs']:
                 if GwIP in Ip2GwDict:
@@ -336,20 +355,34 @@ class ffGatewayInfo:
 
         if BatResult is not None:
             for BatLine in BatResult.split('\n'):
+                GwName = None
                 GwMAC = BatLine.strip()[:17]
 
-                if GwNewMacTemplate.match(GwMAC):
+                if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
                     if int(GwMAC[9:11]) == Segment:
                         GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
-
-                        if GwName not in GwList:
-                            GwList.append(GwName)
-                        else:
-                            self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
                     else:
                         self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+
+                elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
+                    if Segment == 0:
+                        GwName = 'gw'+GwMAC[15:17]
+                        if GwName in self.__GwAliasDict:
+                            GwName = self.__GwAliasDict[GwName]
+
+                        print('++ Old Gateway MAC:',BatmanIF,'->',GwMAC,'=',GwName)
+                    else:
+                        self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+
                 elif MacAdrTemplate.match(GwMAC):
                     self.__alert('!! Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+
+                if GwName is not None:
+                    if GwName not in GwList:
+                        GwList.append(GwName)
+                    else:
+#                        self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                        print('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
         return GwList
 
@@ -367,23 +400,30 @@ class ffGatewayInfo:
         print('\nChecking Batman for Gateways ...\n')
 
         for Segment in sorted(self.__SegmentDict):
-            if Segment > 0:
-                GwList = self.__GetSegmentGwListFromBatman(Segment)
+            GwList = self.__GetSegmentGwListFromBatman(Segment)
 
-                for GwName in GwList:
-                    if GwName not in self.__GatewayDict:
-                        self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
-                        print('++ Inofficial Gateway found:',GwName)
+            for GwName in GwList:
+                if GwName not in self.__GatewayDict:
+                    self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+                    print('++ Inofficial Gateway found:',GwName)
 
-                    if Segment not in self.__GatewayDict[GwName]['Segments']:
-                        self.__GatewayDict[GwName]['Segments'].append(Segment)
+                if Segment not in self.__GatewayDict[GwName]['Segments']:
+                    self.__GatewayDict[GwName]['Segments'].append(Segment)
 
-                    if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
-                        self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
+                if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
+                    self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
 
-                for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
-                    if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
-                        print('!! Gateway in DNS but not in Batman:',Segment,GwName)
+            for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
+                if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
+                    print('!! Gateway in DNS but not in Batman:',Segment,GwName)
+
+        print()
+        for Segment in sorted(self.__SegmentDict):
+            print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwBatNames'])))
+
+        print()
+        for GwName in sorted(self.__GatewayDict):
+            print(GwName,'->',self.__GatewayDict[GwName]['Segments'])
 
         print('\n... done.\n')
         return
@@ -615,7 +655,6 @@ class ffGatewayInfo:
                             return
 
                     self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
-#                    print()
                 else:
                     print('!! Bad fastd status file!',URL)
             else:
@@ -644,14 +683,16 @@ class ffGatewayInfo:
 
             if GwName not in GwIgnoreList:
                 for ffSeg in self.__GatewayDict[GwName]['Segments']:
-                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
+                    if GwName == 'gw09' and ffSeg == 0:
+                        FastdJsonURL = 'http://gw09.freifunk-stuttgart.de/fastd/ffs.status.json'
+                    else:
+                        FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
+
                     self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
 
-                    if GwName[:4] == 5:
+                    if GwName[:4] == 'gw05':
                         FastdJsonURL = 'http://%s.%s/data/data/vpn%02dip6.json' % (GwName,FreifunkDomain,ffSeg)
                         self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-
-        self.__LoadFastdStatusFile('http://gw09.freifunk-stuttgart.de/fastd/ffs.status.json',0)
 
         print('... done.')
         print('-------------------------------------------------------')
@@ -724,7 +765,7 @@ class ffGatewayInfo:
                 (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
                 (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
 
-                print('++ DNS Entry missing:',PeerFileName,'->',self.FastdKeyDict[PeerFileName]['PeerMAC'],'=',self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
+                self.__alert('!! DNS Entry missing: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
                 isOK = False
 
         return isOK

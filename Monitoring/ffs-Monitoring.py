@@ -189,7 +189,7 @@ ffsNet.WriteMoveList(os.path.join(args.LOGPATH,NodeMoveFile))
 
 
 
-print('\nPreparing Info to be sent by Email ...')
+print('\nChecking for Alerts ...')
 
 MailBody = ''
 
