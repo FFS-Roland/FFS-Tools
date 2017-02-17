@@ -42,20 +42,24 @@
 #                                                                                         #
 ###########################################################################################
 
+LOGFILE=/var/freifunk/logs/vpnWW_verify.log
 
 #exit 1    # for blocking during test phase only - will be removed later!
 
-LOGFILE=/var/freifunk/logs/vpn00_verify.log
+
+#----- Path Definitions -----
+BLACKLIST=/var/freifunk/blacklist
+
 
 date >> $LOGFILE
 echo $PEER_KEY >> $LOGFILE
 
-if [ -f /etc/fastd/$INTERFACE/blacklist/$PEER_KEY ]; then
-  LOCKTIME=$(cat /etc/fastd/$INTERFACE/blacklist/$PEER_KEY)
+if [ -f $BLACKLIST/$PEER_KEY ]; then
+  LOCKTIME=$(cat $BLACKLIST/$PEER_KEY)
   NOW=$(date +%s)
   DELTA=$((NOW - LOCKTIME))
   if [ $DELTA -gt 600 ]; then
-    rm /etc/fastd/$INTERFACE/blacklist/$PEER_KEY
+    rm $BLACKLIST/$PEER_KEY
     echo Blocking removed. >> $LOGFILE
   else
     echo Node is blacklisted. >> $LOGFILE

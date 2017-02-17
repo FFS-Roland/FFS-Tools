@@ -9,8 +9,8 @@
 #  Parameter:                                                                             #
 #                                                                                         #
 #      --pid       = fastd-PID                                                            #
-#      --fastd     = fastd-Interface (e.g. vpn00)                                         #
-#      --batman    = batman-Interface (e.g. bat00)                                        #
+#      --fastd     = fastd-Interface (e.g. vpnWW)                                         #
+#      --batman    = batman-Interface (e.g. batWW)                                        #
 #      --peerkey   = fastd-Key from Peer                                                  #
 #      --gitrepo   = Git Repository with KeyFiles                                         #
 #      --json      = Path to json files with data of nodes                                #
@@ -52,13 +52,20 @@ import socket
 import dns.resolver
 import urllib.request
 import json
+import re
+import hashlib
 import fcntl
 import argparse
 
 
 #----- Json-File with needed Accounts -----
-AccountFileName  = '.Accounts.json'
+AccountFileName = '.Accounts.json'
 
+
+#----- Global Constants -----
+NEXTNODE_PREFIX  = 'fd21:711::'
+SEGASSIGN_DOMAIN = '.segassign.freifunk-stuttgart.de.'
+SEGASSIGN_PREFIX = '2001:2:0:711::'
 
 
 
@@ -114,25 +121,27 @@ def getFastdStatusSocket(pid):
 def getMeshMAC(FastdStatusSocket):
 
     MeshMAC = None
-    Retries = 3
+    Retries = 5
 
     while MeshMAC is None and Retries > 0:
         Retries -= 1
         StatusData = ''
-        time.sleep(1)
+        time.sleep(2)
 
         try:
             FastdLiveStatus = socket.socket( socket.AF_UNIX, socket.SOCK_STREAM )
             FastdLiveStatus.connect(FastdStatusSocket)
+#            print('... Fastd-Socket connected, Retries =',Retries,'...')
 
             while True:
-                tmpData = FastdLiveStatus.recv(4096).decode('utf-8')
+                tmpData = FastdLiveStatus.recv(1024*1024).decode('utf-8')
                 if tmpData == '':
                     break;
 
                 StatusData += tmpData
 
             FastdLiveStatus.close()
+#            print('... Fastd-Data ->',StatusData)
 
             if StatusData != '':
                 FastdStatusJson = json.loads(StatusData)
@@ -156,13 +165,13 @@ def getMeshMAC(FastdStatusSocket):
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def InfoFromGluonNodeinfoPage(NodeLLA):
+def InfoFromGluonNodeinfoPage(HttpIPv6):
 
     NodeInfoDict = None
-    print('Connecting to http://['+NodeLLA+']/cgi-bin/nodeinfo ...')
+    print('Connecting to http://['+HttpIPv6+']/cgi-bin/nodeinfo ...')
 
     try:
-        NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/nodeinfo',timeout=10)
+        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/nodeinfo',timeout=10)
         NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
         NodeHTTP.close()
     except:
@@ -186,13 +195,13 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 
                 for NodeIPv6 in NodeJson['network']['addresses']:
                     print('>>> IPv6 =',NodeIPv6)
-                    if NodeIPv6[0:12] == 'fd21:b4dc:4b':
+                    if NodeIPv6[0:12] == 'fd21:b4dc:4b' and NodeInfoDict['Segment'] is None:
                         if NodeIPv6[12:14] == '1e':
                              NodeInfoDict['Segment'] = 'vpn00'
                         else:
                             NodeInfoDict['Segment'] = 'vpn'+NodeIPv6[12:14]
-                        break
-                print('>>> Segment =',NodeInfoDict['Segment'])
+#                        break
+                print('>>> NodeInfo Segment =',NodeInfoDict['Segment'])
 
     return NodeInfoDict
 
@@ -205,14 +214,14 @@ def InfoFromGluonNodeinfoPage(NodeLLA):
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def InfoFromGluonStatusPage(NodeLLA):
+def InfoFromGluonStatusPage(HttpIPv6):
 
     NodeInfoDict = None
     NodeHTML = None
-    print('Connecting to http://['+NodeLLA+']/cgi-bin/status ...')
+    print('Connecting to http://['+HttpIPv6+']/cgi-bin/status ...')
 
     try:
-        NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/cgi-bin/status',timeout=10)
+        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/status',timeout=10)
         NodeHTML = NodeHTTP.read().decode('utf-8')
         NodeHTTP.close()
     except:
@@ -254,7 +263,7 @@ def InfoFromGluonStatusPage(NodeLLA):
             if NodeHTML[pStart:pStart+2] == '1e':
                 NodeInfoDict['Segment'] = 'vpn00'
 
-        print('>>> Segment =',NodeHTML[pStart:pStop])
+        print('>>> StatusInfo Segment =',NodeHTML[pStart:pStop])
 
     return NodeInfoDict
 
@@ -264,7 +273,7 @@ def InfoFromGluonStatusPage(NodeLLA):
 # function "getNodeInfos"
 #
 #-----------------------------------------------------------------------
-def getNodeInfos(NodeLLA):
+def getNodeInfos(HttpIPv6):
 
     NodeInfoDict = None
     NodeHTML = None
@@ -272,10 +281,10 @@ def getNodeInfos(NodeLLA):
 
     while NodeHTML is None and Retries > 0:
         time.sleep(1)
-        print('Connecting to http://['+NodeLLA+'] ...')
+        print('Connecting to http://['+HttpIPv6+'] ...')
         Retries -= 1
         try:
-            NodeHTTP = urllib.request.urlopen('http://['+NodeLLA+']/',timeout=15)
+            NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/',timeout=15)
             NodeHTML = NodeHTTP.read().decode('utf-8')
             NodeHTTP.close()
         except:
@@ -285,10 +294,10 @@ def getNodeInfos(NodeLLA):
     if NodeHTML is not None:
         if NodeHTML.find('/cgi-bin/nodeinfo') > 0:
             print('... is new Gluon ...')
-            NodeInfoDict = InfoFromGluonNodeinfoPage(NodeLLA)
+            NodeInfoDict = InfoFromGluonNodeinfoPage(HttpIPv6)
         elif  NodeHTML.find('/cgi-bin/status') > 0:
             print('... is old Gluon ...')
-            NodeInfoDict = InfoFromGluonStatusPage(NodeLLA)
+            NodeInfoDict = InfoFromGluonStatusPage(HttpIPv6)
         else:
             print('+++ unknown System!')
             NodeInfoDict =  None
@@ -315,14 +324,14 @@ def checkDNS(NodeID,DnsServer):
 
     DnsResolver.nameservers = [ DnsServerIP ]
 
-    Hostname = NodeID + '.segassign.freifunk-stuttgart.de.'
+    Hostname = NodeID + SEGASSIGN_DOMAIN
     print('DNS Query =',Hostname)
 
     try:
         aaaaRecs = DnsResolver.query(Hostname,'aaaa')
 
         for IPv6 in aaaaRecs:
-            if IPv6.to_text()[:14] == '2001:2:0:711::':
+            if IPv6.to_text()[:14] == SEGASSIGN_PREFIX:
                 SegFromDNS = 'vpn'+IPv6.to_text()[14:].zfill(2)
 
     except:
@@ -361,25 +370,229 @@ def LoadKeyData(Path):
 
 
 #-----------------------------------------------------------------------
+# function "ActivateBatman"
+#
+#-----------------------------------------------------------------------
+def ActivateBatman(BatmanIF,FastdIF):
+
+    print('... Activating Batman ...')
+    Retries = 10
+    NeighborMAC = None
+
+    try:
+        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
+        subprocess.run(['/sbin/ip','link','set','dev',BatmanIF,'up'])
+        print('... Batman Interface',BatmanIF,'is up ...')
+    except:
+        print('++ Cannot bring up',BatmanIF,'!')
+    else:
+        while(Retries > 0):
+            Retries -= 1
+            time.sleep(2)
+
+            try:
+                BatctlN = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'n'], stdout=subprocess.PIPE)
+                BatctlResult = BatctlN.stdout.decode('utf-8')
+
+                for NeighborInfo in BatctlResult.split('\n'):
+                    NeighborDetails = NeighborInfo.split()
+                    if NeighborDetails[0] == FastdIF:
+                        NeighborMAC = NeighborDetails[1]
+                        Retries = 0
+                        break
+            except:
+                NeighborMAC = None
+
+    return NeighborMAC
+
+
+
+#-----------------------------------------------------------------------
+# function "DeactivateBatman"
+#
+#-----------------------------------------------------------------------
+def DeactivateBatman(BatmanIF,FastdIF):
+
+    print('... Deactivating Batman ...')
+
+    try:
+        subprocess.run(['/sbin/ip','link','set','dev',BatmanIF,'down'])
+        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
+        print('... Batman Interface',BatmanIF,'is down ...')
+    except:
+        print('++ Cannot shut down',BatmanIF,'!')
+        pass
+
+    return
+
+
+
+#-----------------------------------------------------------------------
+# function "GenerateGluonMACsOld(MainMAC)"
+#
+#   Append self.MAC2NodeIDDict for Gluon <= 2016.1.x
+#
+# reference = Gluon Source:
+#
+#   /package/gluon-core/files/usr/lib/lua/gluon/util.lua
+#
+# function generate_mac(f, i)
+# -- (1, 0): WAN (for mesh-on-WAN)
+# -- (1, 1): LAN (for mesh-on-LAN)
+# -- (2, n): client interface for the n'th radio
+# -- (3, n): adhoc interface for n'th radio
+# -- (4, 0): mesh VPN
+# -- (5, n): mesh interface for n'th radio (802.11s)
+#
+#  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
+#  m2 = (tonumber(m2, 16)+f) % 0x100
+#  m3 = (tonumber(m3, 16)+i) % 0x100
+#-----------------------------------------------------------------------
+def GenerateGluonMACsOld(MainMAC):
+
+    MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
+
+    m1Main = int(MainMAC[0:2],16)
+    m2Main = int(MainMAC[3:5],16)
+    m3Main = int(MainMAC[6:8],16)
+
+    m1New = hex(m1Main | 0x02)[2:].zfill(2)
+
+    GluonMacList = []
+
+    for f in MacRanges:
+        for i in range(MacRanges[f]+1):
+            m2New = hex((m2Main + f) % 0x100)[2:].zfill(2)
+            m3New = hex((m3Main + i) % 0x100)[2:].zfill(2)
+
+            GluonMacList.append(m1New + ':' + m2New + ':' + m3New + ':' + MainMAC[9:])
+
+    return GluonMacList
+
+
+
+#-----------------------------------------------------------------------
+# function "GenerateGluonMACsNew(MainMAC)"
+#
+#   Append self.MAC2NodeIDDict for Gluon >= 2016.2.x
+#
+# reference = Gluon Source:
+#
+#   /package/gluon-core/luasrc/usr/lib/lua/gluon/util.lua
+#
+# function generate_mac(i)
+# -- 0 + 8: client0; WAN
+# -- 1 + 9: mesh0
+# -- 2 + a: ibss0
+# -- 3 + b: wan_radio0 (private WLAN); batman-adv primary address
+# -- 4 + c: client1; LAN
+# -- 5 + d: mesh1
+# -- 6 + e: ibss1
+# -- 7 + f: wan_radio1 (private WLAN); mesh VPN
+#
+#  local hashed = string.sub(hash.md5(sysconfig.primary_mac), 0, 12)
+#  local m1, m2, m3, m4, m5, m6 = string.match(hashed, '(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)(%x%x)')
+#
+#  m1 = tonumber(m1, 16)
+#  m6 = tonumber(m6, 16)
+#
+#  m1 = nixio.bit.bor(m1, 0x02)  -- set locally administered bit
+#  m1 = nixio.bit.band(m1, 0xFE) -- unset the multicast bit
+#
+#  m6 = nixio.bit.band(m6, 0xF8) -- zero the last three bits (space needed for counting)
+#  m6 = m6 + i                   -- add virtual interface id
+#
+# return string.format('%02x:%s:%s:%s:%s:%02x', m1, m2, m3, m4, m5, m6)
+#-----------------------------------------------------------------------
+def GenerateGluonMACsNew(MainMAC):
+
+    mHash = hashlib.md5(MainMAC.encode(encoding='UTF-8'))
+    vMAC = mHash.hexdigest()
+
+    m1Main = int(vMAC[0:2],16)
+    m6Main = int(vMAC[10:12],16)
+
+    m1New    = hex((m1Main | 0x02) & 0xfe)[2:].zfill(2)
+    m1to5New = m1New + ':' + vMAC[2:4] + ':' + vMAC[4:6] + ':' + vMAC[6:8] + ':' + vMAC[8:10] + ':'
+
+    GluonMacList = []
+
+    for i in range(8):
+        GluonMacList.append(m1to5New + hex((m6Main & 0xf8) + i)[2:].zfill(2))
+
+    return GluonMacList
+
+
+
+#-----------------------------------------------------------------------
+# function "GetBatmanNodeMAC"
+#
+#   Get Node's main MAC by Batman Global Translation Table
+#
+#-----------------------------------------------------------------------
+def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
+
+    print('Querying Batman Info from',BatmanIF,'/',BatmanVpnMAC)
+    GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
+    MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+    Retries           = 15
+    NodeMainMAC       = None
+
+    BatctlCmd = ('/usr/sbin/batctl -m %s tg' % (BatmanIF)).split()
+
+    while Retries > 0 and NodeMainMAC is None:
+        Retries -= 1
+        time.sleep(2)
+
+        try:
+            BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+            BatctlResult = BatctlTG.stdout.decode('utf-8')
+#            print('>>>',BatctlResult)
+
+            for BatctlLine in BatctlResult.split('\n'):
+                BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
+                #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
+
+                if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+                    if MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]) and  BatctlInfo[8] == '[....]':
+                        if BatctlInfo[5][:16] == BatmanVpnMAC[:16]:  # new MAC schema
+                            print('>>> is new schema:', BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
+                            BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
+#                            print('>>> New MacList:',BatmanMacList)
+                        elif BatctlInfo[5][:2] == BatmanVpnMAC[:2] and BatctlInfo[5][9:] == BatmanVpnMAC[9:]:  # old MAC schema
+                            print('>>> is old schema:',BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
+                            BatmanMacList = GenerateGluonMACsOld(BatctlInfo[1])
+#                            print('>>> Old MacList:',BatmanMacList)
+                        else:
+                            BatmanMacList = []
+
+                        if BatctlInfo[5] in BatmanMacList and BatmanVpnMAC in BatmanMacList:
+                            NodeMainMAC = BatctlInfo[1]
+                            print('>>> Batman TG =',BatctlLine)
+                            break
+
+        except:
+            print('++ ERROR accessing batman:',BatctlCmd)
+            NodeMainMAC = None
+
+    print('... Node Main MAC =',NodeMainMAC)
+    return NodeMainMAC
+
+
+
+#-----------------------------------------------------------------------
 # function "getBatmanSegment"
 #
 #-----------------------------------------------------------------------
 def getBatmanSegment(BatmanIF,FastdIF):
 
     print('... get Segment via Batman Gateways ...')
-    Retries = 20
+    Retries = 15
     BatSeg = None
 
-    try:
-        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','del',FastdIF])
-        subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
-        subprocess.run(['/sbin/ip','link','set',BatmanIF,'up'])
-    except:
-        pass
-
-    while(Retries > 0):
+    while Retries > 0 and BatSeg is None:
         Retries -= 1
-        time.sleep(1)
+        time.sleep(2)
 
         try:
             BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
@@ -388,16 +601,15 @@ def getBatmanSegment(BatmanIF,FastdIF):
             for Gateway in gwl.split('\n'):
                 if Gateway[3:10] == '02:00:3':
                     BatSeg = 'vpn'+Gateway[12:14]
-                    Retries = 0
                     break
                 elif Gateway[3:12] == '02:00:0a:':
                     BatSeg = 'vpn'+Gateway[15:17]
-                    Retries = 0
                     break
         except:
+            print('++ ERROR accessing',BatmanIF)
             BatSeg = None
 
-    print('... Segment =',BatSeg)
+    print('... Batman Segment =',BatSeg)
     return BatSeg
 
 
@@ -407,6 +619,8 @@ def getBatmanSegment(BatmanIF,FastdIF):
 #
 #-----------------------------------------------------------------------
 def __TestAddNode(NodeInfo,PeerKey,LogPath):
+
+    print('*** New Node:',NodeInfo['MAC'],'=',NodeInfo['Hostname'])
 
     if NodeInfo['Segment'] is None:
         NodeInfo['Segment'] = 'vpn99'
@@ -501,6 +715,7 @@ FastdPID = int(args.FASTDPID)
 
 print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
 
+#if True:
 if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
     setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
@@ -520,52 +735,73 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
         if MeshMAC is not None and KeyDataDict is not None:
             print('... MeshMAC and KeyDataDict loaded.')
-            NodeLLA = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
-            NodeInfo = getNodeInfos(NodeLLA)
 
-            if NodeInfo is not None:
-            #----- Required Data of Node is available -----
-                PeerMAC  = NodeInfo['MAC']
-                PeerFile = 'ffs-'+NodeInfo['NodeID']
+            BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)
 
-                if NodeInfo['Segment'] is None:
-                    NodeInfo['Segment'] = getBatmanSegment(args.BATIF,args.VPNIF)
+            if BatmanVpnMAC == MeshMAC:
+                print('... Fastd and Batman are consistent:',MeshMAC)
+                NodeIPv6 = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
+                NodeInfo = getNodeInfos(NodeIPv6)
+                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)
 
-                DnsSegment  = checkDNS(PeerFile+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
-                print('>>> DNS / Mesh =',DnsSegment,'/',NodeInfo['Segment'])
+                if NodeInfo is not None:  # Data from status page of Node
+                    if PeerMAC is not None and PeerMAC != NodeInfo['MAC']:
+                        print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
 
-                if DnsSegment is None:  # Node is not registered in DNS
+                    NodeID      = NodeInfo['NodeID']
+                    PeerMAC     = NodeInfo['MAC']
+                    PeerName    = NodeInfo['Hostname']
+                    PeerSegment = NodeInfo['Segment']
+                else:  # Fallback
+                    if PeerMAC is not None:
+                        NodeID      = PeerMAC.replace(':','')
+                        PeerName    = PeerFile
+                        PeerSegment = None
 
-                    if PeerKey[:12] in KeyDataDict['Key2Mac']:
-                        print('++ Key is already in use:',NodeInfo['NodeID'],'/',PeerMAC,'->',
-                              KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'=',KeyDataDict['Key2Mac'][PeerKey[:12]]['SegDir'],'/',KeyDataDict['Key2Mac'][PeerKey[:12]]['KeyFile'])
+                if PeerMAC is not None:
+#                    if PeerSegment is None:    #..........................................................................................
+                    PeerSegment = getBatmanSegment(args.BATIF,args.VPNIF)
 
-                    if PeerMAC in KeyDataDict['Mac2Key']:
-                        print('++ MAC is already in use:',NodeInfo['NodeID'],'/',PeerMAC,'->',
-                              KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
+                    PeerFile    = 'ffs-'+NodeID
+                    DnsSegment  = checkDNS(PeerFile+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
+                    print('>>> DNS / Mesh =',DnsSegment,'/',PeerSegment)
 
+                    if DnsSegment is None:  # Node is not registered in DNS
 
-#                   RegisterNode(NodeInfo,PeerKey,args.GITREPO)
-                    __TestAddNode(NodeInfo,PeerKey,args.JSONPATH)
+                        if PeerKey[:12] in KeyDataDict['Key2Mac']:
+                            print('++ Key is already in use:',NodeID,'/',PeerMAC,'->',
+                                  KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'=',KeyDataDict['Key2Mac'][PeerKey[:12]]['SegDir'],'/',KeyDataDict['Key2Mac'][PeerKey[:12]]['KeyFile'])
 
-                else:  # Node is already registered in DNS
-                    if PeerKey[:12] in KeyDataDict['Key2Mac']:
+                        if PeerMAC in KeyDataDict['Mac2Key']:
+                            print('++ MAC is already in use:',NodeID,'/',PeerMAC,'->',
+                                  KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
 
-                        if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
-                            print('!! MAC Mismatch between Git and Peer:',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
-                        else:  # DNS == Git
-                            if NodeInfo['Segment'] is not None and NodeInfo['Segment'] != DnsSegment:
-                                print('++ Node must be moved to other Segment:',PeerFile,'/',DnsSegment,'->',NodeInfo['Segment'])
-                            else:
-                                print('++ Node is already registered:',PeerFile,'/',DnsSegment)
+#                        RegisterNode(NodeInfo,PeerKey,args.GITREPO)
+                        __TestAddNode(NodeInfo,PeerKey,args.JSONPATH)
 
-                    else:  # Node is in DNS but not in Git
-                        print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
+                    else:  # Node is already registered in DNS
+                        if PeerKey[:12] in KeyDataDict['Key2Mac']:
 
-                #endif (Handling of Registration)
+                            if KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'] != PeerMAC:
+                                print('!! MAC Mismatch between Git and Peer:',KeyDataDict['Key2Mac'][PeerKey[:12]]['PeerMAC'],'<>',PeerMAC)
+                            else:  # MAC from DNS == MAC from Git
+                                if PeerSegment is not None and PeerSegment != DnsSegment:
+                                    print('++ Node must be moved to other Segment:',PeerFile,'/',DnsSegment,'->',PeerSegment)
+                                else:
+                                    print('++ Node is already registered:',PeerFile,'/',DnsSegment)
+
+                        else:  # Node is in DNS but not in Git
+                            print('++ DNS is faster than Git:',PeerKey,'=',PeerMAC)
+
+                    #endif (Handling of Registration) ----------
+
+                else: # PeerMAC cannot be determined
+                    print('++ Node status information not available!')
 
             else:
-                print('++ Node status information not available!')
+                print('++ Node MAC via Batman <> via FastD:',BatmanMAC,'<>',MeshMAC)
+
+            DeactivateBatman(args.BATIF,args.VPNIF)
 
         else:
             print('++ MeshMAC (or KeyDataDict) is not available!',MeshMAC)

@@ -39,11 +39,11 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/vpn00_established.log
+LOGFILE=/var/freifunk/logs/vpnWW_established.log
 
 
 #----- Path Definitions -----
-BLACKLIST=/etc/fastd/$INTERFACE/blacklist
+BLACKLIST=/var/freifunk/blacklist
 PEERGITREPO=/var/freifunk/peers-ffs
 JSONDATA=/var/freifunk/json
 
@@ -51,7 +51,7 @@ JSONDATA=/var/freifunk/json
 date >> $LOGFILE
 echo Starting new ffs-Onboarding Process ... >> $LOGFILE
 
-/usr/local/bin/ffs-Onboarding.py --pid $FASTD_PID --fastd $INTERFACE --batman bat00 --peerkey $PEER_KEY --gitrepo $PEERGITREPO --json $JSONDATA --blacklist $BLACKLIST >> $LOGFILE
+/usr/local/bin/ffs-Onboarding.py --pid $FASTD_PID --fastd $INTERFACE --batman batWW --peerkey $PEER_KEY --gitrepo $PEERGITREPO --json $JSONDATA --blacklist $BLACKLIST >> $LOGFILE
 
 if [ $? != 0 ]; then
   date >> $LOGFILE
