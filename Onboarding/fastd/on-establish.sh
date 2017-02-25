@@ -56,8 +56,8 @@ echo Starting new ffs-Onboarding Process ... >> $LOGFILE
 if [ $? != 0 ]; then
   date >> $LOGFILE
   echo ++ ERROR >> $LOGFILE
-  kill -SIGUSR2 $FASTD_PID    # drop all connections
-  kill -SIGCHLD $FASTD_PID    # unlink zombies
+  kill -s 12 $FASTD_PID    # SIGUSR2 = drop all connections
+  kill -s 17 $FASTD_PID    # SIGCHLD = unlink zombies
 else
   date >> $LOGFILE
   echo OK. >> $LOGFILE

@@ -554,15 +554,17 @@ def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
                 #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
 
                 if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
-                    if MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]) and  BatctlInfo[8] == '[....]':
-                        if BatctlInfo[5][:16] == BatmanVpnMAC[:16]:  # new MAC schema
-                            print('>>> is new schema:', BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
-#                            print('>>> New MacList:',BatmanMacList)
-                        elif BatctlInfo[5][:2] == BatmanVpnMAC[:2] and BatctlInfo[5][9:] == BatmanVpnMAC[9:]:  # old MAC schema
+                    if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
+
+                        if ((BatctlInfo[1][:1] == BatctlInfo[5][:1] and BatctlInfo[1][9:] == BatctlInfo[5][9:]) and
+                            (BatctlInfo[5][:1] == BatmanVpnMAC[:1]  and BatctlInfo[5][9:] == BatmanVpnMAC[9:])):  # old MAC schema
                             print('>>> is old schema:',BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = GenerateGluonMACsOld(BatctlInfo[1])
 #                            print('>>> Old MacList:',BatmanMacList)
+                        elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:  # new MAC schema
+                            print('>>> is new schema:', BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
+                            BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
+#                            print('>>> New MacList:',BatmanMacList)
                         else:
                             BatmanMacList = []
 
@@ -618,17 +620,16 @@ def getBatmanSegment(BatmanIF,FastdIF):
 # function "__TestAddNode"
 #
 #-----------------------------------------------------------------------
-def __TestAddNode(NodeInfo,PeerKey,LogPath):
+def __TestAddNode(PeerMAC,PeerName,PeerKey,Path,PeerSegment,PeerFileName):
 
-    print('*** New Node:',NodeInfo['MAC'],'=',NodeInfo['Hostname'])
+    print('*** New Node:',PeerMAC,'=',PeerName)
 
-    if NodeInfo['Segment'] is None:
-        NodeInfo['Segment'] = 'vpn99'
+    if PeerSegment is None:
+        PeerSegment = 'vpn99'
 
     try:
-        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeInfo['NodeID']), mode='w')
-        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
-                      (NodeInfo['MAC'],NodeInfo['Hostname'],NodeInfo['Segment'],PeerKey))
+        KeyFile = open(os.path.join(Path,'new_peers',PeerFileName), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' % (PeerMAC,PeerName,PeerSegment,PeerKey))
         KeyFile.close()
     except:
         return False
@@ -641,6 +642,21 @@ def __TestAddNode(NodeInfo,PeerKey,LogPath):
 # function "__TestDelNode"
 #
 #-----------------------------------------------------------------------
+def __TestDelNode(PeerMAC,PeerName,PeerKey,Path,PeerSegment,PeerFileName):
+
+    print('*** Remove Node:',PeerMAC,'=',PeerName)
+
+    if PeerSegment is None:
+        PeerSegment = 'vpn99'    # should never happen!
+
+    try:
+        KeyFile = open(os.path.join(Path,'old_peers',PeerFileName), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' % (PeerMAC,PeerName,PeerSegment,PeerKey))
+        KeyFile.close()
+    except:
+        return False
+
+    return True
 def __TestDelNode(NodeInfo,PeerKey,LogPath):
 
     try:
@@ -659,15 +675,16 @@ def __TestDelNode(NodeInfo,PeerKey,LogPath):
 # function "RegisterNode"
 #
 #-----------------------------------------------------------------------
-def RegisterNode(NodeInfo,PeerKey,GitRepo):
+def RegisterNode(PeerMAC,PeerName,PeerKey,Path,PeerSegment,PeerFileName):
 
-    if NodeInfo['Segment'] is None:
-        NodeInfo['Segment'] = 'vpn99'    #......... remove later when we have correct segment
+    print('*** New Node:',PeerMAC,'=',PeerName)
+
+    if PeerSegment is None:
+        PeerSegment = 'vpn99'
 
     try:
-        KeyFile = open(os.path.join(LogPath,'new_peers','ffs-'+NodeInfo['NodeID']), mode='w')
-        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' %
-                      (NodeInfo['MAC'],NodeInfo['Hostname'],NodeInfo['Segment'],PeerKey))
+        KeyFile = open(os.path.join(Path,'new_peers',PeerFileName), mode='w')
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";' % (PeerMAC,PeerName,PeerSegment,PeerKey))
         KeyFile.close()
     except:
         return False
@@ -741,30 +758,33 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             if BatmanVpnMAC == MeshMAC:
                 print('... Fastd and Batman are consistent:',MeshMAC)
                 NodeIPv6 = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
-                NodeInfo = getNodeInfos(NodeIPv6)
-                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)
+                NodeInfo = getNodeInfos(NodeIPv6)                       # Data from status page of Node via HTTP
+                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # Node's main MAC from Batman Global Translation Table
 
-                if NodeInfo is not None:  # Data from status page of Node
+                if NodeInfo is not None:
                     if PeerMAC is not None and PeerMAC != NodeInfo['MAC']:
                         print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
 
                     NodeID      = NodeInfo['NodeID']
                     PeerMAC     = NodeInfo['MAC']
                     PeerName    = NodeInfo['Hostname']
-                    PeerSegment = NodeInfo['Segment']
-                else:  # Fallback
+                    PeerSegment = NodeInfo['Segment']     # vpn?? or None
+                else:  # No status page -> Fallback
                     if PeerMAC is not None:
                         NodeID      = PeerMAC.replace(':','')
-                        PeerName    = PeerFile
+                        PeerName    = 'ffs-'+NodeID
                         PeerSegment = None
+                        print('++ Statuspage not available -> Fallback to Batman:',PeerMAC,'=',PeerName.encode('utf-8'))
 
                 if PeerMAC is not None:
-#                    if PeerSegment is None:    #..........................................................................................
-                    PeerSegment = getBatmanSegment(args.BATIF,args.VPNIF)
+                    if PeerSegment is None:
+                        PeerSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
+                        print('++ No Segment on Statuspage -> Fallback to Batman:',PeerMAC,'=',PeerName.encode('utf-8'),'->',PeerSegment)
 
-                    PeerFile    = 'ffs-'+NodeID
-                    DnsSegment  = checkDNS(PeerFile+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
-                    print('>>> DNS / Mesh =',DnsSegment,'/',PeerSegment)
+                    PeerFile   = 'ffs-'+NodeID
+                    DnsSegment = checkDNS(PeerFile+'-'+PeerKey[:12],AccountsDict['DNS']['Server'])    # -> 'vpn??'
+                    print('>>> Segment from DNS / Network =',DnsSegment,'/',PeerSegment)
+
 
                     if DnsSegment is None:  # Node is not registered in DNS
 
@@ -776,8 +796,8 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                             print('++ MAC is already in use:',NodeID,'/',PeerMAC,'->',
                                   KeyDataDict['Mac2Key'][PeerMAC]['SegDir'],'/',KeyDataDict['Mac2Key'][PeerMAC]['KeyFile'],'=',KeyDataDict['Mac2Key'][PeerMAC]['PeerKey']+'...')
 
-#                        RegisterNode(NodeInfo,PeerKey,args.GITREPO)
-                        __TestAddNode(NodeInfo,PeerKey,args.JSONPATH)
+#                        RegisterNode(PeerMAC,PeerName,PeerKey,PeerKey,args.GITREPO,PeerSegment,PeerFile)
+                        __TestAddNode(PeerMAC,PeerName,PeerKey,args.JSONPATH,PeerSegment,PeerFile)
 
                     else:  # Node is already registered in DNS
                         if PeerKey[:12] in KeyDataDict['Key2Mac']:
