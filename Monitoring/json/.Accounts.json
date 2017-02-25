@@ -1,0 +1,24 @@
+{
+  "raw.json":{
+      "URL": "<URL to raw.json>",
+      "Username": "<user>",
+      "Password": "<password>"
+  },
+  "SMTP":{
+      "Server": "<SMTP-Server>",
+      "Username": "<user>",
+      "Password": "<password>",
+      "MailTo": "<receipient>",
+      "MailBCC": "<BCC>"
+  },
+ "Git":{
+      "URL": "<URL to Git Repository>",
+      "Username": "<user>",
+      "Password": "<password>"
+  },
+ "DNS":{
+      "Server": "<DNS-Server>",
+      "ID": "<DNS-ID>",
+      "Key": "<DNS-Key>"
+  }
+}
