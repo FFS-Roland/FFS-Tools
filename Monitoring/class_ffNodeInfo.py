@@ -104,7 +104,6 @@ class ffNodeInfo:
         # public Attributes
         self.MAC2NodeIDDict  = {}       # Dictionary of all Nodes' MAC-Addresses and related Main Address
         self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
-        self.SegmentLoadDict = {}       # Dictionary of Segments with their long term load (Nodes + Clients)
         self.Alerts          = []       # List of  Alert-Messages
         self.AnalyseOnly     = False    # Locking automatic Actions due to inconsistent Data
 
@@ -138,8 +137,8 @@ class ffNodeInfo:
 
 
 
-    #-----------------------------------------------------------------------
-    # private function "__GenerateGluonMACsOld(MainMAC)"
+    #=======================================================================
+    # function "GenerateGluonMACsOld(MainMAC)"
     #
     #   Append self.MAC2NodeIDDict for Gluon <= 2016.1.x
     #
@@ -158,8 +157,8 @@ class ffNodeInfo:
     #  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
     #  m2 = (tonumber(m2, 16)+f) % 0x100
     #  m3 = (tonumber(m3, 16)+i) % 0x100
-    #-----------------------------------------------------------------------
-    def __GenerateGluonMACsOld(self,MainMAC):
+    #=======================================================================
+    def GenerateGluonMACsOld(self,MainMAC):
 
         MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
 
@@ -182,8 +181,8 @@ class ffNodeInfo:
 
 
 
-    #-----------------------------------------------------------------------
-    # private function "__GenerateGluonMACsNew(MainMAC)"
+    #=======================================================================
+    # function "GenerateGluonMACsNew(MainMAC)"
     #
     #   Append self.MAC2NodeIDDict for Gluon >= 2016.2.x
     #
@@ -214,8 +213,8 @@ class ffNodeInfo:
     #  m6 = m6 + i                   -- add virtual interface id
     #
     # return string.format('%02x:%s:%s:%s:%s:%02x', m1, m2, m3, m4, m5, m6)
-    #-----------------------------------------------------------------------
-    def __GenerateGluonMACsNew(self,MainMAC):
+    #=======================================================================
+    def GenerateGluonMACsNew(self,MainMAC):
 
         mHash = hashlib.md5(MainMAC.encode(encoding='UTF-8'))
         vMAC = mHash.hexdigest()
@@ -243,16 +242,16 @@ class ffNodeInfo:
     def __AddGluonMACs(self,MainMAC,MeshMAC):
 
         if MeshMAC != '':
-            GluonMacList = self.__GenerateGluonMACsNew(MainMAC)
+            GluonMacList = self.GenerateGluonMACsNew(MainMAC)
 
             if not MeshMAC in GluonMacList:
-                GluonMacList = self.__GenerateGluonMACsOld(MainMAC)
+                GluonMacList = self.GenerateGluonMACsOld(MainMAC)
 
                 if not MeshMAC in GluonMacList:
                     GluonMacList = [MeshMAC]
 
         else:   # only MainMAC available
-            GluonMacList = self.__GenerateGluonMACsNew(MainMAC)
+            GluonMacList = self.GenerateGluonMACsNew(MainMAC)
 
             knownMAC = False
 
@@ -262,7 +261,7 @@ class ffNodeInfo:
                     break
 
             if not knownMAC:
-                GluonMacList = self.__GenerateGluonMACsOld(MainMAC)
+                GluonMacList = self.GenerateGluonMACsOld(MainMAC)
 
                 for NewMAC in GluonMacList:
                     if NewMAC in self.MAC2NodeIDDict:
@@ -368,7 +367,7 @@ class ffNodeInfo:
                     if UnixTime - jsonDbDict[DbIndex]['last_online'] > MaxInactiveTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'
                     else:
-                        if jsonDbDict[DbIndex]['status'] == 'online':
+                        if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) < MaxOfflineTime:
                             self.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
                             if 'neighbours' in jsonDbDict[DbIndex]:
@@ -577,7 +576,8 @@ class ffNodeInfo:
                                         if GWpeers[Uplink] is not None:
                                             if 'established' in GWpeers[Uplink]:
                                                 GWlist.append(Uplink[2:])
-                                                self.ffNodeDict[NodeMAC]['Status'] = 'V'
+                                                if self.ffNodeDict[NodeMAC]['Status'] == ' ':
+                                                    self.ffNodeDict[NodeMAC]['Status'] = 'V'
 
         print('... done.\n')
         return
@@ -752,6 +752,8 @@ class ffNodeInfo:
                             'Neighbours':[]
                         }
 
+
+                    #---------- new Node or newer info than alfred ----------
                     self.ffNodeDict[ffNodeMAC]['RawKey'] = ffNodeKey
                     self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
 
@@ -798,9 +800,9 @@ class ffNodeInfo:
                                                 self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
                     if UnixTime - LastSeen < MaxOfflineTime:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # online
+                        self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # -> online
                     elif UnixTime - LastSeen > MaxInactiveTime:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # inactive
+                        self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # -> inactive
 
             else:
                 print('** Invalid Record:',ffNodeKey)
@@ -816,54 +818,56 @@ class ffNodeInfo:
     #   Adds a Node { 'SegDir','SegMode','VpnMAC','PeerMAC','PeerName','PeerKey' }
     #
     #=========================================================================
-    def AddNode(self,KeyIndex,ffNode):
+    def AddNode(self,KeyIndex,KeyInfo):
 
-        if not MacAdrTemplate.match(ffNode['PeerMAC']):
-            if MacAdrTemplate.match(ffNode['VpnMAC']):
-                if ffNode['VpnMAC'] in self.MAC2NodeIDDict:
-                    ffNode['PeerMAC'] = self.MAC2NodeIDDict[ffNode['VpnMAC']]
+        ffNodeMAC = KeyInfo['PeerMAC']
 
-        if MacAdrTemplate.match(ffNode['PeerMAC']):
-            if not ffNode['PeerMAC'] in self.ffNodeDict:
+        if not MacAdrTemplate.match(ffNodeMAC):
+            if MacAdrTemplate.match(KeyInfo['VpnMAC']):
+                if KeyInfo['VpnMAC'] in self.MAC2NodeIDDict:
+                    ffNodeMAC = self.MAC2NodeIDDict[KeyInfo['VpnMAC']]
 
-                self.ffNodeDict[ffNode['PeerMAC']] = {
-                    'RawKey':None,
-                    'Name':ffNode['PeerName'],
-                    'Status':'?',
-                    'last_online':0,
-                    'Clients':0,
-                    'Region':'??',
-                    'DestSeg':99,
-                    'oldGluon':'?',
-                    'Segment':int(ffNode['SegDir'][3:]),
-                    'SegMode':ffNode['SegMode'],
-                    'KeyDir':ffNode['SegDir'],
-                    'KeyFile':KeyIndex,
-                    'FastdKey':ffNode['PeerKey'],
-                    'InCloud':0,
-                    'Neighbours':[]
+        if MacAdrTemplate.match(ffNodeMAC):
+            if not ffNodeMAC in self.ffNodeDict:
+
+                self.ffNodeDict[ffNodeMAC] = {
+                    'RawKey': None,
+                    'Name': KeyInfo['PeerName'],
+                    'Status': '?',
+                    'last_online': 0,
+                    'Clients': 0,
+                    'Region': '??',
+                    'DestSeg': 99,
+                    'oldGluon': '?',
+                    'Segment': int(KeyInfo['SegDir'][3:]),
+                    'SegMode': KeyInfo['SegMode'],
+                    'KeyDir': KeyInfo['SegDir'],
+                    'KeyFile': KeyIndex,
+                    'FastdKey': KeyInfo['PeerKey'],
+                    'InCloud': 0,
+                    'Neighbours': []
                 }
 
-                self.MAC2NodeIDDict[ffNode['PeerMAC']] = ffNode['PeerMAC']
-                self.__AddGluonMACs(ffNode['PeerMAC'],ffNode['VpnMAC'])
+                self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
+                self.__AddGluonMACs(ffNodeMAC,KeyInfo['VpnMAC'])
 
-                if ffNode['VpnMAC'] != '':
-                    print('!! New Node:      ',ffNode['SegDir'],'/',ffNode['PeerMAC'],'=',ffNode['PeerName'].encode('utf-8'))
+                if KeyInfo['VpnMAC'] != '':
+                    print('!! New Node:      ',KeyInfo['SegDir'],'/',ffNodeMAC,'=',KeyInfo['PeerName'].encode('utf-8'))
 
-            else:   # update existing node
-                self.ffNodeDict[ffNode['PeerMAC']]['SegMode']  = ffNode['SegMode']
-                self.ffNodeDict[ffNode['PeerMAC']]['KeyDir']   = ffNode['SegDir']
-                self.ffNodeDict[ffNode['PeerMAC']]['KeyFile']  = KeyIndex
-                self.ffNodeDict[ffNode['PeerMAC']]['FastdKey'] = ffNode['PeerKey']
+            else:   # updating existing node
+                self.ffNodeDict[ffNodeMAC]['SegMode']  = KeyInfo['SegMode']
+                self.ffNodeDict[ffNodeMAC]['KeyDir']   = KeyInfo['SegDir']
+                self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyIndex
+                self.ffNodeDict[ffNodeMAC]['FastdKey'] = KeyInfo['PeerKey']
 
-            if ffNode['VpnMAC'] != '':
-                if self.ffNodeDict[ffNode['PeerMAC']]['Status'] == '?':
-                    print('!! Node is alive: ',ffNode['SegDir'],'/',ffNode['VpnMAC'],'->',ffNode['PeerMAC'],'=',ffNode['PeerName'].encode('utf-8'))
-                elif self.ffNodeDict[ffNode['PeerMAC']]['Status'] != 'V':
-                    print('++ Node is online:',ffNode['SegDir'],'/',ffNode['VpnMAC'],'->',ffNode['PeerMAC'],'=',ffNode['PeerName'].encode('utf-8'))
+            if KeyInfo['VpnMAC'] != '':
+                if self.ffNodeDict[ffNodeMAC]['Status'] == '?':
+                    print('!! Node is alive: ',KeyInfo['SegDir'],'/',KeyInfo['VpnMAC'],'->',ffNodeMAC,'=',KeyInfo['PeerName'].encode('utf-8'))
+                elif self.ffNodeDict[ffNodeMAC]['Status'] != 'V':
+                    print('++ Node is online:',KeyInfo['SegDir'],'/',KeyInfo['VpnMAC'],'->',ffNodeMAC,'=',KeyInfo['PeerName'].encode('utf-8'))
 
-                self.ffNodeDict[ffNode['PeerMAC']]['Segment'] = int(ffNode['SegDir'][3:])
-                self.ffNodeDict[ffNode['PeerMAC']]['Status'] = 'V'
+                self.ffNodeDict[ffNodeMAC]['Segment'] = int(KeyInfo['SegDir'][3:])
+                self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
 
         return
 

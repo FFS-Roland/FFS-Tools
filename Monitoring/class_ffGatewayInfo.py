@@ -189,6 +189,9 @@ class ffGatewayInfo:
             if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
                 IpAddress = rds[0].to_text()
 
+                if IpAddress == '51.15.54.143':
+                    print('>>> Instance:',rds)
+
                 if IpAddress not in self.__GatewayDict[GwName]['IPs']:
                     self.__GatewayDict[GwName]['IPs'].append(IpAddress)
 
@@ -218,6 +221,9 @@ class ffGatewayInfo:
         for rds in DnsResult:
             if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
                 IpAddress = rds[0].to_text()
+
+                if IpAddress == '51.15.54.143':
+                    print('>>> Segment:',rds)
 
                 if IpAddress not in IpList:
                     IpList.append(IpAddress)
@@ -321,12 +327,12 @@ class ffGatewayInfo:
 
             print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
 
-            if Segment > 0 and Segment < 9 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
-                self.__alert('!! To few Gateways in Segment '+str(Segment).zfill(2)+' !')
+            if Segment > 0 and Segment < 9 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 1:
+                self.__alert('!! No Gateways in Segment '+str(Segment).zfill(2)+' !')
 
         print()
         for GwName in sorted(self.__GatewayDict):
-            print(GwName,'->',self.__GatewayDict[GwName]['Segments'])
+            print(GwName,'->',sorted(self.__GatewayDict[GwName]['Segments']))
 
         print('\n... done.\n')
         return
@@ -423,7 +429,7 @@ class ffGatewayInfo:
 
         print()
         for GwName in sorted(self.__GatewayDict):
-            print(GwName,'->',self.__GatewayDict[GwName]['Segments'])
+            print(GwName,'->',sorted(self.__GatewayDict[GwName]['Segments']))
 
         print('\n... done.\n')
         return
@@ -640,7 +646,7 @@ class ffGatewayInfo:
             jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
             FastdJsonHTTP.close()
         except:
-#            print('++ ERROR fastd status connect!',FastdJsonURL)
+#            print('++ ERROR fastd status connect!',URL)
             return
         else:
 #            print('Load and analyse',URL,'...')

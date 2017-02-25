@@ -175,7 +175,7 @@ print('Setting up Mesh Net Info and Checking Segments ...')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
-ffsNet.MergeData()    # Merge Data from Gateways to NodeInfos and check consistency
+ffsNet.MergeData(args.JSONPATH)    # Merge Data from Gateways to NodeInfos and check consistency
 
 ffsNet.UpdateStatistikDB(args.JSONPATH)
 

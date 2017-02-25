@@ -39,9 +39,11 @@
 ###########################################################################################
 
 import os
+import subprocess
 import time
 import datetime
 import fcntl
+import re
 
 from class_ffNodeInfo import *
 from class_ffGatewayInfo import *
@@ -52,53 +54,10 @@ from class_ffGatewayInfo import *
 # Global Constants
 #-------------------------------------------------------------
 
+RegionFileName = 'Region2Segment.json'
 StatFileName   = 'SegStatistics.json'
 
 MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
-
-
-RegionSegDict = {
-    'Stuttgart':'vpn01',
-
-    'Alb-Donau-Kreis':'vpn02',
-    'Bayern':'vpn02',
-    'Biberach':'vpn02',
-    'Bodenseekreis':'vpn02',
-    'Konstanz':'vpn02',
-    'Ravensburg':'vpn02',
-    'Reutlingen':'vpn02',
-    'Sigmaringen':'vpn02',
-    'Tuebingen':'vpn02',
-    'Zollernalbkreis':'vpn02',
-
-    'Hohenlohekreis':'vpn03',
-    'Mecklenburg-Vorpommern':'vpn03',
-    'Ostalbkreis':'vpn03',
-    'Schwaebisch-Hall':'vpn03',
-
-    'Calw':'vpn04',
-    'Frankreich':'vpn04',
-    'Heilbronn':'vpn04',
-    'Hessen':'vpn04',
-    'Karlsruhe':'vpn04',
-    'Ludwigsburg':'vpn04',
-    'Neckar-Odenwald-Kreis':'vpn04',
-    'Nordrhein-Westfalen':'vpn04',
-    'Ortenaukreis':'vpn04',
-    'Pforzheim':'vpn04',
-    'Rastatt':'vpn04',
-    'Rheinland-Pfalz':'vpn04',
-    'Rottweil':'vpn04',
-    'Saarland':'vpn04',
-    'Schwarzwald-Baar-Kreis':'vpn04',
-
-    'Esslingen':'vpn05',
-    'Goeppingen':'vpn05',
-
-    'Boeblingen':'vpn06',
-
-    'Rems-Murr-Kreis':'vpn07'
-}
 
 
 NoRegionList = [ '??','No Location','Outside' ]
@@ -119,13 +78,14 @@ class ffMeshNet:
 
         # private Attributes
         self.__NodeInfos = NodeInfos
-        self.__GwInfos = GwInfos
+        self.__GwInfos   = GwInfos
 
-        self.__MeshCloudDict = {}       # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict   = {}       # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
-        self.__NodeMoveDict  = {}       # Git Moves of Nodes from one Segment to another
+        self.__Region2SegDict = {}      # Mapping of Regions to Segments
+        self.__MeshCloudDict  = {}      # Dictionary of Mesh-Clouds with List of Member-Nodes
+        self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
+        self.__NodeMoveDict   = {}      # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget = 3        # Target Segment to use if no better Data available
+        self.__DefaultTarget  = 3       # Target Segment to use if no better Data available
 
         return
 
@@ -167,7 +127,7 @@ class ffMeshNet:
     #                    print('+',Cloud,MAC2NodeIDDict[MeshMAC])
                         self.__AddNeighbour2Cloud(CloudID,self.__NodeInfos.MAC2NodeIDDict[MeshMAC])
                     else:
-                        print('!! Unknown Neighbour',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],'-',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),'->',MeshMAC)
+                        print('!! Unknown Neighbour:',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],'-',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),'->',MeshMAC)
             elif self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud'] == CloudID:
                 print('!! Cloud inconsistent:',CloudID,'-',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),'->',self.__MeshCloudDict[CloudID]['CloudMembers'])
             else:
@@ -244,7 +204,7 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
-                if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn08':  #<<<<<<<<<<<<<<<<<<<
+                if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                     if ffNodeMAC in self.__NodeMoveDict:
                         print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
 
@@ -407,7 +367,7 @@ class ffMeshNet:
                 if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
                     TargetSeg = self.__DefaultTarget
 
-                if TargetSeg < 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn08':  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                if TargetSeg < 99:
                     if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                         if ffNodeMAC in self.__NodeMoveDict:
                             print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
@@ -426,11 +386,9 @@ class ffMeshNet:
     #
     #
     #-----------------------------------------------------------------------
-    def __CheckConsistency(self):
+    def __CheckConsistency(self,Region2SegDict):
 
         print('\nCheck Consistency of Data ...')
-
-        ffSegmentList = self.__GwInfos.Segments()
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?':
@@ -439,25 +397,26 @@ class ffMeshNet:
                     (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is None)):
                     print('!! Segment is None:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
+                if self.__NodeInfos.IsOnline(ffNodeMAC) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
                     print('!! KeyDir <> Segment:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == '':
                     print('!! Uplink w/o Key:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in RegionSegDict:
-                    if int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']:
-                        print('++ DestSeg Mismatch: ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],'->',int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]),self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
-                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = int(RegionSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:])  # Region has priority
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in Region2SegDict:
+                    if int(Region2SegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']:
+                        print('++ DestSeg <> Region: ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],'->',int(Region2SegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:]),self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = int(Region2SegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']][3:])  # Region has priority
                 elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region'] in NoRegionList:
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
                 else:
                     self.__alert('++ Invalid Region: '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status']+' '+ffNodeMAC+' = '+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Region']+' -> vpn'+self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
-                    print('++ Wrong Segment:    ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
+                if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
+                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]))):
+                    print('++ Wrong Segment:    ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]),'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
 
 
                 #---------- calculate segment statistics ----------
@@ -476,10 +435,72 @@ class ffMeshNet:
                     else:
                         print('>> Bad Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',ffSeg)
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].lower():
-                        print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
-                              '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].lower():
+                            print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
+                                  '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
+
+        print('... done.\n')
+        return
+
+
+
+    #-----------------------------------------------------------------------
+    # private function "__GetBatmanNodeMACs"
+    #
+    #   Verify Tunnel-MAC / Main-MAC with batman Global Translation Table
+    #
+    #-----------------------------------------------------------------------
+    def __GetBatmanNodeMACs(self):
+
+        print('Analysing Batman TG ...')
+        GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
+        MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+
+        for ffSeg in self.__GwInfos.Segments():
+            print('... Segment',ffSeg,'...')
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()
+            NodeCount = 0
+            ClientCount = 0
+
+            try:
+                BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                BatctlResult = BatctlTG.stdout.decode('utf-8')
+
+                for BatctlLine in BatctlResult.split('\n'):
+                    BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
+                    #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
+
+                    if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+                        if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
+
+                            if BatctlInfo[5][:1] == BatctlInfo[1][:1] and BatctlInfo[5][9:] == BatctlInfo[1][9:]:  # old Gluon MAC schema
+                                BatmanMacList = self.__NodeInfos.GenerateGluonMACsOld(BatctlInfo[1])
+                            else:  # new Gluon MAC schema
+                                BatmanMacList = self.__NodeInfos.GenerateGluonMACsNew(BatctlInfo[1])
+
+                            if BatctlInfo[5] in BatmanMacList:  # Data is from Node
+                                NodeCount += 1
+
+                                if BatctlInfo[5] in self.__NodeInfos.MAC2NodeIDDict:
+                                    if self.__NodeInfos.MAC2NodeIDDict[BatctlInfo[5]] != BatctlInfo[1]:
+                                        print('!! MAC mismatch Tunnel -> Client: Batman <> Alfred:',BatctlInfo[5],'->',BatctlInfo[1],'<>',self.__NodeInfos.MAC2NodeIDDict[BatctlInfo[5]])
+                                    elif BatctlInfo[1] in self.__NodeInfos.ffNodeDict:
+                                        if self.__NodeInfos.ffNodeDict[BatctlInfo[1]]['Status'] != 'V':
+                                            self.__NodeInfos.ffNodeDict[BatctlInfo[1]]['Status'] = ' '
+                                    else:
+                                        print('++ New Node in Batman:',ffSeg,'/',BatctlInfo[1])
+
+                                else:
+                                    print('++ Unknown MAC in Batman:',ffSeg,'->',BatctlInfo[5],'=',BatctlInfo[1])
+
+                            else:  # Data is from Client
+                                ClientCount += 1
+
+            except:
+                print('++ ERROR accessing batman:',BatctlCmd)
+
+            print('... Nodes / Clients:',NodeCount,'/',ClientCount)
 
         print('... done.\n')
         return
@@ -513,18 +534,46 @@ class ffMeshNet:
 
 
 
+    #-----------------------------------------------------------------------
+    # private function "__LoadRegionData"
+    #
+    #   Load Region to Segment Mapping from Region2Segment.json
+    #
+    #-----------------------------------------------------------------------
+    def __LoadRegionData(self,Path):
+
+        try:
+            RegionJsonFile = open(os.path.join(Path,RegionFileName), mode='r')
+            Region2SegDict = json.load(RegionJsonFile)
+            RegionJsonFile.close()
+
+        except:
+            print('\n!! Error on Reading Region to Segment json-File!\n')
+            Region2SegDict = None
+
+        return Region2SegDict
+
+
+
     #==============================================================================
     # Method "MergeData"
     #
     #   Merging Data from Gateways (fastd-Keys) to Nodes
     #
     #==============================================================================
-    def MergeData(self):
+    def MergeData(self,Path):
 
         for KeyIndex in self.__GwInfos.FastdKeyDict.keys():
             self.__NodeInfos.AddNode(KeyIndex,self.__GwInfos.FastdKeyDict[KeyIndex])
 
-        self.__CheckConsistency()
+        Region2SegDict = self.__LoadRegionData(Path)
+
+        if Region2SegDict is not None:
+            self.__CheckConsistency(Region2SegDict)
+            self.__GetBatmanNodeMACs()
+        else:
+            exit(1)
+
         return
 
 
@@ -681,6 +730,9 @@ class ffMeshNet:
                     elif CurrentVPN != '' and self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'] != CurrentVPN:
                         print('++ ERROR KeyDir:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'=',CurrentVPN,'<>',self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'])
                         CurrentError = '*'
+
+                    if CurrentError == ' ':
+                        CurrentError = self.__NodeInfos.ffNodeDict[ffnb]['oldGluon']
 
                     if self.__NodeInfos.ffNodeDict[ffnb]['Segment'] is None:
                         Segment = 99
