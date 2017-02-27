@@ -70,7 +70,6 @@ AccountsFileName  = '.Accounts.json'
 
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
-NodeMoveFile      = 'NodeMoves.lst'
 
 
 #-------------------------------------------------------------
@@ -141,8 +140,9 @@ def __SendEmail(Subject,MailBody,Account):
 #=======================================================================
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
+parser.add_argument('--gitmoves', dest='GITMOVES', action='store', required=True, help='List of Node Git Moves')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
-parser.add_argument('--json', dest='JSONPATH', action='store', required=False, help='optional Path to KeyDatabase')
+parser.add_argument('--json', dest='JSONPATH', action='store', required=True, help='Path to Databases (json files)')
 args = parser.parse_args()
 
 AccountsDict = __LoadAccounts(os.path.join(args.JSONPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
@@ -159,8 +159,7 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
 
 if not args.JSONPATH is None:
-    print('Writing Fastd Key Database ...')
-    ffsGWs.WriteKeyData(args.JSONPATH)
+    ffsGWs.WriteKeyData(args.JSONPATH)    # Export Key-Database for Onboarding-System
 
 
 #---------- Nodes ----------
@@ -182,11 +181,11 @@ ffsNet.UpdateStatistikDB(args.JSONPATH)
 ffsNet.CheckSegments()    # Find Mesh-Clouds with anasysing for shortcuts
 
 
-print('\nWriting Logs ...')
-
+print('\nWriting Log ...')
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
-ffsNet.WriteMoveList(os.path.join(args.LOGPATH,NodeMoveFile))
 
+print('\nWriting Git Moves ...')
+ffsNet.WriteMoveScript(args.GITMOVES,args.GITREPO,AccountsDict['Git'])
 
 
 print('\nChecking for Alerts ...')

@@ -12,9 +12,7 @@
       "MailBCC": "<BCC>"
   },
  "Git":{
-      "URL": "<URL to Git Repository>",
-      "Username": "<user>",
-      "Password": "<password>"
+      "URL": "https://<user>:<password>@<URL to Git Repository>"
   },
  "DNS":{
       "Server": "<DNS-Server>",

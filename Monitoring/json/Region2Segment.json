@@ -1,4 +1,6 @@
 {
+  "Stuttgart": "vpn01",
+
   "Stuttgart-Mitte": "vpn01",
   "Stuttgart-Nord": "vpn01",
   "Stuttgart-Ost": "vpn01",
@@ -24,7 +26,6 @@
   "Stuttgart-Weilimdorf": "vpn08",
   "Stuttgart-Zuffenhausen": "vpn08",
 
-  "Stuttgart": "vpn08",
   "Stuttgart-Zzz": "vpn08",
 
   "Alb-Donau-Kreis": "vpn02",

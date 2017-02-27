@@ -415,7 +415,7 @@ class ffMeshNet:
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = 99
 
                 if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
-                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]))):
+                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] == 'auto')):
                     print('++ Wrong Segment:    ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]),'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
 
 
@@ -652,24 +652,28 @@ class ffMeshNet:
 
 
     #==============================================================================
-    # Method "WriteMoveList"
+    # Method "WriteMoveScript"
     #
     #   Write out Node-Moves
     #==============================================================================
-    def WriteMoveList(self,FileName):
+    def WriteMoveScript(self,FileName,GitRepo,GitAccount):
 
         if len(self.__NodeMoveDict) > 0:
             if self.AnalyseOnly or self.__NodeInfos.AnalyseOnly or self.__GwInfos.AnalyseOnly:
                 self.__alert('!! There might be Nodes to be moved but cannot due to inconsistent Data!')
             else:
-                self.__alert('++ There are Nodes to be moved:')
+                self.__alert('++ The following Nodes will be moved automatically:')
                 NodeMoveFile = open(FileName, mode='w')
+                NodeMoveFile.write('#!/bin/sh\n')
 
                 for ffNodeMAC in sorted(self.__NodeMoveDict):
-                    MoveElement = 'git mv %s/peers/%s vpn%02d/peers/\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],self.__NodeMoveDict[ffNodeMAC])
+                    MoveElement = 'git -C %s mv %s/peers/%s vpn%02d/peers/\n' % (GitRepo,self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'], self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],self.__NodeMoveDict[ffNodeMAC])
 
                     NodeMoveFile.write(MoveElement)
                     self.__alert('   '+MoveElement)
+
+                NodeMoveFile.write('git -C /var/freifunk/peers-ffs commit -a -m "Automatic move of node(s) by ffs-Monitor"\n')
+                NodeMoveFile.write('git -C /var/freifunk/peers-ffs push %s\n' % (GitAccount['URL']))
 
                 NodeMoveFile.close()
                 print('... done.\n')
