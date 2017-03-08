@@ -64,6 +64,7 @@ FreifunkDomain      = 'gw.freifunk-stuttgart.de'
 oldFreifunkDomain   = 'freifunk-stuttgart.de'
 
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
+SegAssignIPv6       = '2001:2:0:711::'
 
 GwIgnoreList        = ['gw05n08','gw05n09','gw07', 'gw08n04']
 
@@ -119,8 +120,9 @@ class ffGatewayInfo:
         # Initializations
         self.__GetGatewaysFromGit()
         self.__GetGatewaysFromDNS()
-        self.__LoadKeysFromGit()
         self.__GetGatewaysFromBatman()
+
+        self.__LoadKeysFromGit()
         self.__LoadFastdStatusInfos()
         return
 
@@ -172,6 +174,7 @@ class ffGatewayInfo:
 
         print('... done.\n')
         return
+
 
 
 
@@ -283,7 +286,10 @@ class ffGatewayInfo:
 
         print('Checking DNS for Gateways ...')
 
-        for ffDomain in [oldFreifunkDomain,FreifunkDomain]:
+        DnsDomainsDict = { '1':FreifunkDomain, '2':oldFreifunkDomain }
+
+        for DomainIdx in sorted(DnsDomainsDict.keys()):
+            ffDomain = DnsDomainsDict[DomainIdx]
             print('\n... Domain:',ffDomain)
             Ip2GwDict   = {}
             DnsZone     = None
@@ -293,34 +299,35 @@ class ffGatewayInfo:
                 DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
                 DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,ffDomain))
             except:
-                self.__alert('!! ERROR on fetching Freifunk DNS Zone!')
+                self.__alert('!! ERROR on fetching DNS Zone: '+DnsDomainsDict[DomainIdx])
                 DnsZone = None
                 self.AnalyseOnly = True
 
+            if DnsZone is None:
+                print('++ DNS Zone is empty:',DnsDomainsDict[DomainIdx])
+                continue
 
             #----- get Gateways from Zone File -----
-            if DnsZone is not None:
-                for name, node in DnsZone.nodes.items():
-                    GwName = name.to_text()
+            for name, node in DnsZone.nodes.items():
+                GwName = name.to_text()
 
-                    if GwInstanceTemplate.match(GwName):
-                        if GwName not in self.__GatewayDict:
-                            self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+                if GwInstanceTemplate.match(GwName):
+                    if GwName not in self.__GatewayDict:
+                        self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
 
-                        self.__GetGwInstances(GwName,node.rdatasets)
+                    self.__GetGwInstances(GwName,node.rdatasets)
 
-                    if GwGroupTemplate.match(GwName):
-                        if len(GwName) == 7:
-                            Segment = int(GwName[5:])
-                        else:
-                            Segment = 0
+                if GwGroupTemplate.match(GwName):
+                    if len(GwName) == 7:
+                        Segment = int(GwName[5:])
+                    else:
+                        Segment = 0
 
-                        if Segment not in self.__SegmentDict:
-                            print('!! Segment in DNS but not in Git:',Segment)
-                            self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
+                    if Segment not in self.__SegmentDict:
+                        print('!! Segment in DNS but not in Git:',Segment)
+                        self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
 
-                        self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(node.rdatasets)
-
+                    self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(node.rdatasets)
 
             #----- setting up GwIP to GwInstanceName -----
             for GwName in self.__GatewayDict:
@@ -429,7 +436,6 @@ class ffGatewayInfo:
                         print('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
         return GwList
-
 
 
 
@@ -579,7 +585,6 @@ class ffGatewayInfo:
 
 
 
-
     #=======================================================================
     # private function "__LoadKeysFromGit"
     #
@@ -608,7 +613,7 @@ class ffGatewayInfo:
                 for KeyFileName in os.listdir(VpnPeerPath):
                     if KeyFileName[:1] != '.':
                         if not PeerTemplate.match(KeyFileName):
-                            print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName[:1]))
+                            print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName))
 
                         if GwNameTemplate.match(KeyFileName):
                             print('++ GW in peer folder:',os.path.join(SegDir,'peers',KeyFileName))
@@ -751,7 +756,7 @@ class ffGatewayInfo:
     #    Returns True if everything is OK
     #
     #--------------------------------------------------------------------------
-    def __CheckDNSvsGit(self,DnsZone):
+    def __CheckDNSvsGit(self,DnsZone,DnsServerIP):
 
         isOK = True
 
@@ -803,6 +808,11 @@ class ffGatewayInfo:
         #---------- Check Git for missing DNS entries ----------
         print('Checking Keys from Git against DNS Entries ...')
 
+        self.__DnsAccDict['Server']
+
+        DnsKeyRing = None
+        DnsUpdate  = None
+
         for PeerFileName in self.FastdKeyDict:
             if ((PeerTemplate.match(PeerFileName)) and
                 (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
@@ -810,10 +820,23 @@ class ffGatewayInfo:
                 (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
 
                 self.__alert('!! DNS Entry missing: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
+
+                if DnsUpdate is None:
+                    DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
+                    DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+
+                if DnsUpdate is not None:
+                    PeerDnsName = PeerFileName+'-'+self.FastdKeyDict[PeerFileName]['PeerKey'][:12]
+                    PeerDnsIPv6 = SegAssignIPv6+str(int(SegDir[3:]))
+                    DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                    print('>>> Adding Peer to DNS:',PeerDnsName,'->',PeerDnsIPv6)
+
                 isOK = False
 
-        return isOK
+        if DnsUpdate is not None:
+            dns.query.tcp(DnsUpdate,DnsServerIP)
 
+        return isOK
 
 
 
@@ -828,24 +851,25 @@ class ffGatewayInfo:
         DnsZone     = None
         isOK        = True
 
-        print('\nChecking DNS ...')
+        print('\nChecking DNS Zone \"segassign\" ...')
 
         try:
             DnsResolver = dns.resolver.Resolver()
             DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
             DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,SegAssignDomain))
         except:
-            self.__alert('!! ERROR on fetching DNS Zone!')
+            self.__alert('!! ERROR on fetching DNS Zone \"segassign\"!')
             self.AnalyseOnly = True
             isOK = False
 
         if DnsZone is not None:
-            isOK = self.__CheckDNSvsGit(DnsZone)
+            isOK = self.__CheckDNSvsGit(DnsZone,DnsServerIP)
         else:
             isOK = False
 
         print('... done.\n')
         return isOK
+
 
 
 
@@ -860,14 +884,40 @@ class ffGatewayInfo:
 
 
 
-    #=========================================================================
-    # Method "FastdKeys"
+    #==============================================================================
+    # Method "WriteMoveScript"
     #
-    #   Returns Dictionary of Fastd Keys with Filename and MACs
-    #
-    #=========================================================================
-    def FastdKeys(self):
-        return self.FastdKeyDict
+    #   Write out Node-Moves
+    #==============================================================================
+    def WriteMoveScript(self,NodeMoveDict,ScriptName,GitAccount):
+
+        self.__alert('++ The following Nodes will be moved automatically:')
+        NodeMoveFile = open(ScriptName, mode='w')
+        NodeMoveFile.write('#!/bin/sh\n')
+        LineCount = 0
+
+        for ffNodeMAC in NodeMoveDict:
+            KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
+
+            if KeyFileName in self.FastdKeyDict:
+                MoveElement = 'git -C %s mv %s/peers/%s vpn%02d/peers/\n' % (self.__GitPath, self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName, NodeMoveDict[ffNodeMAC])
+                NodeMoveFile.write(MoveElement)
+                self.__alert('   '+MoveElement)
+                LineCount += 1
+            else:
+                self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
+
+        NodeMoveFile.write('git -C /var/freifunk/peers-ffs commit -a -m "Automatic move of node(s) by ffs-Monitor"\n')
+        NodeMoveFile.write('git -C /var/freifunk/peers-ffs pull\n')
+        NodeMoveFile.write('git -C /var/freifunk/peers-ffs push %s\n' % (GitAccount['URL']))
+        NodeMoveFile.close()
+
+        if LineCount < 1:
+            self.__alert('>>> No valid movements available!')
+            os.remove(ScriptName)
+
+        print('... done.\n')
+        return
 
 
 

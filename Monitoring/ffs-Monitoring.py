@@ -68,6 +68,8 @@ from class_ffMeshNet import *
 
 AccountsFileName  = '.Accounts.json'
 
+JsonRegionFolder  = 'regions'
+
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
 
@@ -166,31 +168,45 @@ if not args.JSONPATH is None:
 print('Setting up Node Data ...')
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
+print('Merging fastd-Infos to Nodes ...')
+for KeyIndex in ffsGWs.FastdKeyDict.keys():
+    ffsNodes.AddNode(KeyIndex,ffsGWs.FastdKeyDict[KeyIndex])    # Merge Data from Gateways to NodeInfos
+
+ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
+
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
+
+if not ffsNodes.SetDesiredSegment(os.path.join(args.JSONPATH,JsonRegionFolder)):
+    print('!! FATAL ERROR: Regions / Segments not available!')
+    exit(1)
 
 
 #---------- FF-Network ----------
-print('Setting up Mesh Net Info and Checking Segments ...')
+print('Setting up Mesh Net Info ...')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
-ffsNet.MergeData(args.JSONPATH)    # Merge Data from Gateways to NodeInfos and check consistency
-
 ffsNet.UpdateStatistikDB(args.JSONPATH)
 
-ffsNet.CheckSegments()    # Find Mesh-Clouds with anasysing for shortcuts
+ffsNet.CheckSegments()    # Find Mesh-Clouds with analysing for shortcuts
 
-
-print('\nWriting Log ...')
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 
-print('\nWriting Git Moves ...')
-ffsNet.WriteMoveScript(args.GITMOVES,args.GITREPO,AccountsDict['Git'])
+
+#---------- Actions ----------
+NodeMoveDict = ffsNet.GetMoveDict()
+MailBody = ''
+
+if NodeMoveDict is not None:
+    print('\nWriting Git Moves ...')
+
+    if ffsNodes.AnalyseOnly or ffsGWs.AnalyseOnly or ffsNet.AnalyseOnly:
+        MailBody = '!! There are Nodes to be moved but cannot due to inconsistent Data !!\n'
+    else:
+        ffsGWs.WriteMoveScript(NodeMoveDict,args.GITMOVES,AccountsDict['Git'])
 
 
 print('\nChecking for Alerts ...')
-
-MailBody = ''
 
 for Alert in ffsGWs.Alerts:
     MailBody += Alert+'\n'

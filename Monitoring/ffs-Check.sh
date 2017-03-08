@@ -44,11 +44,13 @@ GITMOVES=/tmp/NodeMoves.sh
 JSONDIR=/var/freifunk/json
 
 
+date > $LOGFILE
+
 if [ -f $GITMOVES ]; then
   rm $GITMOVES
 fi
 
-git -C $GITREPO pull --rebase=true
+git -C $GITREPO pull --rebase=true >> $LOGFILE
 
 if [ $? -eq 0 ]; then
   /usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --gitmoves=$GITMOVES --logs=$LOGDIR --json=$JSONDIR >> $LOGFILE
@@ -56,8 +58,10 @@ if [ $? -eq 0 ]; then
   if [ $? -eq 0 ]; then
     if [ -f $GITMOVES ]; then
       chmod +x $GITMOVES
-      $($GITMOVES)
-      rm $GITMOVES
+      $($GITMOVES >> $LOGFILE)
+#      rm $GITMOVES
     fi
   fi
 fi
+
+date >> $LOGFILE

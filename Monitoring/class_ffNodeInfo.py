@@ -42,6 +42,7 @@
 ###########################################################################################
 
 import os
+import subprocess
 import urllib.request
 import time
 import datetime
@@ -49,6 +50,9 @@ import json
 import re
 import hashlib
 
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+from glob import glob
 
 
 #-------------------------------------------------------------
@@ -350,6 +354,9 @@ class ffNodeInfo:
                         'Status':'#',
                         'last_online':jsonDbDict[DbIndex]['last_online'],
                         'Clients':TotalClients,
+                        'Latitude':None,
+                        'Longitude':None,
+                        'ZIP':None,
                         'Region':'??',
                         'DestSeg':99,
                         'oldGluon':'?',
@@ -398,6 +405,14 @@ class ffNodeInfo:
                                 self.ffNodeDict[ffNodeMAC]['Segment'] = GwSeg
                             elif self.ffNodeDict[ffNodeMAC]['Segment'] != GwSeg:
                                 print('!! Segment mismatch:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment'],'<>',GwSeg,'=',self.ffNodeDict[ffNodeMAC]['Name'])
+
+                    if 'location' in jsonDbDict[DbIndex]:
+                        if 'latitude' in jsonDbDict[DbIndex]['location'] and 'longitude' in jsonDbDict[DbIndex]['location']:
+                            self.ffNodeDict[ffNodeMAC]['Latitude']  = jsonDbDict[DbIndex]['location']['latitude']
+                            self.ffNodeDict[ffNodeMAC]['Longitude'] = jsonDbDict[DbIndex]['location']['longitude']
+
+                        if 'ZIP' in jsonDbDict[DbIndex]['location']:
+                            self.ffNodeDict[ffNodeMAC]['ZIP'] = jsonDbDict[DbIndex]['location']['ZIP']
 
                     if 'region' in jsonDbDict[DbIndex]:
                         self.ffNodeDict[ffNodeMAC]['Region'] = jsonDbDict[DbIndex]['region']
@@ -740,6 +755,9 @@ class ffNodeInfo:
                             'Status':'#',
                             'last_online':0,
                             'Clients':0,
+                            'Latitude':None,
+                            'Longitude':None,
+                            'ZIP':None,
                             'Region':'??',
                             'DestSeg':99,
                             'oldGluon':'?',
@@ -776,6 +794,14 @@ class ffNodeInfo:
                             self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][13:14])
                         elif GwNewMacTemplate.match(RawJsonDict[ffNodeKey]['statistics']['gateway']):
                             self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][10:11])
+
+                    if 'location' in RawJsonDict[ffNodeKey]['nodeinfo']:
+                        if 'latitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location'] and 'longitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
+                            self.ffNodeDict[ffNodeMAC]['Latitude']  = RawJsonDict[ffNodeKey]['nodeinfo']['location']['latitude']
+                            self.ffNodeDict[ffNodeMAC]['Longitude'] = RawJsonDict[ffNodeKey]['nodeinfo']['location']['longitude']
+
+                        if 'ZIP' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
+                            self.ffNodeDict[ffNodeMAC]['ZIP'] = RawJsonDict[ffNodeKey]['location']['ZIP']
 
                     if 'mesh_interfaces' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
                         for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh_interfaces']:
@@ -836,6 +862,9 @@ class ffNodeInfo:
                     'Status': '?',
                     'last_online': 0,
                     'Clients': 0,
+                    'Latitude':None,
+                    'Longitude':None,
+                    'ZIP':None,
                     'Region': '??',
                     'DestSeg': 99,
                     'oldGluon': '?',
@@ -888,6 +917,68 @@ class ffNodeInfo:
 
 
     #==============================================================================
+    # Method "GetBatmanNodeMACs"
+    #
+    #   Verify Tunnel-MAC / Main-MAC with batman Global Translation Table
+    #
+    #==============================================================================
+    def GetBatmanNodeMACs(self,SegmentList):
+
+        print('\nAnalysing Batman TG ...')
+        GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
+        MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+
+        for ffSeg in SegmentList:
+            print('... Segment',ffSeg,'...')
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()
+            NodeCount = 0
+            ClientCount = 0
+
+            try:
+                BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                BatctlResult = BatctlTG.stdout.decode('utf-8')
+
+                for BatctlLine in BatctlResult.split('\n'):
+                    BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
+                    #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
+
+                    if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+                        if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
+
+                            if BatctlInfo[5][:1] == BatctlInfo[1][:1] and BatctlInfo[5][9:] == BatctlInfo[1][9:]:  # old Gluon MAC schema
+                                BatmanMacList = self.GenerateGluonMACsOld(BatctlInfo[1])
+                            else:  # new Gluon MAC schema
+                                BatmanMacList = self.GenerateGluonMACsNew(BatctlInfo[1])
+
+                            if BatctlInfo[5] in BatmanMacList:  # Data is from Node
+                                NodeCount += 1
+
+                                if BatctlInfo[5] in self.MAC2NodeIDDict:
+                                    if self.MAC2NodeIDDict[BatctlInfo[5]] != BatctlInfo[1]:
+                                        print('!! MAC mismatch Tunnel -> Client: Batman <> Alfred:',BatctlInfo[5],'->',BatctlInfo[1],'<>',self.MAC2NodeIDDict[BatctlInfo[5]])
+                                    elif BatctlInfo[1] in self.ffNodeDict:
+                                        if self.ffNodeDict[BatctlInfo[1]]['Status'] != 'V':
+                                            self.ffNodeDict[BatctlInfo[1]]['Status'] = ' '
+                                    else:
+                                        print('++ New Node in Batman:',ffSeg,'/',BatctlInfo[1])
+
+                                else:
+                                    print('++ Unknown MAC in Batman:',ffSeg,'->',BatctlInfo[5],'=',BatctlInfo[1])
+
+                            else:  # Data is from Client
+                                ClientCount += 1
+
+            except:
+                print('++ ERROR accessing batman:',BatctlCmd)
+
+            print('... Nodes / Clients:',NodeCount,'/',ClientCount)
+
+        print('... done.\n')
+        return
+
+
+
+    #==============================================================================
     # Method "DumpMacTable"
     #
     #   Dump out MAC-Table
@@ -906,3 +997,134 @@ class ffNodeInfo:
         MacTableFile.close()
         print('... done.\n')
         return
+
+
+
+
+    #-------------------------------------------------------------
+    # private function "__SetupRegionData"
+    #
+    #     Load Region Json Files and setup polygons
+    #
+    #-------------------------------------------------------------
+    def __SetupRegionData(self,Path):
+
+        print('Setting up Region Data ...')
+
+        RegionDict = {
+            'Center_lat': None,
+            'Center_lon': None,
+            'Q1_Segment': None,
+            'Q2_Segment': None,
+            'Q3_Segment': None,
+            'Q4_Segment': None,
+            'Polygons'  : {},
+            'Segments'  : {}
+        }
+
+        JsonFileList = glob(os.path.join(Path,'*/*.json'))
+
+        try:
+            for FileName in JsonFileList:
+                Region  = os.path.basename(FileName.split(".")[0])
+                Segment = os.path.dirname(FileName).split("/")[-1]
+
+                with open(FileName,"r") as JsonFile:
+                    GeoJson = json.load(JsonFile)
+
+                if "geometries" in GeoJson:
+                    Track = GeoJson["geometries"][0]["coordinates"][0][0]
+                elif "coordinates" in GeoJson:
+                    Track = GeoJson["coordinates"][0][0]
+                else:
+                    Track = None
+                    print('Problem parsing %s' % FileName)
+                    continue
+
+                Shape = []
+
+                for t in Track:
+                    Shape.append( (t[1],t[0]) )
+
+                Area = Polygon(Shape)
+
+                RegionDict['Polygons'][Region] = Area
+                RegionDict['Segments'][Region] = Segment
+
+                if Region[:1] == '0':
+                    CenterPoint = Area.centroid
+                    RegionDict['Center_lat'] = CenterPoint.y
+                    RegionDict['Center_lon'] = CenterPoint.x
+
+                if Region[:1] == '1': RegionDict['Q1_Segment'] = Segment
+                if Region[:1] == '2': RegionDict['Q2_Segment'] = Segment
+                if Region[:1] == '3': RegionDict['Q3_Segment'] = Segment
+                if Region[:1] == '4': RegionDict['Q4_Segment'] = Segment
+
+        except:
+            RegionDict = None
+        else:
+            if ((RegionDict['Center_lat'] is None or RegionDict['Center_lon'] is None) or
+                (RegionDict['Q1_Segment'] is None or RegionDict['Q2_Segment'] is None) or
+                (RegionDict['Q3_Segment'] is None or RegionDict['Q4_Segment'] is None)):
+
+                RegionDict = None
+
+        print('... done.\n')
+        return RegionDict
+
+
+
+    #==============================================================================
+    # Method "SetDesiredSegment"
+    #
+    #   Get Segment from Regions
+    #==============================================================================
+    def SetDesiredSegment(self,RegionJsonPath):
+
+        isOK = True
+        RegionDict = self.__SetupRegionData(RegionJsonPath)
+
+        if RegionDict is None:
+            self.__alert('!! No Region Data available !!!')
+            self.AnalyseOnly = True
+            isOK = False
+        else:
+            for ffNodeMAC in self.ffNodeDict.keys():
+                if ((self.ffNodeDict[ffNodeMAC]['Status'] != '?') and
+                    (self.ffNodeDict[ffNodeMAC]['Latitude'] is not None and self.ffNodeDict[ffNodeMAC]['Longitude'] is not None)):
+
+                    lat = self.ffNodeDict[ffNodeMAC]['Latitude']
+                    lon = self.ffNodeDict[ffNodeMAC]['Longitude']
+
+                    if lat < lon:
+                        lat = self.ffNodeDict[ffNodeMAC]['Longitude']
+                        lon = self.ffNodeDict[ffNodeMAC]['Latitude']
+
+                    NodeLocation = Point(lat,lon)
+
+                    result = "Outside"
+                    Segment = None
+
+                    for Region in RegionDict['Polygons'].keys():
+                        if RegionDict['Polygons'][Region].intersects(NodeLocation):
+                            Segment = RegionDict['Segments'][Region]
+                            break
+
+                    if Segment is None:
+                        if lat > RegionDict['Center_lat']:
+                            if lon > RegionDict['Center_lon']:  # Quadrant 1
+                                Segment = RegionDict['Q1_Segment']
+                            else:  # Quadrant 2
+                                Segment = RegionDict['Q2_Segment']
+                        else:
+                            if lon < RegionDict['Center_lon']:  # Quadrant 3
+                                Segment = RegionDict['Q3_Segment']
+                            else:  # Quadrant 4
+                                Segment = RegionDict['Q4_Segment']
+
+                    if Segment is not None:
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(Segment)
+
+        return isOK
+
