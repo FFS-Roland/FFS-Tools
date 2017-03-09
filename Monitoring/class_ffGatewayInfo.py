@@ -104,18 +104,19 @@ class ffGatewayInfo:
     def __init__(self,GitPath,DnsAccDict):
 
         # public Attributes
-        self.FastdKeyDict = {}          # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
-        self.Alerts       = []          # List of  Alert-Messages
-        self.AnalyseOnly  = False       # Blocking active Actions due to inconsistent Data
+        self.FastdKeyDict = {}           # FastdKeyDic[KeyFileName]  -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
+        self.Alerts       = []           # List of  Alert-Messages
+        self.AnalyseOnly  = False        # Blocking active Actions due to inconsistent Data
 
         # private Attributes
-        self.__GitPath = GitPath
-        self.__DnsAccDict = DnsAccDict  # DNS Account
+        self.__GitPath     = GitPath
+        self.__DnsAccDict  = DnsAccDict  # DNS Account
+        self.__DnsServerIP = None
 
-        self.__GatewayDict = {}         # GatewayDict[GwInstanceName] -> IPs, Segments
-        self.__SegmentDict = {}         # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
-        self.__GwAliasDict = {}         # GwAliasDict[LegacyName]     -> current new Gateway
-        self.__Key2FileNameDict = {}    # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
+        self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, Segments
+        self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
+        self.__GwAliasDict = {}          # GwAliasDict[LegacyName]     -> current new Gateway
+        self.__Key2FileNameDict = {}     # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
 
         # Initializations
         self.__GetGatewaysFromGit()
@@ -666,8 +667,7 @@ class ffGatewayInfo:
                     print('!! PeerKey not in Git:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
                     print()
 
-#        print('... Active Keys =',ActiveKeyCount)
-        return
+        return ActiveKeyCount
 
 
 
@@ -682,6 +682,8 @@ class ffGatewayInfo:
     #-----------------------------------------------------------------------
     def __LoadFastdStatusFile(self,URL,Segment):
 
+        ActiveConnections = 0
+
         try:
             FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
             HttpDate = datetime.datetime.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
@@ -690,10 +692,8 @@ class ffGatewayInfo:
             FastdJsonHTTP.close()
         except:
 #            print('++ ERROR fastd status connect!',URL)
-            return
+            return None
         else:
-#            print('Load and analyse',URL,'...')
-
             StatusAge = datetime.datetime.utcnow() - HttpDate
 
             if StatusAge.total_seconds() < 900:
@@ -701,15 +701,15 @@ class ffGatewayInfo:
                     if 'interface' in jsonFastdDict:
                         if int(jsonFastdDict['interface'][3:5]) != Segment:
                             print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
-                            return
+                            return None
 
-                    self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
+                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
                 else:
                     print('!! Bad fastd status file!',URL)
             else:
                 print('++ fastd status to old!',URL)
 
-        return
+        return ActiveConnections
 
 
 
@@ -728,7 +728,7 @@ class ffGatewayInfo:
         print('Loading fastd Status Infos ...')
 
         for GwName in sorted(self.__GatewayDict):
-            print('...',GwName,'...')
+            if len(self.__GatewayDict[GwName]['Segments']) > 0 : print()
 
             if GwName not in GwIgnoreList:
                 for ffSeg in self.__GatewayDict[GwName]['Segments']:
@@ -737,11 +737,16 @@ class ffGatewayInfo:
                     else:
                         FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
 
-                    self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                    ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                    print('...',GwName,ffSeg,'=',ActiveConnections)
 
                     if GwName[:4] == 'gw05':
-                        FastdJsonURL = 'http://%s.%s/data/data/vpn%02dip6.json' % (GwName,FreifunkDomain,ffSeg)
-                        self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                        FastdJsonURL = 'http://%s.%s/data/vpn%02dip6.json' % (GwName,FreifunkDomain,ffSeg)
+                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                        print('...',GwName,ffSeg,'(IPv6) =',ActiveConnections)
+
+            else:
+                print('...',GwName,'... ignored.')
 
         print('... done.')
         print('-------------------------------------------------------')
@@ -756,7 +761,7 @@ class ffGatewayInfo:
     #    Returns True if everything is OK
     #
     #--------------------------------------------------------------------------
-    def __CheckDNSvsGit(self,DnsZone,DnsServerIP):
+    def __CheckDNSvsGit(self,DnsZone):
 
         isOK = True
 
@@ -834,7 +839,7 @@ class ffGatewayInfo:
                 isOK = False
 
         if DnsUpdate is not None:
-            dns.query.tcp(DnsUpdate,DnsServerIP)
+            dns.query.tcp(DnsUpdate,self.__DnsServerIP)
 
         return isOK
 
@@ -855,15 +860,16 @@ class ffGatewayInfo:
 
         try:
             DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,SegAssignDomain))
+            self.__DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
+            DnsZone = dns.zone.from_xfr(dns.query.xfr(self.__DnsServerIP,SegAssignDomain))
         except:
             self.__alert('!! ERROR on fetching DNS Zone \"segassign\"!')
+            self.__DnsServerIP = None
             self.AnalyseOnly = True
             isOK = False
 
         if DnsZone is not None:
-            isOK = self.__CheckDNSvsGit(DnsZone,DnsServerIP)
+            isOK = self.__CheckDNSvsGit(DnsZone)
         else:
             isOK = False
 
@@ -894,16 +900,33 @@ class ffGatewayInfo:
         self.__alert('++ The following Nodes will be moved automatically:')
         NodeMoveFile = open(ScriptName, mode='w')
         NodeMoveFile.write('#!/bin/sh\n')
+
+        DnsKeyRing = None
+        DnsUpdate  = None
         LineCount = 0
 
         for ffNodeMAC in NodeMoveDict:
             KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
 
             if KeyFileName in self.FastdKeyDict:
+                LineCount += 1
                 MoveElement = 'git -C %s mv %s/peers/%s vpn%02d/peers/\n' % (self.__GitPath, self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName, NodeMoveDict[ffNodeMAC])
                 NodeMoveFile.write(MoveElement)
                 self.__alert('   '+MoveElement)
-                LineCount += 1
+
+                if DnsUpdate is None and self.__DnsServerIP is not None:
+                    DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
+                    DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+
+                if DnsUpdate is not None:
+                    PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
+                    PeerDnsIPv6 = SegAssignIPv6+str(NodeMoveDict[ffNodeMAC])
+
+                    if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
+                        DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                    else:
+                        DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+
             else:
                 self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
 
@@ -912,7 +935,10 @@ class ffGatewayInfo:
         NodeMoveFile.write('git -C /var/freifunk/peers-ffs push %s\n' % (GitAccount['URL']))
         NodeMoveFile.close()
 
-        if LineCount < 1:
+        if LineCount > 0:
+            if DnsUpdate is not None:
+                dns.query.tcp(DnsUpdate,self.__DnsServerIP)
+        else:
             self.__alert('>>> No valid movements available!')
             os.remove(ScriptName)
 

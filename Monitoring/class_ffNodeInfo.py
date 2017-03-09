@@ -925,8 +925,6 @@ class ffNodeInfo:
     def GetBatmanNodeMACs(self,SegmentList):
 
         print('\nAnalysing Batman TG ...')
-        GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[5-9]))(:[0-9a-f]{2}){3}')
-        MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 
         for ffSeg in SegmentList:
             print('... Segment',ffSeg,'...')
@@ -937,7 +935,9 @@ class ffNodeInfo:
             try:
                 BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
                 BatctlResult = BatctlTG.stdout.decode('utf-8')
-
+            except:
+                print('++ ERROR accessing batman:',BatctlCmd)
+            else:
                 for BatctlLine in BatctlResult.split('\n'):
                     BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
                     #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
@@ -968,13 +968,55 @@ class ffNodeInfo:
                             else:  # Data is from Client
                                 ClientCount += 1
 
-            except:
-                print('++ ERROR accessing batman:',BatctlCmd)
-
             print('... Nodes / Clients:',NodeCount,'/',ClientCount)
 
         print('... done.\n')
         return
+
+
+
+    #==============================================================================
+    # Method "GetUplinkList"
+    #
+    #   returns UplinkList from NodeList verified by batman traceroute
+    #
+    #==============================================================================
+    def GetUplinkList(self,NodeList,SegmentList):
+
+        print('... Analysing Batman Traceroute:',NodeList,'->',SegmentList,'...')
+        UplinkList = []
+
+        for ffNodeMAC in NodeList:
+            for ffSeg in SegmentList:
+                BatctlCmd = ('/usr/sbin/batctl -m bat%02d tr %s' % (ffSeg,ffNodeMAC)).split()
+
+                try:
+                    BatctlTr = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                    BatctlResult = BatctlTr.stdout.decode('utf-8')
+                except:
+                    print('++ ERROR accessing batman:',BatctlCmd)
+                else:
+                    MeshMAC = None
+
+                    for BatctlLine in BatctlResult.split('\n'):
+                        BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
+#                        print(MeshMAC,BatctlInfo)
+
+                        if len(BatctlInfo) > 3:
+                            if BatctlInfo[0] == 'traceroute':
+                                MeshMAC = BatctlInfo[3]
+                            elif MeshMAC is not None:
+                                if MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+#                                    print(BatctlInfo[1],'<>',MeshMAC)
+                                    if BatctlInfo[1] == MeshMAC:
+                                        UplinkList.append(ffNodeMAC)
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+                                    break
+
+        if len(UplinkList) < 1:
+            UplinkList = None
+
+        return UplinkList
 
 
 
@@ -1014,6 +1056,7 @@ class ffNodeInfo:
         RegionDict = {
             'Center_lat': None,
             'Center_lon': None,
+            'ValidArea' : Polygon([(35.0,-12.0),(72.0,-12.0),(72.0,30.0),(35.0,30.0)]),
             'Q1_Segment': None,
             'Q2_Segment': None,
             'Q3_Segment': None,
@@ -1076,11 +1119,13 @@ class ffNodeInfo:
 
 
     #==============================================================================
-    # Method "SetDesiredSegment"
+    # Method "SetDesiredSegments"
     #
     #   Get Segment from Regions
     #==============================================================================
-    def SetDesiredSegment(self,RegionJsonPath):
+    def SetDesiredSegments(self,RegionJsonPath):
+
+        print('Setting up Desired Segments from Region Data ...')
 
         isOK = True
         RegionDict = self.__SetupRegionData(RegionJsonPath)
@@ -1102,9 +1147,13 @@ class ffNodeInfo:
                         lon = self.ffNodeDict[ffNodeMAC]['Latitude']
 
                     NodeLocation = Point(lat,lon)
-
-                    result = "Outside"
                     Segment = None
+
+                    if not RegionDict['ValidArea'].intersects(NodeLocation):
+                        print('++ Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lat,'|',lon)
+                        self.ffNodeDict[ffNodeMAC]['Latitude']  = None
+                        self.ffNodeDict[ffNodeMAC]['Longitude'] = None
+                        continue
 
                     for Region in RegionDict['Polygons'].keys():
                         if RegionDict['Polygons'][Region].intersects(NodeLocation):
@@ -1126,5 +1175,6 @@ class ffNodeInfo:
                     if Segment is not None:
                         self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(Segment)
 
+        print('... done.\n')
         return isOK
 

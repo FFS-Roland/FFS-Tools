@@ -154,8 +154,7 @@ if AccountsDict is None:
     exit(1)
 
 
-#---------- Gateways ----------
-print('Setting up Gateway Data ...')
+print('==========================================================================\n\nSetting up Gateway Data ...\n')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
@@ -164,8 +163,7 @@ if not args.JSONPATH is None:
     ffsGWs.WriteKeyData(args.JSONPATH)    # Export Key-Database for Onboarding-System
 
 
-#---------- Nodes ----------
-print('Setting up Node Data ...')
+print('==========================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
 print('Merging fastd-Infos to Nodes ...')
@@ -176,13 +174,12 @@ ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
-if not ffsNodes.SetDesiredSegment(os.path.join(args.JSONPATH,JsonRegionFolder)):
+if not ffsNodes.SetDesiredSegments(os.path.join(args.JSONPATH,JsonRegionFolder)):
     print('!! FATAL ERROR: Regions / Segments not available!')
     exit(1)
 
 
-#---------- FF-Network ----------
-print('Setting up Mesh Net Info ...')
+print('==========================================================================\n\nSetting up Mesh Net Info ...\n')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
@@ -219,11 +216,11 @@ for Alert in ffsNet.Alerts:
 
 if MailBody != '':
     print('\nSending Email to inform Admins on Errors ...')
-    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['SMTP'])
+    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['StatusMail'])
 else:
     TimeInfo = datetime.datetime.now()
     if TimeInfo.hour == 12 and TimeInfo.minute < 5:
         print('\nSending Hello Mail to inform Admins beeing alive ...')
-        __SendEmail('Hello from ffs-Monitor','ffs-Monitor is alive. No Alerts right now.',AccountsDict['SMTP'])
+        __SendEmail('Hello from ffs-Monitor','ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
 
 print('\nOK.\n')

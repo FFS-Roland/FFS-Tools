@@ -38,7 +38,9 @@
 #exit 0
 
 LOGDIR=/var/freifunk/logs
-LOGFILE=$LOGDIR/monitoring.log
+LOGFILE=$LOGDIR/$(date +%s).log
+OLDLOGS=$LOGDIR/1*.log
+
 GITREPO=/var/freifunk/peers-ffs
 GITMOVES=/tmp/NodeMoves.sh
 JSONDIR=/var/freifunk/json
@@ -46,10 +48,27 @@ JSONDIR=/var/freifunk/json
 
 date > $LOGFILE
 
+#----- Removing Log Files older than 24 Hours -----
+NOW=$(date +%s)
+
+for Log in $(ls $OLDLOGS | sed "s!$LOGDIR/!!g");
+do
+    LOGTIME=$(echo $Log | cut -d'.' -f1)
+    DELTA=$((NOW - LOGTIME))
+
+    if [ $DELTA -gt 86400 ]; then
+        rm $LOGDIR/$Log
+    fi
+done
+
+
+#----- Removing old Git Move Script -----
 if [ -f $GITMOVES ]; then
   rm $GITMOVES
 fi
 
+
+#----- Get current Keys from Git and start Monitoring -----
 git -C $GITREPO pull --rebase=true >> $LOGFILE
 
 if [ $? -eq 0 ]; then

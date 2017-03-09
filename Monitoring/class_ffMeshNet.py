@@ -81,7 +81,7 @@ class ffMeshNet:
         self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
         self.__NodeMoveDict   = {}      # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget  = 4       # Target Segment to use if no better Data available
+        self.__DefaultTarget  = 5       # Target Segment to use if no better Data available
 
         # Initializations
         self.__CheckConsistency()
@@ -308,7 +308,7 @@ class ffMeshNet:
                     else:
                         ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] += 1
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
                         VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
 
                         if VpnSeg not in UplinkSegList:
@@ -320,16 +320,19 @@ class ffMeshNet:
                         else:
                             DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += 1
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] == '%':
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] != ' ':
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegList:
-                            FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
+                            FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])  # cannot be moved!
 
                 #---------- Actions depending of situation in cloud ----------
                 if len(UplinkSegList) > 1:
                     self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)
                 else:
-                    if len(UplinkSegList) == 0 :
-                        print('++ No VPN Uplink:',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                    if len(UplinkSegList) == 0:
+                        print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                        UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],ActiveSegDict.keys())
+                        print('>> Uplink(s) found by Batman:',UplinkList)
+
                     elif len(FixedSegList) > 0:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
                     else:
@@ -352,22 +355,28 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == 0 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto') and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] != '%')):
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] == ' ')):
 
-                TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto':
+                    TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
-                if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
-                    TargetSeg = self.__DefaultTarget
+                    if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
+                        TargetSeg = self.__DefaultTarget
 
-                if TargetSeg < 99:
-                    if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
-                        if ffNodeMAC in self.__NodeMoveDict:
-                            print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
+                    if TargetSeg < 99:
+                        if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
+                            if ffNodeMAC in self.__NodeMoveDict:
+                                print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
 
-                        self.__NodeMoveDict[ffNodeMAC] = TargetSeg
-                        print('>> git mv %s/peers/%s vpn%02d/peers/  = %s'%( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
-                                                                             TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8') ))
+                            self.__NodeMoveDict[ffNodeMAC] = TargetSeg
+                            print('>> git mv %s/peers/%s vpn%02d/peers/  = %s' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
+                                                                                  TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8') ))
+
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == ' ':
+                    print('++ Node seems to be w/o VPN Uplink:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+
+                    if self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]) is not None:
+                        print('>> Has active Uplink(s), found by Batman.')
 
         print('... done.\n')
         return
@@ -381,7 +390,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     def __CheckConsistency(self):
 
-        print('\nChecking Consistency of Data ...')
+        print('Checking Consistency of Data ...')
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?':
@@ -444,10 +453,10 @@ class ffMeshNet:
             if self.__SegmentDict[Segment]['Weight'] is None:
                 self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
 
-            if Segment > 0 and Segment < 9:  #....................................... must be changed later !!
+            if Segment > 0  and Segment != 6 and Segment < 9:  #....................................... must be changed later !!
                 if self.__SegmentDict[Segment]['Weight'] < SegWeight:
                     SegWeight = self.__SegmentDict[Segment]['Weight']
-#                    self.__DefaultTarget = Segment
+                    self.__DefaultTarget = Segment
 
         print('... Default Target =',self.__DefaultTarget)
 
@@ -586,7 +595,8 @@ class ffMeshNet:
                     if self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'] != '':
                         if ((int(self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffnb]['Segment']) or
                             (self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffnb]['Segment'])):
-                            print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',
+                            print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),'->',
+                                  self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',
                                   self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['SegMode'])
                             CurrentError = '>'
 
