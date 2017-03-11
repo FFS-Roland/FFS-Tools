@@ -261,15 +261,14 @@ class ffMeshNet:
     #   Handling Geo-Location (Segments) of Mesh Cloud w/o shortcuts or fixes
     #
     #-----------------------------------------------------------------------
-    def __HandleGeoLocation(self,CloudID,ActiveSegDict,DesiredSegDict):
+    def __HandleGeoLocation(self,CloudID,ActiveSegList,DesiredSegDict):
 
         SegWeight = 0
         TargetSeg = None
 
         if len(DesiredSegDict) == 0:
-            if 0 in ActiveSegDict:  # Cloud in Legacy Segment
+            if 0 in ActiveSegList:  # Cloud in Legacy Segment
                 TargetSeg = self.__DefaultTarget
-
         else:
             for Segment in DesiredSegDict.keys():
                 if DesiredSegDict[Segment] > SegWeight:
@@ -295,18 +294,16 @@ class ffMeshNet:
 
         for CloudID in self.__MeshCloudDict:
             if self.__MeshCloudDict[CloudID]['NumNodes'] > 1:
-                ActiveSegDict  = {}    # really used segments with number of nodes
                 DesiredSegDict = {}    # desired segments with number of nodes
+                ActiveSegList  = []    # really used segments
                 UplinkSegList  = []    # List of segments from nodes with uplink
                 FixedSegList   = []    # List of segments from nodes with fixed segment assignment
 
                 #---------- Analysing used segments with their nodes and clients ----------
                 for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegDict:
-                        ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] = 1
-                    else:
-                        ActiveSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] += 1
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegList:
+                        ActiveSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
                         VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
@@ -326,17 +323,17 @@ class ffMeshNet:
 
                 #---------- Actions depending of situation in cloud ----------
                 if len(UplinkSegList) > 1:
-                    self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)
+                    self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)  # Shortcut !!
                 else:
                     if len(UplinkSegList) == 0:
                         print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                        UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],ActiveSegDict.keys())
+                        UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],ActiveSegList)
                         print('>> Uplink(s) found by Batman:',UplinkList)
 
                     elif len(FixedSegList) > 0:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
                     else:
-                        self.__HandleGeoLocation(CloudID,ActiveSegDict,DesiredSegDict)
+                        self.__HandleGeoLocation(CloudID,ActiveSegList,DesiredSegDict)
 
         print('... done.\n')
         return

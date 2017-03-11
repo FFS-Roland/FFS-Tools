@@ -7,13 +7,16 @@
 #  Loading and analysing Data of all Nodes.                                               #
 #                                                                                         #
 #                                                                                         #
-#  Needed json-Files:                                                                     #
+#  Needed Data Files:                                                                     #
 #                                                                                         #
-#       raw.json             -> Node Names and Information                                #
-#       nodesdb.json         -> Region = Segment                                          #
-#       alfred-json-158.json -> Nodeinfos                                                 #
-#       alfred-json-159.json -> VPN-Uplinks                                               #
-#       alfred-json-160.json -> Neighbors                                                 #
+#       raw.json                  -> Node Names and Information                           #
+#       nodesdb.json              -> Region = Segment                                     #
+#       alfred-json-158.json      -> Nodeinfos                                            #
+#       alfred-json-159.json      -> VPN-Uplinks                                          #
+#       alfred-json-160.json      -> Neighbors                                            #
+#                                                                                         #
+#       regions/<segment>/*.json  -> Polygons of Regions                                  #
+#       regions/DE.tab            -> Table of OpenGeoDB with ZIP-Codes and Positions      #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -69,6 +72,8 @@ NodesDbName    = 'nodesdb.json'
 Alfred158Name  = 'alfred-json-158.json'
 Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
+
+ZipTableName   = 'DE.tab'         # from OpenGeoDB
 
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
@@ -411,8 +416,8 @@ class ffNodeInfo:
                             self.ffNodeDict[ffNodeMAC]['Latitude']  = jsonDbDict[DbIndex]['location']['latitude']
                             self.ffNodeDict[ffNodeMAC]['Longitude'] = jsonDbDict[DbIndex]['location']['longitude']
 
-                        if 'ZIP' in jsonDbDict[DbIndex]['location']:
-                            self.ffNodeDict[ffNodeMAC]['ZIP'] = jsonDbDict[DbIndex]['location']['ZIP']
+                        if 'zip' in jsonDbDict[DbIndex]['location']:
+                            self.ffNodeDict[ffNodeMAC]['ZIP'] = str(jsonDbDict[DbIndex]['location']['zip'])[:5]
 
                     if 'region' in jsonDbDict[DbIndex]:
                         self.ffNodeDict[ffNodeMAC]['Region'] = jsonDbDict[DbIndex]['region']
@@ -800,8 +805,8 @@ class ffNodeInfo:
                             self.ffNodeDict[ffNodeMAC]['Latitude']  = RawJsonDict[ffNodeKey]['nodeinfo']['location']['latitude']
                             self.ffNodeDict[ffNodeMAC]['Longitude'] = RawJsonDict[ffNodeKey]['nodeinfo']['location']['longitude']
 
-                        if 'ZIP' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
-                            self.ffNodeDict[ffNodeMAC]['ZIP'] = RawJsonDict[ffNodeKey]['location']['ZIP']
+                        if 'zip' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
+                            self.ffNodeDict[ffNodeMAC]['ZIP'] = str(RawJsonDict[ffNodeKey]['nodeinfo']['location']['zip'])[:5]
 
                     if 'mesh_interfaces' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
                         for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh_interfaces']:
@@ -1042,6 +1047,52 @@ class ffNodeInfo:
 
 
 
+    #-------------------------------------------------------------
+    # private function "__SetupZipData"
+    #
+    #     Load ZIP File of OpenGeoDB Project
+    #
+    #-------------------------------------------------------------
+    def __SetupZipData(self,Path):
+
+        print('Setting up ZIP Data ...')
+
+        ZipTemplate = re.compile('^[0-9]{5}$')
+        Zip2PositionDict = None
+        FieldNames = None
+        ZipCount = 0
+
+        try:
+            with open(os.path.join(Path,ZipTableName), mode='r') as GeoDbFile:
+                Zip2PositionDict = {}
+
+                for DataLine in GeoDbFile:
+                    if DataLine[:1] == '#':
+                        FieldNames = DataLine[1:].strip().split('\t')
+                    elif FieldNames is not None:
+                        DataFields = DataLine.strip().split('\t')
+                        ZipRecord = {}
+
+                        for fn in range(len(DataFields)):
+                            ZipRecord[FieldNames[fn]] = DataFields[fn]
+
+                        if 'plz' in ZipRecord and 'lat' in ZipRecord and 'lon' in ZipRecord:
+                            if ZipRecord['plz'] != '' and ZipRecord['lat'] != '' and ZipRecord['lon'] != '':
+                                ZipList = ZipRecord['plz'].split(',')
+
+                                for ZipCode in ZipList:
+                                    if ZipTemplate.match(ZipCode) and ZipCode not in Zip2PositionDict:
+                                        Zip2PositionDict[ZipCode] = { 'lat':float(ZipRecord['lat']), 'lon':float(ZipRecord['lon']) }
+                                        ZipCount += 1
+
+        except:
+            print('!! ERROR on setting up ZIP-Data')
+            Zip2PositionDict = None
+
+        print('... ZIP-Codes loaded:',ZipCount,'\n')
+        return Zip2PositionDict
+
+
 
     #-------------------------------------------------------------
     # private function "__SetupRegionData"
@@ -1066,11 +1117,12 @@ class ffNodeInfo:
         }
 
         JsonFileList = glob(os.path.join(Path,'*/*.json'))
+        RegionCount = 0
 
         try:
             for FileName in JsonFileList:
                 Region  = os.path.basename(FileName.split(".")[0])
-                Segment = os.path.dirname(FileName).split("/")[-1]
+                Segment = int(os.path.dirname(FileName).split("/")[-1])
 
                 with open(FileName,"r") as JsonFile:
                     GeoJson = json.load(JsonFile)
@@ -1093,6 +1145,7 @@ class ffNodeInfo:
 
                 RegionDict['Polygons'][Region] = Area
                 RegionDict['Segments'][Region] = Segment
+                RegionCount += 1
 
                 if Region[:1] == '0':
                     CenterPoint = Area.centroid
@@ -1113,8 +1166,48 @@ class ffNodeInfo:
 
                 RegionDict = None
 
-        print('... done.\n')
+        print('... Region Areas loaded:',RegionCount,'\n')
         return RegionDict
+
+
+
+    #-------------------------------------------------------------
+    # private function "__GetSegmentFromRegion"
+    #
+    #     Load Region Json Files and setup polygons
+    #
+    #-------------------------------------------------------------
+    def __GetSegmentFromRegion(self,lat,lon,ffNodeMAC,RegionDict):
+
+        Segment = None
+
+        if lat is not None and lon is not None:
+            NodeLocation = Point(lat,lon)
+
+            if RegionDict['ValidArea'].intersects(NodeLocation):
+
+                for Region in RegionDict['Polygons'].keys():
+                    if RegionDict['Polygons'][Region].intersects(NodeLocation):
+                        Segment = RegionDict['Segments'][Region]
+                        break
+
+                if Segment is None:
+                    if lat > RegionDict['Center_lat']:
+                        if lon > RegionDict['Center_lon']:  # Quadrant 1
+                            Segment = RegionDict['Q1_Segment']
+                        else:  # Quadrant 2
+                            Segment = RegionDict['Q2_Segment']
+                    else:
+                        if lon < RegionDict['Center_lon']:  # Quadrant 3
+                            Segment = RegionDict['Q3_Segment']
+                        else:  # Quadrant 4
+                            Segment = RegionDict['Q4_Segment']
+
+            else:
+                print('!! Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lat,'|',lon)
+
+        return Segment
+
 
 
 
@@ -1125,10 +1218,11 @@ class ffNodeInfo:
     #==============================================================================
     def SetDesiredSegments(self,RegionJsonPath):
 
-        print('Setting up Desired Segments from Region Data ...')
+        print('Setting up Desired Segments from Region Data or ZIP-Code ...')
 
         isOK = True
-        RegionDict = self.__SetupRegionData(RegionJsonPath)
+        RegionDict  = self.__SetupRegionData(RegionJsonPath)
+        Zip2PosDict = self.__SetupZipData(RegionJsonPath)
 
         if RegionDict is None:
             self.__alert('!! No Region Data available !!!')
@@ -1136,44 +1230,47 @@ class ffNodeInfo:
             isOK = False
         else:
             for ffNodeMAC in self.ffNodeDict.keys():
-                if ((self.ffNodeDict[ffNodeMAC]['Status'] != '?') and
-                    (self.ffNodeDict[ffNodeMAC]['Latitude'] is not None and self.ffNodeDict[ffNodeMAC]['Longitude'] is not None)):
-
-                    lat = self.ffNodeDict[ffNodeMAC]['Latitude']
-                    lon = self.ffNodeDict[ffNodeMAC]['Longitude']
-
-                    if lat < lon:
-                        lat = self.ffNodeDict[ffNodeMAC]['Longitude']
-                        lon = self.ffNodeDict[ffNodeMAC]['Latitude']
-
-                    NodeLocation = Point(lat,lon)
+                if self.ffNodeDict[ffNodeMAC]['Status'] != '?':
+                    lat = None
+                    lon = None
                     Segment = None
 
-                    if not RegionDict['ValidArea'].intersects(NodeLocation):
-                        print('++ Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lat,'|',lon)
-                        self.ffNodeDict[ffNodeMAC]['Latitude']  = None
-                        self.ffNodeDict[ffNodeMAC]['Longitude'] = None
-                        continue
+                    if self.ffNodeDict[ffNodeMAC]['Latitude'] is not None and self.ffNodeDict[ffNodeMAC]['Longitude'] is not None:
 
-                    for Region in RegionDict['Polygons'].keys():
-                        if RegionDict['Polygons'][Region].intersects(NodeLocation):
-                            Segment = RegionDict['Segments'][Region]
-                            break
+                        lat = self.ffNodeDict[ffNodeMAC]['Latitude']
+                        lon = self.ffNodeDict[ffNodeMAC]['Longitude']
 
-                    if Segment is None:
-                        if lat > RegionDict['Center_lat']:
-                            if lon > RegionDict['Center_lon']:  # Quadrant 1
-                                Segment = RegionDict['Q1_Segment']
-                            else:  # Quadrant 2
-                                Segment = RegionDict['Q2_Segment']
+                        if lat < lon:
+                            lat = self.ffNodeDict[ffNodeMAC]['Longitude']
+                            lon = self.ffNodeDict[ffNodeMAC]['Latitude']
+
+                        Segment = self.__GetSegmentFromRegion(lat,lon,ffNodeMAC,RegionDict)
+
+
+                    if Zip2PosDict is not None and self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
+                        print('++ Get Position from ZIP-Code:',ffNodeMAC,'->',self.ffNodeDict[ffNodeMAC]['ZIP'])    #<<<<<<<<<<<<<<<
+
+                        if self.ffNodeDict[ffNodeMAC]['ZIP'] in Zip2PosDict:
+                            lat = Zip2PosDict[self.ffNodeDict[ffNodeMAC]['ZIP']]['lat']
+                            lon = Zip2PosDict[self.ffNodeDict[ffNodeMAC]['ZIP']]['lon']
+#                            print('... Position = ',lat,'|',lon)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+                            ZipSegment = self.__GetSegmentFromRegion(lat,lon,ffNodeMAC,RegionDict)
+
+                            print('>>> Segment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+                            if Segment is not None:
+                                if ZipSegment is not None and ZipSegment != Segment:
+                                    print('!! Segment Mismatch Geo <> ZIP:',Segment,'<>',ZipSegment)
+                            elif ZipSegment is not None:
+                                Segment = ZipSegment
+                                print('++ Segment set by ZIP-Code:',Segment)
+
                         else:
-                            if lon < RegionDict['Center_lon']:  # Quadrant 3
-                                Segment = RegionDict['Q3_Segment']
-                            else:  # Quadrant 4
-                                Segment = RegionDict['Q4_Segment']
+                            print('... unknown ZIP-Code.')
 
                     if Segment is not None:
-                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(Segment)
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = Segment
 
         print('... done.\n')
         return isOK

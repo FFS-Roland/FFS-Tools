@@ -43,7 +43,7 @@ OLDLOGS=$LOGDIR/1*.log
 
 GITREPO=/var/freifunk/peers-ffs
 GITMOVES=/tmp/NodeMoves.sh
-JSONDIR=/var/freifunk/json
+JSONDIR=/var/freifunk/database
 
 
 date > $LOGFILE

@@ -154,7 +154,7 @@ if AccountsDict is None:
     exit(1)
 
 
-print('==========================================================================\n\nSetting up Gateway Data ...\n')
+print('====================================================================================\n\nSetting up Gateway Data ...\n')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
@@ -163,7 +163,7 @@ if not args.JSONPATH is None:
     ffsGWs.WriteKeyData(args.JSONPATH)    # Export Key-Database for Onboarding-System
 
 
-print('==========================================================================\n\nSetting up Node Data ...\n')
+print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
 
 print('Merging fastd-Infos to Nodes ...')
@@ -179,7 +179,7 @@ if not ffsNodes.SetDesiredSegments(os.path.join(args.JSONPATH,JsonRegionFolder))
     exit(1)
 
 
-print('==========================================================================\n\nSetting up Mesh Net Info ...\n')
+print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
