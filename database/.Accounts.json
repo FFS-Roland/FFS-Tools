@@ -4,13 +4,21 @@
       "Username": "<user>",
       "Password": "<password>"
   },
-  "SMTP":{
+  "StatusMail":{
       "Server": "<SMTP-Server>",
       "Username": "<user>",
       "Password": "<password>",
       "MailTo": "<receipient>",
       "MailBCC": "<BCC>"
   },
+},
+  "KeyMail":{
+      "Server": "<SMTP-Server>",
+      "Username": "<user>",
+      "Password": "<password>",
+      "MailTo": "vpn-schluessel@lists.freifunk-stuttgart.net",
+      "MailBCC": "<BCC>"
+},
  "Git":{
       "URL": "https://<user>:<password>@<URL to Git Repository>"
   },
