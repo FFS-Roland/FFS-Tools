@@ -64,12 +64,12 @@ FreifunkDomain      = 'gw.freifunk-stuttgart.de'
 oldFreifunkDomain   = 'freifunk-stuttgart.de'
 
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
-SegAssignIPv6       = '2001:2:0:711::'
+SegAssignIPv6Prefix = '2001:2:0:711::'
 
 GwIgnoreList        = ['gw05n08','gw05n09','gw07', 'gw08n04']
 
 
-DnsSegTemplate      = re.compile('^2001:2:0:711::[0-9][0-9]?$')
+DnsSegTemplate      = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
 GwNameTemplate      = re.compile('^gw[01][0-9]{1,2}')
@@ -781,7 +781,8 @@ class ffGatewayInfo:
 
                         if DnsSegTemplate.match(IPv6):
                             if SegFromDNS is None:
-                                SegFromDNS = 'vpn'+IPv6[14:].zfill(2)
+                                DnsNodeInfo = IPv6.split(':')
+                                SegFromDNS = 'vpn'+DnsNodeInfo[-1].zfill(2)
                             else:
                                 self.__alert('!! Duplicate DNS Result: '+DnsPeerID+' = '+IPv6)
                                 self.AnalyseOnly = True
@@ -920,7 +921,7 @@ class ffGatewayInfo:
 
                 if DnsUpdate is not None:
                     PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
-                    PeerDnsIPv6 = SegAssignIPv6+str(NodeMoveDict[ffNodeMAC])
+                    PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
 
                     if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
                         DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
@@ -941,54 +942,6 @@ class ffGatewayInfo:
         else:
             self.__alert('>>> No valid movements available!')
             os.remove(ScriptName)
-
-        print('... done.\n')
-        return
-
-
-
-    #=========================================================================
-    # Method "WriteKeyData"
-    #
-    #   Writes Fastd Keys as json file with Fastd Key <-> MACC
-    #
-    #=========================================================================
-    def WriteKeyData(self,Path):
-
-        print('Creating Fastd Key Database ...')
-
-        KeyDataDict = { 'Key2Mac':{},'Mac2Key':{} }
-
-        for KeyFileName in self.FastdKeyDict:
-            if self.FastdKeyDict[KeyFileName]['PeerKey'] != '':
-                KeyDataDict['Key2Mac'][self.FastdKeyDict[KeyFileName]['PeerKey'][:12]] = {
-                    'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
-                    'KeyFile':KeyFileName,
-                    'PeerMAC':self.FastdKeyDict[KeyFileName]['PeerMAC']
-                }
-
-            if self.FastdKeyDict[KeyFileName]['PeerMAC'] != '':
-                KeyDataDict['Mac2Key'][self.FastdKeyDict[KeyFileName]['PeerMAC']] = {
-                    'SegDir':self.FastdKeyDict[KeyFileName]['SegDir'],
-                    'KeyFile':KeyFileName,
-                    'PeerKey':self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
-                }
-
-        try:
-            LockFile = open('/tmp/.ffsKeyData.lock', mode='w+')
-            fcntl.lockf(LockFile,fcntl.LOCK_EX)
-            print('Writing Fastd Key Database as json-File ...')
-
-            KeyJsonFile = open(os.path.join(Path,'KeyData.json'), mode='w')
-            json.dump(KeyDataDict,KeyJsonFile)
-            KeyJsonFile.close()
-
-        except:
-            print('\n!! Error on Writing Fastd Key Database as json-File!\n')
-
-        finally:
-            fcntl.lockf(LockFile,fcntl.LOCK_UN)
-            LockFile.close()
 
         print('... done.\n')
         return

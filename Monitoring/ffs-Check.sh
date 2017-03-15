@@ -80,6 +80,8 @@ if [ $? -eq 0 ]; then
       $($GITMOVES >> $LOGFILE)
 #      rm $GITMOVES
     fi
+  else
+    echo "++ERROR!"
   fi
 fi
 

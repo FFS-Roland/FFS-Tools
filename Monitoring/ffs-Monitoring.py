@@ -159,9 +159,6 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
 
-if not args.JSONPATH is None:
-    ffsGWs.WriteKeyData(args.JSONPATH)    # Export Key-Database for Onboarding-System
-
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])

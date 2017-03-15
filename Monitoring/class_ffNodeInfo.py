@@ -16,7 +16,7 @@
 #       alfred-json-160.json      -> Neighbors                                            #
 #                                                                                         #
 #       regions/<segment>/*.json  -> Polygons of Regions                                  #
-#       regions/DE.tab            -> Table of OpenGeoDB with ZIP-Codes and Positions      #
+#       regions/ZIP2GPS_DE.json   -> Dict. of ZIP-Codes with related GPS-Positions        #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -52,6 +52,7 @@ import datetime
 import json
 import re
 import hashlib
+import overpy
 
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
@@ -73,7 +74,7 @@ Alfred158Name  = 'alfred-json-158.json'
 Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
 
-ZipTableName   = 'DE.tab'         # from OpenGeoDB
+ZipTableName   = 'ZIP2GPS_DE.json'  # Data merged from OpenStreetMap and OpenGeoDB
 
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
@@ -87,6 +88,7 @@ PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
 PeerTemplate1     = re.compile('^ffs[-_][0-9a-f]{12}')
 PeerTemplate2     = re.compile('^ffs[0-9a-f]{12}')
 
+ZipTemplate       = re.compile('^[0-9]{5}$')
 SegmentTemplate   = re.compile('^[0-9]{2}$')
 
 KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
@@ -699,7 +701,7 @@ class ffNodeInfo:
                 time.sleep(2)
 
         if RawJsonDict is None:
-            self.__alert('++ Error on loading raw.json !!!')
+            self.__alert('++ Error on loading raw.json !!!\n')
             self.AnalyseOnly = True
             return
 
@@ -1057,40 +1059,20 @@ class ffNodeInfo:
 
         print('Setting up ZIP Data ...')
 
-        ZipTemplate = re.compile('^[0-9]{5}$')
-        Zip2PositionDict = None
-        FieldNames = None
+        Zip2GpsDict = None
         ZipCount = 0
 
         try:
-            with open(os.path.join(Path,ZipTableName), mode='r') as GeoDbFile:
-                Zip2PositionDict = {}
-
-                for DataLine in GeoDbFile:
-                    if DataLine[:1] == '#':
-                        FieldNames = DataLine[1:].strip().split('\t')
-                    elif FieldNames is not None:
-                        DataFields = DataLine.strip().split('\t')
-                        ZipRecord = {}
-
-                        for fn in range(len(DataFields)):
-                            ZipRecord[FieldNames[fn]] = DataFields[fn]
-
-                        if 'plz' in ZipRecord and 'lat' in ZipRecord and 'lon' in ZipRecord:
-                            if ZipRecord['plz'] != '' and ZipRecord['lat'] != '' and ZipRecord['lon'] != '':
-                                ZipList = ZipRecord['plz'].split(',')
-
-                                for ZipCode in ZipList:
-                                    if ZipTemplate.match(ZipCode) and ZipCode not in Zip2PositionDict:
-                                        Zip2PositionDict[ZipCode] = { 'lat':float(ZipRecord['lat']), 'lon':float(ZipRecord['lon']) }
-                                        ZipCount += 1
-
+            with open(os.path.join(Path,ZipTableName), mode='r') as Zip2GpsFile:
+                Zip2GpsDict = json.load(Zip2GpsFile)
         except:
             print('!! ERROR on setting up ZIP-Data')
-            Zip2PositionDict = None
+            Zip2GpsDict = None
+        else:
+            ZipCount = len(Zip2GpsDict)
 
         print('... ZIP-Codes loaded:',ZipCount,'\n')
-        return Zip2PositionDict
+        return Zip2GpsDict
 
 
 
@@ -1172,12 +1154,12 @@ class ffNodeInfo:
 
 
     #-------------------------------------------------------------
-    # private function "__GetSegmentFromRegion"
+    # private function "__GetSegmentFromGPS"
     #
-    #     Load Region Json Files and setup polygons
+    #     Get Segment from GPS using region polygons
     #
     #-------------------------------------------------------------
-    def __GetSegmentFromRegion(self,lat,lon,ffNodeMAC,RegionDict):
+    def __GetSegmentFromGPS(self,lat,lon,ffNodeMAC,RegionDict):
 
         Segment = None
 
@@ -1214,17 +1196,18 @@ class ffNodeInfo:
     #==============================================================================
     # Method "SetDesiredSegments"
     #
-    #   Get Segment from Regions
+    #   Get Segment from Location (GPS Data or ZIP-Code)
     #==============================================================================
-    def SetDesiredSegments(self,RegionJsonPath):
+    def SetDesiredSegments(self,RegionDataPath):
 
-        print('Setting up Desired Segments from Region Data or ZIP-Code ...')
+        print('Setting up Desired Segments from GPS Data or ZIP-Code ...')
 
         isOK = True
-        RegionDict  = self.__SetupRegionData(RegionJsonPath)
-        Zip2PosDict = self.__SetupZipData(RegionJsonPath)
+        RegionDict  = self.__SetupRegionData(RegionDataPath)
+        Zip2PosDict = self.__SetupZipData(RegionDataPath)
+        OSMapi      = overpy.Overpass()
 
-        if RegionDict is None:
+        if RegionDict is None or Zip2PosDict is None:
             self.__alert('!! No Region Data available !!!')
             self.AnalyseOnly = True
             isOK = False
@@ -1244,20 +1227,38 @@ class ffNodeInfo:
                             lat = self.ffNodeDict[ffNodeMAC]['Longitude']
                             lon = self.ffNodeDict[ffNodeMAC]['Latitude']
 
-                        Segment = self.__GetSegmentFromRegion(lat,lon,ffNodeMAC,RegionDict)
+                        Segment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
 
 
-                    if Zip2PosDict is not None and self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
-                        print('++ Get Position from ZIP-Code:',ffNodeMAC,'->',self.ffNodeDict[ffNodeMAC]['ZIP'])    #<<<<<<<<<<<<<<<
+                    if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
+                        ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]
+                        ZipSegment = None
 
-                        if self.ffNodeDict[ffNodeMAC]['ZIP'] in Zip2PosDict:
-                            lat = Zip2PosDict[self.ffNodeDict[ffNodeMAC]['ZIP']]['lat']
-                            lon = Zip2PosDict[self.ffNodeDict[ffNodeMAC]['ZIP']]['lon']
-#                            print('... Position = ',lat,'|',lon)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                        if ZipTemplate.match(ZipCode):
+                            print('++ Get Position from ZIP-Code:',ffNodeMAC,'->',ZipCode)    #<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-                            ZipSegment = self.__GetSegmentFromRegion(lat,lon,ffNodeMAC,RegionDict)
+                            if ZipCode in Zip2PosDict:
+                                lat = float(Zip2PosDict[ZipCode]['lat'])
+                                lon = float(Zip2PosDict[ZipCode]['lon'])
+                                ZipSegment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
 
-                            print('>>> Segment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                            if ZipSegment is None:    # Fallback to online query of OSM ...
+                                lat = 0.0
+                                lon = 0.0
+
+                                try:
+                                    query = 'rel[postal_code="%s"];out center;' % (ZipCode)
+                                    result = OSMapi.query(query)
+
+                                    for relation in result.relations:
+                                        lat = relation.center_lat
+                                        lon = relation.center_lon
+                                        ZipSegment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
+                                        break
+                                except:
+                                    ZipSegment = None
+
+                            print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                             if Segment is not None:
                                 if ZipSegment is not None and ZipSegment != Segment:
@@ -1267,7 +1268,7 @@ class ffNodeInfo:
                                 print('++ Segment set by ZIP-Code:',Segment)
 
                         else:
-                            print('... unknown ZIP-Code.')
+                            print('!! Invalid ZIP-Code:',ZipCode)
 
                     if Segment is not None:
                         self.ffNodeDict[ffNodeMAC]['DestSeg'] = Segment
