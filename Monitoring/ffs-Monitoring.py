@@ -8,9 +8,9 @@
 #                                                                                         #
 #  Parameter:                                                                             #
 #                                                                                         #
-#       --gitrepo  = Git Repository with KeyFiles                                         #
+#       --gitrepo  = Git Repository with fastd KeyFiles                                   #
+#       --data     = Path to Databases Statistics                                         #
 #       --logs     = Path to LogFiles                                                     #
-#       --json     = Path to json-Files (Databases with fastd-Keys and Statistics)        #
 #                                                                                         #
 #  Needed json-Files from Webserver:                                                      #
 #                                                                                         #
@@ -142,16 +142,16 @@ def __SendEmail(Subject,MailBody,Account):
 #=======================================================================
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
-parser.add_argument('--gitmoves', dest='GITMOVES', action='store', required=True, help='List of Node Git Moves')
+parser.add_argument('--data', dest='DATAPATH', action='store', required=True, help='Path to Databases')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
-parser.add_argument('--json', dest='JSONPATH', action='store', required=True, help='Path to Databases (json files)')
 args = parser.parse_args()
 
-AccountsDict = __LoadAccounts(os.path.join(args.JSONPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
+AccountsDict = __LoadAccounts(os.path.join(args.DATAPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
 
 if AccountsDict is None:
     print('!! FATAL ERROR: Accounts not available!')
     exit(1)
+
 
 
 print('====================================================================================\n\nSetting up Gateway Data ...\n')
@@ -171,7 +171,7 @@ ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
-if not ffsNodes.SetDesiredSegments(os.path.join(args.JSONPATH,JsonRegionFolder)):
+if not ffsNodes.SetDesiredSegments(os.path.join(args.DATAPATH,JsonRegionFolder)):
     print('!! FATAL ERROR: Regions / Segments not available!')
     exit(1)
 
@@ -180,7 +180,7 @@ print('=========================================================================
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
 
-ffsNet.UpdateStatistikDB(args.JSONPATH)
+ffsNet.UpdateStatistikDB(args.DATAPATH)
 
 ffsNet.CheckSegments()    # Find Mesh-Clouds with analysing for shortcuts
 
@@ -192,12 +192,12 @@ NodeMoveDict = ffsNet.GetMoveDict()
 MailBody = ''
 
 if NodeMoveDict is not None:
-    print('\nWriting Git Moves ...')
+    print('\nMoving Nodes ...')
 
     if ffsNodes.AnalyseOnly or ffsGWs.AnalyseOnly or ffsNet.AnalyseOnly:
         MailBody = '!! There are Nodes to be moved but cannot due to inconsistent Data !!\n'
     else:
-        ffsGWs.WriteMoveScript(NodeMoveDict,args.GITMOVES,AccountsDict['Git'])
+        ffsGWs.MoveNodes(NodeMoveDict,AccountsDict['Git'])
 
 
 print('\nChecking for Alerts ...')

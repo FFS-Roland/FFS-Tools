@@ -37,13 +37,12 @@
 
 #exit 0
 
+GITREPO=/var/freifunk/peers-ffs
+DATADIR=/var/freifunk/database
+
 LOGDIR=/var/freifunk/logs
 LOGFILE=$LOGDIR/$(date +%s).log
 OLDLOGS=$LOGDIR/1*.log
-
-GITREPO=/var/freifunk/peers-ffs
-GITMOVES=/tmp/NodeMoves.sh
-JSONDIR=/var/freifunk/database
 
 
 date > $LOGFILE
@@ -62,26 +61,13 @@ do
 done
 
 
-#----- Removing old Git Move Script -----
-if [ -f $GITMOVES ]; then
-  rm $GITMOVES
-fi
-
-
-#----- Get current Keys from Git and start Monitoring -----
-git -C $GITREPO pull --rebase=true >> $LOGFILE
+#----- start Monitoring -----
 
 if [ $? -eq 0 ]; then
-  /usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --gitmoves=$GITMOVES --logs=$LOGDIR --json=$JSONDIR >> $LOGFILE
+  /usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --logs=$LOGDIR >> $LOGFILE
 
-  if [ $? -eq 0 ]; then
-    if [ -f $GITMOVES ]; then
-      chmod +x $GITMOVES
-      $($GITMOVES >> $LOGFILE)
-#      rm $GITMOVES
-    fi
-  else
-    echo "++ERROR!"
+  if [ $? -ne 0 ]; then
+    echo "++ERROR!" >> $LOGFILE
   fi
 fi
 

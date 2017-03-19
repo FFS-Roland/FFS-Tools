@@ -45,6 +45,8 @@ import datetime
 import json
 import re
 import fcntl
+import git
+
 import dns.resolver
 import dns.query
 import dns.zone
@@ -151,23 +153,47 @@ class ffGatewayInfo:
     #-----------------------------------------------------------------------
     def __GetGatewaysFromGit(self):
 
-        print('\nLoad Gateways from Git ...')
+        print('Loading Gateways from Git ...')
 
-        for SegDir in os.listdir(self.__GitPath):
-            SegPath = os.path.join(self.__GitPath,SegDir)
+        GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')
 
-            if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
-                Segment = int(SegDir[3:])
+        try:
+            LockFile = open(GitLockName, mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
+            GitRepo   = git.Repo(self.__GitPath)
+            GitOrigin = GitRepo.remotes.origin
 
-                if Segment not in self.__SegmentDict:
-                    self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
-#                    print('>>> New Segment =',Segment)
+            if not GitRepo.is_dirty():
+                print('... Git pull ...')
+                GitOrigin.pull()
+            else:
+                self.AnalyseOnly = True
+                self.__alert('!! Git Repository is dirty - switched to analyse only mode!')
 
-                VpnBackbonePath = os.path.join(SegPath,'bb')
+            for SegDir in os.listdir(self.__GitPath):
+                SegPath = os.path.join(self.__GitPath,SegDir)
 
-                for KeyFileName in os.listdir(VpnBackbonePath):
-                    if GwSegmentTemplate.match(KeyFileName):
-                        self.__SegmentDict[Segment]['GwGitNames'].append(KeyFileName.split('s')[0])
+                if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
+                    Segment = int(SegDir[3:])
+
+                    if Segment not in self.__SegmentDict:
+                        self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
+#                        print('>>> New Segment =',Segment)
+
+                    VpnBackbonePath = os.path.join(SegPath,'bb')
+
+                    for KeyFileName in os.listdir(VpnBackbonePath):
+                        if GwSegmentTemplate.match(KeyFileName):
+                            self.__SegmentDict[Segment]['GwGitNames'].append(KeyFileName.split('s')[0])
+
+        except:
+            self.__alert('!! Fatal ERROR on accessing Git for Gateways!')
+        finally:
+            del GitOrigin
+            del GitRepo
+
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
 
 #        print()
 #        for Segment in sorted(self.__SegmentDict):
@@ -731,7 +757,7 @@ class ffGatewayInfo:
             if len(self.__GatewayDict[GwName]['Segments']) > 0 : print()
 
             if GwName not in GwIgnoreList:
-                for ffSeg in self.__GatewayDict[GwName]['Segments']:
+                for ffSeg in sorted(self.__GatewayDict[GwName]['Segments']):
                     if GwName == 'gw09' and ffSeg == 0:
                         FastdJsonURL = 'http://gw09.%s/fastd/ffs.status.json' % (FreifunkDomain)
                     else:
@@ -825,7 +851,7 @@ class ffGatewayInfo:
                 (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
                 (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
 
-                self.__alert('!! DNS Entry missing: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'].encode('utf-8'))
+                self.__alert('!! DNS Entry missing: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'])
 
                 if DnsUpdate is None:
                     DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
@@ -833,7 +859,7 @@ class ffGatewayInfo:
 
                 if DnsUpdate is not None:
                     PeerDnsName = PeerFileName+'-'+self.FastdKeyDict[PeerFileName]['PeerKey'][:12]
-                    PeerDnsIPv6 = SegAssignIPv6+str(int(SegDir[3:]))
+                    PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,int(self.FastdKeyDict[PeerFileName]['SegDir'][3:]))
                     DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
                     print('>>> Adding Peer to DNS:',PeerDnsName,'->',PeerDnsIPv6)
 
@@ -892,56 +918,98 @@ class ffGatewayInfo:
 
 
     #==============================================================================
-    # Method "WriteMoveScript"
+    # Method "MoveNodes"
     #
-    #   Write out Node-Moves
+    #   Moving Nodes in GIT and DNS
     #==============================================================================
-    def WriteMoveScript(self,NodeMoveDict,ScriptName,GitAccount):
+    def MoveNodes(self,NodeMoveDict,GitAccount):
 
-        self.__alert('++ The following Nodes will be moved automatically:')
-        NodeMoveFile = open(ScriptName, mode='w')
-        NodeMoveFile.write('#!/bin/sh\n')
+        print('Moving Nodes in GIT and DNS ...')
 
-        DnsKeyRing = None
-        DnsUpdate  = None
-        LineCount = 0
+        if len(NodeMoveDict) < 1:
+            print('++ There are no Peers to be moved.')
+            return
 
-        for ffNodeMAC in NodeMoveDict:
-            KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
+        if self.__DnsServerIP is None or self.__GitPath is None or GitAccount is None:
+            print('!! Account Data is not available!')
+            return
 
-            if KeyFileName in self.FastdKeyDict:
-                LineCount += 1
-                MoveElement = 'git -C %s mv %s/peers/%s vpn%02d/peers/\n' % (self.__GitPath, self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName, NodeMoveDict[ffNodeMAC])
-                NodeMoveFile.write(MoveElement)
-                self.__alert('   '+MoveElement)
 
-                if DnsUpdate is None and self.__DnsServerIP is not None:
-                    DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
-                    DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+        try:
+            GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')
+            LockFile = open(GitLockName, mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
 
-                if DnsUpdate is not None:
-                    PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
-                    PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
+            DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
+            DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
 
-                    if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
-                        DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
-                    else:
-                        DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+            GitRepo   = git.Repo(self.__GitPath)
+            GitIndex  = GitRepo.index
+            GitOrigin = GitRepo.remotes.origin
 
+            if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or DnsUpdate is None:
+                self.__alert('!! The Git Repository and/or DNS are not clean - cannot move Nodes!')
             else:
-                self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
+                self.__alert('++ The following Nodes will be moved automatically:')
+                LineCount = 0
 
-        NodeMoveFile.write('git -C /var/freifunk/peers-ffs commit -a -m "Automatic move of node(s) by ffs-Monitor"\n')
-        NodeMoveFile.write('git -C /var/freifunk/peers-ffs pull\n')
-        NodeMoveFile.write('git -C /var/freifunk/peers-ffs push %s\n' % (GitAccount['URL']))
-        NodeMoveFile.close()
+                for ffNodeMAC in NodeMoveDict:
+                    KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
 
-        if LineCount > 0:
-            if DnsUpdate is not None:
-                dns.query.tcp(DnsUpdate,self.__DnsServerIP)
-        else:
-            self.__alert('>>> No valid movements available!')
-            os.remove(ScriptName)
+                    if KeyFileName in self.FastdKeyDict:
+                        LineCount += 1
+                        SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName)
+                        DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
+                        print(SourceFile,'->',DestFile)
+
+                        if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
+                            GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
+                            print('... Git remove of old location done.')
+                            os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
+                            print('... File moved.')
+                            GitIndex.add([os.path.join(self.__GitPath,DestFile)])
+                            print('... Git add of new location done.')
+
+                            PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
+                            PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
+
+                            if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
+                                DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                            else:
+                                DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+
+                            self.__alert('   '+SourceFile+' -> '+DestFile)
+                        else:
+                            print('... Key File was already moved by other process.')
+
+                    else:
+                        self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
+
+
+                if LineCount > 0:
+                    print('... doing Git commit ...')
+                    GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
+                    GitOrigin.config_writer.set('url',GitAccount['URL'])
+                    print('... doing Git pull ...')
+                    GitOrigin.pull()
+                    print('... doing Git push ...')
+                    GitOrigin.push()
+
+                    dns.query.tcp(DnsUpdate,self.__DnsServerIP)
+                    print('DNS Update committed.')
+                else:
+                    self.__alert('>>> No valid movements available!')
+
+        except:
+            self.__alert('!! Fatal ERROR on moving Node(s)!')
+
+        finally:
+            del GitOrigin
+            del GitIndex
+            del GitRepo
+
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
 
         print('... done.\n')
         return
