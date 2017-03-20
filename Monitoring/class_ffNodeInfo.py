@@ -285,13 +285,19 @@ class ffNodeInfo:
         for NewMAC in GluonMacList:
             if NewMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[NewMAC] != MainMAC:
-                    print('\n!! MAC-Collision:',NewMAC)
-                    print('        New Node:',self.ffNodeDict[MainMAC]['KeyDir'],'/',MainMAC,'=',self.ffNodeDict[MainMAC]['Name'].encode('utf-8'))
-                    print('   Existing Node:',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['KeyDir'],'/',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
-                    print()
 
-                    if not NewMAC in self.ffNodeDict[MainMAC]['Neighbours']:
-                        self.ffNodeDict[MainMAC]['Neighbours'].append(NewMAC)
+                    if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['last_online']:
+                        self.MAC2NodeIDDict[NewMAC] = MainMAC
+                        self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Neighbours'] = []
+
+                        if not NewMAC in self.ffNodeDict[MainMAC]['Neighbours']:
+                            self.ffNodeDict[MainMAC]['Neighbours'].append(NewMAC)
+
+#                    print('\n!! MAC-Collision:',NewMAC)
+#                    print('        New Node:',self.ffNodeDict[MainMAC]['KeyDir'],'/',MainMAC,'=',self.ffNodeDict[MainMAC]['Name'].encode('utf-8'))
+#                    print('   Existing Node:',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['KeyDir'],'/',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
+#                    print()
+
             else:
                 self.MAC2NodeIDDict[NewMAC] = MainMAC
 
@@ -958,6 +964,7 @@ class ffNodeInfo:
 
                 self.ffNodeDict[ffNodeMAC]['Segment'] = int(KeyInfo['SegDir'][3:])
                 self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+                self.ffNodeDict[ffNodeMAC]['last_online'] = KeyInfo['LastConn']
 
         return
 

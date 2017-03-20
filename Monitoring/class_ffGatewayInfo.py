@@ -596,6 +596,7 @@ class ffGatewayInfo:
             'PeerName':PeerName,
             'PeerKey':PeerKey,
             'VpnMAC':'',
+            'LastConn':0,
             'DnsSeg':None
         }
 
@@ -661,7 +662,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __AnalyseFastdStatus(self,FastdPeersDict,Segment):
+    def __AnalyseFastdStatus(self,FastdPeersDict,Segment,LastConnected):
 
         ActiveKeyCount = 0
 
@@ -684,6 +685,7 @@ class ffGatewayInfo:
                                 if PeerVpnMAC != '' and not GwAllMacTemplate.match(PeerVpnMAC):
                                     ActiveKeyCount += 1
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['VpnMAC'] = PeerVpnMAC
+                                    self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['LastConn'] = LastConnected
 
                     else:
                         print('!! PeerKey not in FastdKeyDict:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
@@ -729,7 +731,8 @@ class ffGatewayInfo:
                             print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
                             return None
 
-                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment)
+                    LastConnTime = int(time.mktime(HttpDate.timetuple()))
+                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,LastConnTime)
                 else:
                     print('!! Bad fastd status file!',URL)
             else:
