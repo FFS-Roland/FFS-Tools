@@ -979,9 +979,9 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
     DnsUpdate  = None
     isOK       = True
 
+    NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NodeInfo['Segment'],NodeInfo['NodeID'])
     NewPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],PeerKey[:12])
     NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NodeInfo['Segment'])
-    NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NodeInfo['Segment'],NodeInfo['NodeID'])
     print('>>> New Peer Data:', NewPeerDnsName, '=', NewPeerDnsIPv6, '->', NewPeerFile,)
 
     try:
@@ -1010,49 +1010,61 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
 
         elif Action == 'NEW_KEY':
             print('*** New Key for existing Node: vpn%02d / %s = %s -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
+            OldPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],oldKeyID)
             WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
 #            print('>>> File written:',os.path.join(GitPath,NewPeerFile))
-            OldPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],oldKeyID)
+            GitIndex.add([NewPeerFile])
+#            print('>>> Git add of modified file done.')
+
             DnsUpdate.delete(OldPeerDnsName,'AAAA')
             DnsUpdate.add(NewPeerDnsName,300,'AAAA',NewPeerDnsIPv6)
 #            print('>>> DNS update done.')
 
-            GitIndex.add([NewPeerFile])
-#            print('>>> Git add of modified file done.')
-
         elif Action == 'NEW_MAC':
             print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = %s (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
-            WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
-            OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,PeerKey[:12])
-            DnsUpdate.delete(OldPeerDnsName,'AAAA')
-            DnsUpdate.add(NewPeerDnsName, 300,'AAAA',NewPeerDnsIPv6)
-#            print('>>> DNS update done.')
-
             OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,oldNodeID)
-            GitIndex.remove([OldPeerFile])
-#            print('>>> Git remove of old file done.')
-            os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-            GitIndex.add([NewPeerFile])
-#            print('>>> Git add of modified file done.')
+            OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,PeerKey[:12])
+
+            if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                GitIndex.remove([OldPeerFile])
+#                print('>>> Git remove of old file done.')
+                os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
+                WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
+                GitIndex.add([NewPeerFile])
+#                print('>>> Git add of modified file done.')
+
+                DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                DnsUpdate.add(NewPeerDnsName, 300,'AAAA',NewPeerDnsIPv6)
+#                print('>>> DNS update done.')
+            else:
+                print('... Key File was already replaced by other process.')
 
         elif Action == 'NEW_NODE':
             print('*** New Node: vpn%02d / ffs-%s = %s (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
-            WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
-#            print('>>> File written:',os.path.join(GitPath,NewPeerFile))
-            DnsUpdate.add(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
-#            print('>>> DNS add done.')
 
-            GitIndex.add([NewPeerFile])
-#            print('>>> Git add of new file done.')
+            if os.path.exists(os.path.join(GitPath,NewPeerFile)):
+                WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
+#                print('>>> File written:',os.path.join(GitPath,NewPeerFile))
+                GitIndex.add([NewPeerFile])
+#                print('>>> Git add of new file done.')
+
+                DnsUpdate.add(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
+#                print('>>> DNS add done.')
+            else:
+                print('... Key File was already added by other process.')
 
         elif Action == 'CHANGE_SEGMENT':
             print('!!! New Segment for existing Node: vpn%02d / %s = %s -> vpn02d' % (oldSegment,NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),NodeInfo['Segment']))
-            DnsUpdate.replace(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
-
             OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,NodeInfo['NodeID'])
-            GitIndex.remove([OldPeerFile])
-            os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-            GitIndex.add([NewPeerFile])
+
+            if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                GitIndex.remove([OldPeerFile])
+                os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
+                GitIndex.add([NewPeerFile])
+
+                DnsUpdate.replace(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
+            else:
+                print('... Key File was already moved by other process.')
 
         else:
             print('!!! Invalid Action:',Action)
