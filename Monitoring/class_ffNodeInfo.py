@@ -252,6 +252,9 @@ class ffNodeInfo:
     #-------------------------------------------------------------
     def __AddGluonMACs(self,MainMAC,MeshMAC):
 
+        if self.ffNodeDict[MainMAC]['Status'] == '?' and self.ffNodeDict[MainMAC]['Name'] == '<killme>':
+            return  # Node data has to be killed because HW was replaced ...
+
         if MeshMAC != '':
             GluonMacList = self.GenerateGluonMACsNew(MainMAC)
 
@@ -285,18 +288,25 @@ class ffNodeInfo:
         for NewMAC in GluonMacList:
             if NewMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[NewMAC] != MainMAC:
+                    print('\n!! MAC-Collision:',NewMAC,'=',MainMAC,'->',self.MAC2NodeIDDict[NewMAC])
 
                     if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['last_online']:
+                        BadMAC = self.MAC2NodeIDDict[NewMAC]
                         self.MAC2NodeIDDict[NewMAC] = MainMAC
-                        self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Neighbours'] = []
 
-                        if not NewMAC in self.ffNodeDict[MainMAC]['Neighbours']:
-                            self.ffNodeDict[MainMAC]['Neighbours'].append(NewMAC)
+                        for MAC in self.MAC2NodeIDDict:
+                            if self.MAC2NodeIDDict[MAC] == BadMAC:
+                                self.MAC2NodeIDDict[MAC] = MainMAC
 
-#                    print('\n!! MAC-Collision:',NewMAC)
-#                    print('        New Node:',self.ffNodeDict[MainMAC]['KeyDir'],'/',MainMAC,'=',self.ffNodeDict[MainMAC]['Name'].encode('utf-8'))
-#                    print('   Existing Node:',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['KeyDir'],'/',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
-#                    print()
+                    else:
+                        BadMAC = MainMAC
+
+                    print('   Bad Node:',BadMAC,'=',self.ffNodeDict[BadMAC]['Name'].encode('utf-8'))
+                    self.ffNodeDict[BadMAC]['Status'] = '?'
+                    self.ffNodeDict[BadMAC]['Name'] = '<killme>'
+                    self.ffNodeDict[BadMAC]['DestSeg'] = 999    # kill this Node
+                    self.ffNodeDict[BadMAC]['Neighbours'] = []
+                    print()
 
             else:
                 self.MAC2NodeIDDict[NewMAC] = MainMAC
@@ -358,24 +368,24 @@ class ffNodeInfo:
                             continue
 
                     self.ffNodeDict[ffNodeMAC] = {
-                        'RawKey':None,
-                        'Name':jsonDbDict[DbIndex]['hostname'],
-                        'Status':'#',
-                        'last_online':jsonDbDict[DbIndex]['last_online'],
-                        'Clients':0,
-                        'Latitude':None,
-                        'Longitude':None,
-                        'ZIP':None,
-                        'Region':'??',
-                        'DestSeg':99,
-                        'oldGluon':'?',
-                        'Segment':None,
-                        'SegMode':'auto',
-                        'KeyDir':'',
-                        'KeyFile':'',
-                        'FastdKey':'',
-                        'InCloud':0,
-                        'Neighbours':[]
+                        'RawKey': None,
+                        'Name': jsonDbDict[DbIndex]['hostname'],
+                        'Status': '#',
+                        'last_online': jsonDbDict[DbIndex]['last_online'],
+                        'Clients': 0,
+                        'Latitude': None,
+                        'Longitude': None,
+                        'ZIP': None,
+                        'Region': '??',
+                        'DestSeg': None,
+                        'oldGluon': '?',
+                        'Segment': None,
+                        'SegMode': 'auto',
+                        'KeyDir': '',
+                        'KeyFile': '',
+                        'FastdKey': '',
+                        'InCloud': 0,
+                        'Neighbours': []
                     }
 
                     self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
@@ -540,7 +550,7 @@ class ffNodeInfo:
                             'Longitude': None,
                             'ZIP': None,
                             'Region': '??',
-                            'DestSeg': 99,
+                            'DestSeg': None,
                             'oldGluon': '?',
                             'Segment': None,
                             'SegMode': 'auto',
@@ -756,7 +766,7 @@ class ffNodeInfo:
         print('Analysing raw.json ...')
 
         UtcTime  = datetime.datetime.utcnow()
-        UnixTime = time.mktime(UtcTime.timetuple())
+        UnixTime = int(time.mktime(UtcTime.timetuple()))
 
         for ffNodeKey in RawJsonDict.keys():
             if 'nodeinfo' in RawJsonDict[ffNodeKey] and 'statistics' in RawJsonDict[ffNodeKey] and 'lastseen' in RawJsonDict[ffNodeKey]:
@@ -786,7 +796,7 @@ class ffNodeInfo:
                         print('++ Invalid Record:',ffNodeKey,'=',ffNodeMAC)
                         continue
 
-                    LastSeen = time.mktime(datetime.datetime.strptime(RawJsonDict[ffNodeKey]['lastseen'], '%Y-%m-%dT%H:%M:%S.%fZ').timetuple())
+                    LastSeen = int(time.mktime(datetime.datetime.strptime(RawJsonDict[ffNodeKey]['lastseen'], '%Y-%m-%dT%H:%M:%S.%fZ').timetuple()))
 
                     if ffNodeMAC in self.ffNodeDict:
 
@@ -801,28 +811,31 @@ class ffNodeInfo:
                             else:
                                 print('-+ Upd. RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                     else:
+                        if UnixTime - LastSeen > MaxInactiveTime:
+                            continue    # data is too old
+
                         print('++ New Node:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                         self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
 
                         self.ffNodeDict[ffNodeMAC] = {
-                            'RawKey':'',
-                            'Name':RawJsonDict[ffNodeKey]['nodeinfo']['hostname'],
-                            'Status':'#',
-                            'last_online':0,
-                            'Clients':0,
-                            'Latitude':None,
-                            'Longitude':None,
-                            'ZIP':None,
-                            'Region':'??',
-                            'DestSeg':99,
-                            'oldGluon':'?',
-                            'Segment':None,
-                            'SegMode':'auto',
-                            'KeyDir':'',
-                            'KeyFile':'',
-                            'FastdKey':'',
-                            'InCloud':0,
-                            'Neighbours':[]
+                            'RawKey': None,
+                            'Name': RawJsonDict[ffNodeKey]['nodeinfo']['hostname'],
+                            'Status': '#',
+                            'last_online': 0,
+                            'Clients': 0,
+                            'Latitude': None,
+                            'Longitude': None,
+                            'ZIP': None,
+                            'Region': '??',
+                            'DestSeg': None,
+                            'oldGluon': '?',
+                            'Segment': None,
+                            'SegMode': 'auto',
+                            'KeyDir': '',
+                            'KeyFile': '',
+                            'FastdKey': '',
+                            'InCloud': 0,
+                            'Neighbours': []
                         }
 
 
@@ -929,11 +942,11 @@ class ffNodeInfo:
                     'Status': '?',
                     'last_online': 0,
                     'Clients': 0,
-                    'Latitude':None,
-                    'Longitude':None,
-                    'ZIP':None,
+                    'Latitude': None,
+                    'Longitude': None,
+                    'ZIP': None,
                     'Region': '??',
-                    'DestSeg': 99,
+                    'DestSeg': None,
                     'oldGluon': '?',
                     'Segment': int(KeyInfo['SegDir'][3:]),
                     'SegMode': KeyInfo['SegMode'],
@@ -1319,7 +1332,7 @@ class ffNodeInfo:
                                 except:
                                     ZipSegment = None
 
-                            print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#                            print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                             if Segment is not None:
                                 if ZipSegment is not None and ZipSegment != Segment:

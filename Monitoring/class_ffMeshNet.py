@@ -163,7 +163,9 @@ class ffMeshNet:
         TotalClients = 0
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
-            if len(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Neighbours']) > 0 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == 0:
+            if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] == 0) and
+                (len(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Neighbours']) > 0)):
+
                 CloudNumber += 1
 
                 self.__MeshCloudDict[CloudNumber] = {
@@ -311,7 +313,7 @@ class ffMeshNet:
                         if VpnSeg not in UplinkSegList:
                             UplinkSegList.append(VpnSeg)
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99:
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
                             DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] =  1
                         else:
@@ -343,7 +345,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     # private function "__CheckSingleNodes"
     #
-    #   Analysing Mesh Clouds for Segment Shortcuts
+    #   Check if Node is in correct Segment
     #
     #-----------------------------------------------------------------------
     def __CheckSingleNodes(self):
@@ -357,10 +359,10 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto':
                     TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
-                    if TargetSeg == 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
+                    if TargetSeg is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
                         TargetSeg = self.__DefaultTarget
 
-                    if TargetSeg < 99:
+                    if TargetSeg is not None:
                         if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                             if ffNodeMAC in self.__NodeMoveDict:
                                 print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
@@ -374,6 +376,10 @@ class ffMeshNet:
 
                     if self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]) is not None:
                         print('>> Has active Uplink(s), found by Batman.')
+
+            elif ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == '?' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] == 999) and
+                  (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '')):
+                self.__NodeMoveDict[ffNodeMAC] = 999    # kill this Node
 
         print('... done.\n')
         return
@@ -403,7 +409,7 @@ class ffMeshNet:
                     print('!! Uplink w/o Key:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
-                if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
+                if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
                     (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] == 'auto')):
                     print('++ Wrong Segment:    ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]),'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'])
 
@@ -591,7 +597,7 @@ class ffMeshNet:
 
                     if self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'] != '':
                         if ((int(self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffnb]['Segment']) or
-                            (self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffnb]['Segment'])):
+                            (self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffnb]['Segment'])):
                             print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),'->',
                                   self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',
                                   self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['SegMode'])
@@ -636,7 +642,7 @@ class ffMeshNet:
 
                 CurrentError = ' '
 
-                if self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != 99 and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'][3:]):
+                if self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'][3:]):
                     print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],
                           self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['SegMode'])
                     CurrentError = '>'

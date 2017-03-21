@@ -962,24 +962,35 @@ class ffGatewayInfo:
                     if KeyFileName in self.FastdKeyDict:
                         LineCount += 1
                         SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName)
-                        DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
+                        PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
+
+                        if NodeMoveDict[ffNodeMAC] == 99:    # kill this Node
+                            DestFile   = '<Trash>'
+                        else:
+                            DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
+
                         print(SourceFile,'->',DestFile)
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
                             GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
                             print('... Git remove of old location done.')
-                            os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
-                            print('... File moved.')
-                            GitIndex.add([os.path.join(self.__GitPath,DestFile)])
-                            print('... Git add of new location done.')
 
-                            PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
-                            PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
+                            if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
+                                os.remove(os.path.join(self.__GitPath,SourceFile))
+                                print('... File deleted.')
+                                DnsUpdate.delete(PeerDnsName, 'AAAA')
+                            else:    # move this Node
+                                os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
+                                print('... File moved.')
+                                GitIndex.add([os.path.join(self.__GitPath,DestFile)])
+                                print('... Git add of new location done.')
 
-                            if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
-                                DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
-                            else:
-                                DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                                PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
+
+                                if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
+                                    DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                                else:
+                                    DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
 
                             self.__alert('   '+SourceFile+' -> '+DestFile)
                         else:
