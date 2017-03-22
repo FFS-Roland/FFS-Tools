@@ -629,11 +629,11 @@ def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
 
                         if ((BatctlInfo[1][:1] == BatctlInfo[5][:1] and BatctlInfo[1][9:] == BatctlInfo[5][9:]) and
                             (BatctlInfo[5][:1] == BatmanVpnMAC[:1]  and BatctlInfo[5][9:] == BatmanVpnMAC[9:])):  # old MAC schema
-                            print('>>> is old schema:',BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
+                            print('... is old schema:',BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = GenerateGluonMACsOld(BatctlInfo[1])
 #                            print('>>> Old MacList:',BatmanMacList)
                         elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:  # new MAC schema
-                            print('>>> is new schema:', BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
+                            print('... is new schema:', BatmanVpnMAC,'=',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
 #                            print('>>> New MacList:',BatmanMacList)
                         else:
@@ -983,6 +983,7 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
     NewPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],PeerKey[:12])
     NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NodeInfo['Segment'])
     print('>>> New Peer Data:', NewPeerDnsName, '=', NewPeerDnsIPv6, '->', NewPeerFile,)
+#    print('>>> Old Peer Data:', oldSegment, '/', oldNodeID, '=', oldKeyID)
 
     try:
         #----- Synchronizing Git Acccess -----
@@ -1009,19 +1010,20 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
             DnsUpdate = None
 
         elif Action == 'NEW_KEY':
-            print('*** New Key for existing Node: vpn%02d / %s = %s -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
+            print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
             OldPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],oldKeyID)
             WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
 #            print('>>> File written:',os.path.join(GitPath,NewPeerFile))
             GitIndex.add([NewPeerFile])
 #            print('>>> Git add of modified file done.')
 
-            DnsUpdate.delete(OldPeerDnsName,'AAAA')
-            DnsUpdate.add(NewPeerDnsName,300,'AAAA',NewPeerDnsIPv6)
-#            print('>>> DNS update done.')
+            if NodeInfo['Segment'] > 0:
+                DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                DnsUpdate.add(NewPeerDnsName,120,'AAAA',NewPeerDnsIPv6)
+#                print('>>> DNS update done.')
 
         elif Action == 'NEW_MAC':
-            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = %s (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
+            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
             OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,oldNodeID)
             OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,PeerKey[:12])
 
@@ -1033,14 +1035,15 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 GitIndex.add([NewPeerFile])
 #                print('>>> Git add of modified file done.')
 
-                DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                DnsUpdate.add(NewPeerDnsName, 300,'AAAA',NewPeerDnsIPv6)
-#                print('>>> DNS update done.')
+                if NodeInfo['Segment'] > 0:
+                    DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+#                    print('>>> DNS update done.')
             else:
                 print('... Key File was already replaced by other process.')
 
         elif Action == 'NEW_NODE':
-            print('*** New Node: vpn%02d / ffs-%s = %s (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'].encode('utf-8'),PeerKey[:12]))
+            print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
 
             if os.path.exists(os.path.join(GitPath,NewPeerFile)):
                 WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
@@ -1048,13 +1051,14 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 GitIndex.add([NewPeerFile])
 #                print('>>> Git add of new file done.')
 
-                DnsUpdate.add(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
-#                print('>>> DNS add done.')
+                if NodeInfo['Segment'] > 0:
+                    DnsUpdate.add(NewPeerDnsName, 120, 'AAAA',NewPeerDnsIPv6)
+#                    print('>>> DNS add done.')
             else:
                 print('... Key File was already added by other process.')
 
         elif Action == 'CHANGE_SEGMENT':
-            print('!!! New Segment for existing Node: vpn%02d / %s = %s -> vpn02d' % (oldSegment,NodeInfo['MAC'],NodeInfo['Hostname'].encode('utf-8'),NodeInfo['Segment']))
+            print('!!! New Segment for existing Node: vpn%02d / %s = \"%s\" -> vpn%02d' % (oldSegment, NodeInfo['MAC'], NodeInfo['Hostname'], NodeInfo['Segment']) )
             OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,NodeInfo['NodeID'])
 
             if os.path.exists(os.path.join(GitPath,OldPeerFile)):
@@ -1062,7 +1066,10 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
                 GitIndex.add([NewPeerFile])
 
-                DnsUpdate.replace(NewPeerDnsName, 300, 'AAAA',NewPeerDnsIPv6)
+                if NodeInfo['Segment'] == 0:
+                    DnsUpdate.delete(NewPeerDnsName, 'AAAA')    # no DNS-Entries for Legacy
+                else:
+                    DnsUpdate.replace(NewPeerDnsName, 120, 'AAAA',NewPeerDnsIPv6)
             else:
                 print('... Key File was already moved by other process.')
 
@@ -1164,15 +1171,18 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)
 
             if BatmanVpnMAC is not None and BatmanVpnMAC == MeshMAC:
-                print('... Batman and fastd are matching:',BatmanVpnMAC)
+                print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
                 NodeIPv6 = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
                 NodeInfo = getNodeInfos(NodeIPv6)                       # Data from status page of Node via HTTP
                 PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # Node's main MAC from Batman Global Translation Table
 
                 if NodeInfo is not None:
-                    if PeerMAC is not None and PeerMAC != NodeInfo['MAC']:
-                        print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
-                        NodeInfo = None
+                    if PeerMAC is not None:
+                        if PeerMAC != NodeInfo['MAC']:
+                            print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
+                            NodeInfo = None
+                        else:
+                            print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
                 elif PeerMAC is not None:    # No status page -> Fallback to batman
                     NodeInfo    = {
