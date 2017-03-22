@@ -761,11 +761,7 @@ class ffGatewayInfo:
 
             if GwName not in GwIgnoreList:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['Segments']):
-                    if GwName == 'gw09' and ffSeg == 0:
-                        FastdJsonURL = 'http://gw09.%s/fastd/ffs.status.json' % (FreifunkDomain)
-                    else:
-                        FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
-
+                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkDomain,ffSeg)
                     ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
                     print('...',GwName,ffSeg,'=',ActiveConnections)
 
@@ -964,7 +960,7 @@ class ffGatewayInfo:
                         SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName)
                         PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
 
-                        if NodeMoveDict[ffNodeMAC] == 99:    # kill this Node
+                        if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
                             DestFile   = '<Trash>'
                         else:
                             DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
@@ -978,7 +974,10 @@ class ffGatewayInfo:
                             if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
                                 os.remove(os.path.join(self.__GitPath,SourceFile))
                                 print('... File deleted.')
-                                DnsUpdate.delete(PeerDnsName, 'AAAA')
+
+                                if self.FastdKeyDict[KeyFileName]['SegDir'] != 'vpn00':
+                                    DnsUpdate.delete(PeerDnsName, 'AAAA')
+
                             else:    # move this Node
                                 os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
                                 print('... File moved.')
@@ -988,9 +987,12 @@ class ffGatewayInfo:
                                 PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
 
                                 if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
-                                    DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                                    DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                                 else:
-                                    DnsUpdate.replace(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
+                                    if NodeMoveDict[ffNodeMAC] == 0:
+                                        DnsUpdate.delete(PeerDnsName, 'AAAA')    # no DNS-Entries for Legacy
+                                    else:
+                                        DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
 
                             self.__alert('   '+SourceFile+' -> '+DestFile)
                         else:

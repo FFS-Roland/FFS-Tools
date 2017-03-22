@@ -288,7 +288,7 @@ class ffNodeInfo:
         for NewMAC in GluonMacList:
             if NewMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[NewMAC] != MainMAC:
-                    print('\n!! MAC-Collision:',NewMAC,'=',MainMAC,'->',self.MAC2NodeIDDict[NewMAC])
+                    print('\n!! MAC-Collision:',NewMAC,'=',MainMAC,'->',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
 
                     if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['last_online']:
                         BadMAC = self.MAC2NodeIDDict[NewMAC]
@@ -307,6 +307,7 @@ class ffNodeInfo:
                     self.ffNodeDict[BadMAC]['DestSeg'] = 999    # kill this Node
                     self.ffNodeDict[BadMAC]['Neighbours'] = []
                     print()
+                    break
 
             else:
                 self.MAC2NodeIDDict[NewMAC] = MainMAC
