@@ -1164,7 +1164,7 @@ class ffNodeInfo:
         RegionDict = {
             'Center_lat': None,
             'Center_lon': None,
-            'ValidArea' : Polygon([(35.0,-12.0),(72.0,-12.0),(72.0,30.0),(35.0,30.0)]),
+            'ValidArea' : Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
             'Q1_Segment': None,
             'Q2_Segment': None,
             'Q3_Segment': None,
@@ -1196,7 +1196,7 @@ class ffNodeInfo:
                 Shape = []
 
                 for t in Track:
-                    Shape.append( (t[1],t[0]) )
+                    Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
 
                 Area = Polygon(Shape)
 
@@ -1208,11 +1208,12 @@ class ffNodeInfo:
                     CenterPoint = Area.centroid
                     RegionDict['Center_lat'] = CenterPoint.y
                     RegionDict['Center_lon'] = CenterPoint.x
+#                    print('>>> CenterPoint (lon/lat) =',RegionDict['Center_lon'],'|',RegionDict['Center_lat'])
 
-                if Region[:1] == '1': RegionDict['Q1_Segment'] = Segment
-                if Region[:1] == '2': RegionDict['Q2_Segment'] = Segment
-                if Region[:1] == '3': RegionDict['Q3_Segment'] = Segment
-                if Region[:1] == '4': RegionDict['Q4_Segment'] = Segment
+                elif Region[:1] == '1': RegionDict['Q1_Segment'] = Segment
+                elif Region[:1] == '2': RegionDict['Q2_Segment'] = Segment
+                elif Region[:1] == '3': RegionDict['Q3_Segment'] = Segment
+                elif Region[:1] == '4': RegionDict['Q4_Segment'] = Segment
 
         except:
             RegionDict = None
@@ -1234,12 +1235,12 @@ class ffNodeInfo:
     #     Get Segment from GPS using region polygons
     #
     #-------------------------------------------------------------
-    def __GetSegmentFromGPS(self,lat,lon,ffNodeMAC,RegionDict):
+    def __GetSegmentFromGPS(self,lon,lat,ffNodeMAC,RegionDict):
 
         Segment = None
 
         if lat is not None and lon is not None:
-            NodeLocation = Point(lat,lon)
+            NodeLocation = Point(lon,lat)
 
             if RegionDict['ValidArea'].intersects(NodeLocation):
 
@@ -1249,19 +1250,25 @@ class ffNodeInfo:
                         break
 
                 if Segment is None:
+#                    print('>>> GPS not in RegionsDict:',lon,'|',lat)
+
                     if lat > RegionDict['Center_lat']:
                         if lon > RegionDict['Center_lon']:  # Quadrant 1
+#                            print('>>> Q1')
                             Segment = RegionDict['Q1_Segment']
                         else:  # Quadrant 2
+#                            print('>>> Q2')
                             Segment = RegionDict['Q2_Segment']
                     else:
                         if lon < RegionDict['Center_lon']:  # Quadrant 3
+#                            print('>>> Q3')
                             Segment = RegionDict['Q3_Segment']
                         else:  # Quadrant 4
+#                            print('>>> Q4')
                             Segment = RegionDict['Q4_Segment']
 
             else:
-                print('!! Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lat,'|',lon)
+                print('!! Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lon,'|',lat)
 
         return Segment
 
@@ -1302,7 +1309,10 @@ class ffNodeInfo:
                             lat = self.ffNodeDict[ffNodeMAC]['Longitude']
                             lon = self.ffNodeDict[ffNodeMAC]['Latitude']
 
-                        Segment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
+                        while lat > 100.0:    # missing decimal separator
+                            lat /= 10.0
+
+                        Segment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
@@ -1315,7 +1325,7 @@ class ffNodeInfo:
                             if ZipCode in Zip2PosDict:
                                 lat = float(Zip2PosDict[ZipCode]['lat'])
                                 lon = float(Zip2PosDict[ZipCode]['lon'])
-                                ZipSegment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
+                                ZipSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
                             if ZipSegment is None:    # Fallback to online query of OSM ...
                                 lat = 0.0
@@ -1328,7 +1338,7 @@ class ffNodeInfo:
                                     for relation in result.relations:
                                         lat = relation.center_lat
                                         lon = relation.center_lon
-                                        ZipSegment = self.__GetSegmentFromGPS(lat,lon,ffNodeMAC,RegionDict)
+                                        ZipSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
                                         break
                                 except:
                                     ZipSegment = None
@@ -1340,7 +1350,7 @@ class ffNodeInfo:
                                     print('!! Segment Mismatch Geo <> ZIP:',Segment,'<>',ZipSegment)
                             elif ZipSegment is not None:
                                 Segment = ZipSegment
-                                print('>>> Segment set by ZIP-Code:',Segment)
+                                print('>>> Segment set by ZIP-Code:',Segment,'->',lon,'|',lat)
 
                         else:
                             print('!! Invalid ZIP-Code:',ZipCode)

@@ -950,13 +950,12 @@ class ffGatewayInfo:
                 self.__alert('!! The Git Repository and/or DNS are not clean - cannot move Nodes!')
             else:
                 self.__alert('++ The following Nodes will be moved automatically:')
-                LineCount = 0
+                MoveCount = 0
 
                 for ffNodeMAC in NodeMoveDict:
                     KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
 
                     if KeyFileName in self.FastdKeyDict:
-                        LineCount += 1
                         SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName)
                         PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
 
@@ -967,7 +966,8 @@ class ffGatewayInfo:
 
                         print(SourceFile,'->',DestFile)
 
-                        if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
+                        if os.path.exists(os.path.join(self.__GitPath,SourceFile)) and NodeMoveDict[ffNodeMAC] > 0:
+                            MoveCount += 1
                             GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
                             print('... Git remove of old location done.')
 
@@ -989,12 +989,12 @@ class ffGatewayInfo:
                                 if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
                                     DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                                 else:
-                                    if NodeMoveDict[ffNodeMAC] == 0:
-                                        DnsUpdate.delete(PeerDnsName, 'AAAA')    # no DNS-Entries for Legacy
-                                    else:
-                                        DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
+                                    DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
 
                             self.__alert('   '+SourceFile+' -> '+DestFile)
+
+                        elif NodeMoveDict[ffNodeMAC] == 0:
+                            self.__alert('!! Will not move to Legacy: '+KeyFileName+' = '+ffNodeMAC)
                         else:
                             print('... Key File was already moved by other process.')
 
@@ -1002,7 +1002,7 @@ class ffGatewayInfo:
                         self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
 
 
-                if LineCount > 0:
+                if MoveCount > 0:
                     print('... doing Git commit ...')
                     GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
                     GitOrigin.config_writer.set('url',GitAccount['URL'])
@@ -1011,8 +1011,9 @@ class ffGatewayInfo:
                     print('... doing Git push ...')
                     GitOrigin.push()
 
-                    dns.query.tcp(DnsUpdate,self.__DnsServerIP)
-                    print('DNS Update committed.')
+                    if len(DnsUpdate.index) > 1:
+                        dns.query.tcp(DnsUpdate,self.__DnsServerIP)
+                        print('DNS Update committed.')
                 else:
                     self.__alert('>>> No valid movements available!')
 

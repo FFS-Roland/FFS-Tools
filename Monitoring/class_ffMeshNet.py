@@ -209,11 +209,12 @@ class ffMeshNet:
                     if ffNodeMAC in self.__NodeMoveDict:
                         print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
 
-                    self.__NodeMoveDict[ffNodeMAC] = TargetSeg
-                    print('>> git mv %s/peers/%s vpn%02d/peers/  = %s'%( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
-                                                                         TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8') ))
-#                    print(self.__NodeInfos.ffNodeDict[ffNodeMAC])
-                    print()
+                    if TargetSeg == 0:
+                        print('!! No move to Legacy: %s/peers/%s\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']) )
+                    else:
+                        self.__NodeMoveDict[ffNodeMAC] = TargetSeg
+                        print('>> git mv %s/peers/%s vpn%02d/peers/  = %s\n' % ( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
+                                                                                 TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8') ))
 
         return
 
@@ -300,12 +301,16 @@ class ffMeshNet:
                 ActiveSegList  = []    # really used segments
                 UplinkSegList  = []    # List of segments from nodes with uplink
                 FixedSegList   = []    # List of segments from nodes with fixed segment assignment
+                isOnline       = False
 
                 #---------- Analysing used segments with their nodes and clients ----------
                 for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegList:
-                        ActiveSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '#':
+                        isOnline = True
+
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegList:
+                            ActiveSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
                         VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
@@ -327,7 +332,7 @@ class ffMeshNet:
                 if len(UplinkSegList) > 1:
                     self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)  # Shortcut !!
                 else:
-                    if len(UplinkSegList) == 0:
+                    if len(UplinkSegList) == 0 and isOnline:
                         print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
                         UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],ActiveSegList)
                         print('>> Uplink(s) found by Batman:',UplinkList)
@@ -375,7 +380,7 @@ class ffMeshNet:
                     print('++ Node seems to be w/o VPN Uplink:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
 
                     if self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]) is not None:
-                        print('>> Has active Uplink(s), found by Batman.')
+                        print('>> Has active Uplink, found by Batman.')
 
             elif ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == '?' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] == 999) and
                   (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '')):
