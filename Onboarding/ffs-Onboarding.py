@@ -246,25 +246,40 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
                     'MAC'      : NodeJson['network']['mac'].strip(),
                     'Hostname' : NodeJson['hostname'].strip(),
                     'Segment'  : None,
-                    'Location' : None
+                    'Location' : None,
+                    'Contact'  : None
                 }
+
+                if 'owner' in NodeJson:
+                    if 'contact' in NodeJson['owner']:
+                        NodeInfoDict['Contact'] = NodeJson['owner']['contact']
 
                 print('>>> NodeID   =',NodeInfoDict['NodeID'])
                 print('>>> MAC      =',NodeInfoDict['MAC'])
                 print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
+                print('>>> Contact  =',NodeInfoDict['Contact'])
 
                 if 'location' in NodeJson:
                     NodeInfoDict['Location'] = NodeJson['location']
 
+                Segment = None
+
                 for NodeIPv6 in NodeJson['network']['addresses']:
                     print('>>> IPv6 =',NodeIPv6)
-                    if NodeIPv6[0:12] == 'fd21:b4dc:4b' and NodeInfoDict['Segment'] is None:
+                    if NodeIPv6[0:12] == 'fd21:b4dc:4b':
                         if NodeIPv6[12:14] == '1e':
-                             NodeInfoDict['Segment'] = 0
+                            Segment = 0
                         else:
-                            NodeInfoDict['Segment'] = int(NodeIPv6[12:14])
-#                        break
-                print('>>> NodeInfo Segment =',NodeInfoDict['Segment'])
+                            Segment = int(NodeIPv6[12:14])
+
+                        if NodeInfoDict['Segment'] is None:
+                            NodeInfoDict['Segment'] = Segment
+                        elif NodeInfoDict['Segment'] != Segment:
+                            print('!! Addresses of multiple Segments:',NodeInfoDict['Segment'],'<>',Segment)
+                            NodeInfoDict = None
+                            break
+
+                print('>>> NodeInfo Segment =',Segment)
 
     return NodeInfoDict
 
@@ -297,7 +312,8 @@ def InfoFromGluonStatusPage(HttpIPv6):
         'MAC'      : None,
         'Hostname' : None,
         'Segment'  : None,
-        'Location' : None
+        'Location' : None,
+        'Contact'  : None
     }
 
     pStart = NodeHTML.find('<body><h1>')
@@ -328,10 +344,10 @@ def InfoFromGluonStatusPage(HttpIPv6):
         if pStop > pStart + 2:
             if NodeHTML[pStart:pStart+2] == '1e':
                 NodeInfoDict['Segment'] = 0
+                print('>>> StatusInfo Segment =',NodeInfoDict['Segment'])
             else:
-                NodeInfoDict['Segment'] = int(NodeHTML[pStart:pStart+2])
-
-            print('>>> StatusInfo Segment =',NodeInfoDict['Segment'])
+                NodeInfoDict = None
+                print('!! Old Node in new Mesh Cloud!')
 
     return NodeInfoDict
 
@@ -726,7 +742,7 @@ def __SetupRegionData(Path):
     RegionDict = {
         'Center_lat': None,
         'Center_lon': None,
-        'ValidArea' : Polygon([(35.0,-12.0),(72.0,-12.0),(72.0,30.0),(35.0,30.0)]),
+        'ValidArea' : Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
         'Q1_Segment': None,
         'Q2_Segment': None,
         'Q3_Segment': None,
@@ -758,7 +774,7 @@ def __SetupRegionData(Path):
             Shape = []
 
             for t in Track:
-                Shape.append( (t[1],t[0]) )
+                Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
 
             Area = Polygon(Shape)
 
@@ -795,14 +811,14 @@ def __SetupRegionData(Path):
 #
 #   Get Segment from Position (GPS Coordinate)
 #-----------------------------------------------------------------------
-def GetSegmentFromGPS(lat,lon,RegionDict):
+def GetSegmentFromGPS(lon,lat,RegionDict):
 
     print('... Get Segment from GPS Data ...')
 
     Segment = None
 
     if lat is not None and lon is not None:
-        NodeLocation = Point(lat,lon)
+        NodeLocation = Point(lon,lat)
 
         if RegionDict['ValidArea'].intersects(NodeLocation):
             for Region in RegionDict['Polygons'].keys():
@@ -823,7 +839,7 @@ def GetSegmentFromGPS(lat,lon,RegionDict):
                         Segment = RegionDict['Q4_Segment']
 
         else:
-            print('++ Invalid Location:',lat,'|',lon)
+            print('++ Invalid Location (lon|lat):',lon,'|',lat)
 
     return Segment
 
@@ -844,15 +860,15 @@ def GetGeoSegment(Location,RegionDataPath):
     if RegionDict is None:
         print('!! No Region Data available !!!')
     else:
-        if 'latitude' in Location and 'longitude' in Location:
-            lat = Location['latitude']
+        if 'longitude' in Location and 'latitude' in Location:
             lon = Location['longitude']
+            lat = Location['latitude']
 
             if lat < lon:
-                lat = Location['longitude']
                 lon = Location['latitude']
+                lat = Location['longitude']
 
-            Segment = GetSegmentFromGPS(lat,lon,RegionDict)
+            Segment = GetSegmentFromGPS(lon,lat,RegionDict)
 
         if 'zip' in Location:
             ZipCode = str(Location['zip'])[:5]
@@ -864,13 +880,13 @@ def GetGeoSegment(Location,RegionDataPath):
 
                 if Zip2PosDict is not None:
                     if ZipCode in Zip2PosDict:
-                        lat = float(Zip2PosDict[ZipCode]['lat'])
                         lon = float(Zip2PosDict[ZipCode]['lon'])
-                        ZipSegment = GetSegmentFromGPS(lat,lon,RegionDict)
+                        lat = float(Zip2PosDict[ZipCode]['lat'])
+                        ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
 
                 if ZipSegment is None:  # Fallback to OpenStreetMap online request
-                    lat = 0.0
                     lon = 0.0
+                    lat = 0.0
 
                     try:
                         api = overpy.Overpass()
@@ -878,9 +894,9 @@ def GetGeoSegment(Location,RegionDataPath):
                         result = api.query(query)
 
                         for relation in result.relations:
-                            lat = relation.center_lat
                             lon = relation.center_lon
-                            ZipSegment = GetSegmentFromGPS(lat,lon,RegionDict)
+                            lat = relation.center_lat
+                            ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
                             break
                     except:
                         ZipSegment = None
@@ -977,6 +993,7 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
 
     DnsKeyRing = None
     DnsUpdate  = None
+    NeedCommit = False
     isOK       = True
 
     NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NodeInfo['Segment'],NodeInfo['NodeID'])
@@ -1013,14 +1030,12 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
             print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
             OldPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],oldKeyID)
             WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
-#            print('>>> File written:',os.path.join(GitPath,NewPeerFile))
             GitIndex.add([NewPeerFile])
-#            print('>>> Git add of modified file done.')
+            NeedCommit = True
 
             if NodeInfo['Segment'] > 0:
                 DnsUpdate.delete(OldPeerDnsName,'AAAA')
                 DnsUpdate.add(NewPeerDnsName,120,'AAAA',NewPeerDnsIPv6)
-#                print('>>> DNS update done.')
 
         elif Action == 'NEW_MAC':
             print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
@@ -1029,31 +1044,27 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
 
             if os.path.exists(os.path.join(GitPath,OldPeerFile)):
                 GitIndex.remove([OldPeerFile])
-#                print('>>> Git remove of old file done.')
                 os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
                 WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
                 GitIndex.add([NewPeerFile])
-#                print('>>> Git add of modified file done.')
+                NeedCommit = True
 
                 if NodeInfo['Segment'] > 0:
                     DnsUpdate.delete(OldPeerDnsName,'AAAA')
                     DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-#                    print('>>> DNS update done.')
             else:
                 print('... Key File was already replaced by other process.')
 
         elif Action == 'NEW_NODE':
             print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
 
-            if os.path.exists(os.path.join(GitPath,NewPeerFile)):
+            if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
                 WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
-#                print('>>> File written:',os.path.join(GitPath,NewPeerFile))
                 GitIndex.add([NewPeerFile])
-#                print('>>> Git add of new file done.')
+                NeedCommit = True
 
                 if NodeInfo['Segment'] > 0:
                     DnsUpdate.add(NewPeerDnsName, 120, 'AAAA',NewPeerDnsIPv6)
-#                    print('>>> DNS add done.')
             else:
                 print('... Key File was already added by other process.')
 
@@ -1065,6 +1076,7 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 GitIndex.remove([OldPeerFile])
                 os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
                 GitIndex.add([NewPeerFile])
+                NeedCommit = True
 
                 if NodeInfo['Segment'] == 0:
                     DnsUpdate.delete(NewPeerDnsName, 'AAAA')    # no DNS-Entries for Legacy
@@ -1078,19 +1090,22 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
             DnsUpdate = None
 
         if DnsUpdate is not None:
-            dns.query.tcp(DnsUpdate,DnsServerIP)
+            if NeedCommit:
+                GitIndex.commit('Onboarding (%s) of Peer \"%s\" in Segment %02d' % (Action,NodeInfo['Hostname'],NodeInfo['Segment']))
+                GitOrigin.config_writer.set('url',AccountsDict['Git']['URL'])
+                print('... doing Git pull ...')
+                GitOrigin.pull()
+                print('... doing Git push ...')
+                GitOrigin.push()
 
-            GitIndex.commit('Onboarding (%s) of Peer \"%s\" in Segment %02d' % (Action,NodeInfo['Hostname'],NodeInfo['Segment']))
-            GitOrigin.config_writer.set('url',AccountsDict['Git']['URL'])
-#            print('... doing Git pull ...')
-            GitOrigin.pull()
-            print('... doing Git push ...')
-            GitOrigin.push()
+                if len(DnsUpdate.index) > 1:
+                    dns.query.tcp(DnsUpdate,DnsServerIP)
 
-            MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey)
-            print(MailBody)
+                MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey)
+                print(MailBody)
 
-            __SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
+                __SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
+
         else:
             print('!!! ERROR - DnsUpdate is None:',Action)
 
@@ -1191,7 +1206,8 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         'MAC'      : PeerMAC,
                         'Hostname' : 'ffs-'+PeerMAC.replace(':',''),
                         'Segment'  : None,
-                        'Location' : None
+                        'Location' : None,
+                        'Contact'  : None
                     }
 
                     print('++ Statuspage not available -> Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
