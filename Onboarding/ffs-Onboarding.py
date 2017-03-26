@@ -397,62 +397,62 @@ def getNodeInfos(HttpIPv6):
 
 
 #-----------------------------------------------------------------------
-# function "GetDnsInfo"
+# function "GetGitInfo"
 #
 #-----------------------------------------------------------------------
-def GetDnsInfo(DnsServerName):
+def GetGitInfo(GitPath):
 
-    print('... Loading DNS Info ...')
-    DnsDataDict = None
+    print('... Loading Git Info ...')
+    GitDataDict = None
     NodeCount = 0
 
     try:
-        DnsResolver = dns.resolver.Resolver()
-        DnsServerIP = DnsResolver.query('%s.' % (DnsServerName),'a')[0].to_text()
-        DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,SEGASSIGN_DOMAIN))
+        #----- Synchronizing Git Acccess -----
+        GitLockName = os.path.join('/tmp','.'+os.path.basename(GitPath)+'.lock')
+        LockFile = open(GitLockName, mode='w+')
+        fcntl.lockf(LockFile,fcntl.LOCK_EX)
+
+        GitRepo   = git.Repo(GitPath)
+        GitOrigin = GitRepo.remotes.origin
+
+        if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0:
+            print('!! The Git Repository is not clean - cannot register Node!')
+        else:
+            GitDataDict = { 'NodeID':{}, 'Key':{} }
+            GitOrigin.pull()
+            SegmentDirs = glob(os.path.join(GitPath,'vpn*'))
+
+            for VpnPath in SegmentDirs:
+                ffNodeSeg = int(os.path.basename(VpnPath)[3:])
+                KeyFileList = glob('%s/peers/ffs-*' % (VpnPath))
+
+                for KeyFilePath in KeyFileList:
+                    with open(KeyFilePath,'r') as KeyFile:
+                        KeyData = KeyFile.read()
+
+                        for DataLine in KeyData.split('\n'):
+                            if DataLine.startswith('key '):
+                                NodeCount += 1
+                                ffNodeID  = os.path.basename(KeyFilePath)[4:]
+                                ffNodeKey = DataLine.split(' ')[1][1:-2]
+
+                                GitDataDict['NodeID'][ffNodeID] = { 'Key':ffNodeKey, 'Segment':ffNodeSeg }
+                                GitDataDict['Key'][ffNodeKey] = ffNodeID
+
     except:
-        print('!! ERROR on fetching segassign DNS Zone!')
-        DnsZone = None
+        print('!!! ERROR accessing Git Reository!')
+        GitDataDict = None
 
-    if DnsZone is not None:
-        DnsDataDict = { 'NodeID':{}, 'KeyID':{} }
+    finally:
+        del GitOrigin
+        del GitRepo
 
-        for name, node in DnsZone.nodes.items():
-            DnsNodeID = name.to_text().strip()
+        fcntl.lockf(LockFile,fcntl.LOCK_UN)
+        LockFile.close()
 
-            if DnsNodeTemplate.match(DnsNodeID):
-                NodeCount += 1
-                ffNodeID  = DnsNodeID[4:16]
-                ffNodeKey = DnsNodeID[17:]
-                ffNodeSeg = None
+        print('... Git-Infos loaded:',NodeCount)
 
-                for rds in node.rdatasets:
-                    if rds.rdtype == dns.rdatatype.AAAA and ffNodeSeg is None:
-                        for r in rds:
-                            IPv6 = r.to_text().strip()
-
-                            if IPv6NodeTemplate.match(IPv6):
-                                DnsNodeInfo = IPv6.split(':')
-                                ffNodeSeg = int(DnsNodeInfo[-1])
-                                break
-
-                if ffNodeID in DnsDataDict['NodeID']:
-                    print('!! Duplicate NodeID:',ffNodeID,'->',DnsDataDict['NodeID'][ffNodeID])
-                else:
-                    DnsDataDict['NodeID'][ffNodeID] = { 'KeyID':ffNodeKey, 'Segment':ffNodeSeg }
-
-                if ffNodeKey in DnsDataDict['KeyID']:
-                    print('!! Duplicate fastd Key:',ffNodeKey,'->',DnsDataDict['KeyID'][ffNodeKey])
-                else:
-                    DnsDataDict['KeyID'][ffNodeKey] = ffNodeID
-
-                if ffNodeSeg is None:
-                    print('!! No Segment for NodeID:',ffNodeID,'->',DnsDataDict['NodeID'][ffNodeID])
-
-
-        print('... DNS-Infos loaded:',NodeCount)
-
-    return DnsDataDict
+    return GitDataDict
 
 
 
@@ -463,7 +463,7 @@ def GetDnsInfo(DnsServerName):
 def ActivateBatman(BatmanIF,FastdIF):
 
     print('... Activating Batman ...')
-    Retries = 10
+    Retries = 15
     NeighborMAC = None
 
     try:
@@ -488,6 +488,7 @@ def ActivateBatman(BatmanIF,FastdIF):
                         Retries = 0
                         break
             except:
+#                print('++ ERROR on running batctl n:',BatmanIF,'->',FastdIF)
                 NeighborMAC = None
 
     return NeighborMAC
@@ -989,7 +990,7 @@ def WriteNodeKeyFile(KeyFileName,NodeInfo,PeerKey):
 #     CHANGE_SEGMENT
 #
 #-----------------------------------------------------------------------
-def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, GitPath, AccountsDict):
+def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, AccountsDict):
 
     DnsKeyRing = None
     DnsUpdate  = None
@@ -1000,7 +1001,11 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
     NewPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],PeerKey[:12])
     NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NodeInfo['Segment'])
     print('>>> New Peer Data:', NewPeerDnsName, '=', NewPeerDnsIPv6, '->', NewPeerFile,)
-#    print('>>> Old Peer Data:', oldSegment, '/', oldNodeID, '=', oldKeyID)
+
+    OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (oldSegment,oldNodeID)
+    OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,oldKey[:12])
+
+#    print('>>> Old Peer Data:', oldSegment, '/', oldNodeID, '=', oldKey[:12])
 
     try:
         #----- Synchronizing Git Acccess -----
@@ -1026,70 +1031,57 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
             DnsUpdate = None
 
-        elif Action == 'NEW_KEY':
-            print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
-            OldPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],oldKeyID)
-            WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
-            GitIndex.add([NewPeerFile])
-            NeedCommit = True
-
-            if NodeInfo['Segment'] > 0:
-                DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                DnsUpdate.add(NewPeerDnsName,120,'AAAA',NewPeerDnsIPv6)
-
-        elif Action == 'NEW_MAC':
-            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
-            OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,oldNodeID)
-            OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,PeerKey[:12])
-
-            if os.path.exists(os.path.join(GitPath,OldPeerFile)):
-                GitIndex.remove([OldPeerFile])
-                os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-                WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
-                GitIndex.add([NewPeerFile])
-                NeedCommit = True
-
-                if NodeInfo['Segment'] > 0:
-                    DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-            else:
-                print('... Key File was already replaced by other process.')
-
-        elif Action == 'NEW_NODE':
-            print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
-
-            if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
-                WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
-                GitIndex.add([NewPeerFile])
-                NeedCommit = True
-
-                if NodeInfo['Segment'] > 0:
-                    DnsUpdate.add(NewPeerDnsName, 120, 'AAAA',NewPeerDnsIPv6)
-            else:
-                print('... Key File was already added by other process.')
-
-        elif Action == 'CHANGE_SEGMENT':
-            print('!!! New Segment for existing Node: vpn%02d / %s = \"%s\" -> vpn%02d' % (oldSegment, NodeInfo['MAC'], NodeInfo['Hostname'], NodeInfo['Segment']) )
-            OldPeerFile = 'vpn%02d/peers/ffs-%s' % (oldSegment,NodeInfo['NodeID'])
-
-            if os.path.exists(os.path.join(GitPath,OldPeerFile)):
-                GitIndex.remove([OldPeerFile])
-                os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-                GitIndex.add([NewPeerFile])
-                NeedCommit = True
-
-                if NodeInfo['Segment'] == 0:
-                    DnsUpdate.delete(NewPeerDnsName, 'AAAA')    # no DNS-Entries for Legacy
-                else:
-                    DnsUpdate.replace(NewPeerDnsName, 120, 'AAAA',NewPeerDnsIPv6)
-            else:
-                print('... Key File was already moved by other process.')
-
         else:
-            print('!!! Invalid Action:',Action)
-            DnsUpdate = None
+            if Action == 'NEW_NODE':
+                print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
 
-        if DnsUpdate is not None:
+                if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                    GitIndex.remove([OldPeerFile])
+                    os.remove(os.path.join(GitPath,OldPeerFile))
+                    NeedCommit = True
+
+                if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
+                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
+                    GitIndex.add([NewPeerFile])
+                    NeedCommit = True
+                else:
+                    print('... Key File was already added by other process.')
+
+            else:    # Node already exists
+                if NewPeerFile != OldPeerFile:    # Segment + NodeID
+                    if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                        GitIndex.remove([OldPeerFile])
+                        os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
+                    else:
+                        print('... Registration of Node was already done by other process.')
+                        DnsUpdate = None
+
+                if DnsUpdate is not None:
+
+                    if NewPeerDnsName != OldPeerDnsName and oldSegment > 0:    # NodeID + Key
+                        DnsUpdate.delete(OldPeerDnsName,'AAAA')
+
+                    if Action == 'NEW_KEY':
+                        print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
+                        GitIndex.add([NewPeerFile])
+                        NeedCommit = True
+
+                    elif Action == 'NEW_MAC':
+                        print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
+                        GitIndex.add([NewPeerFile])
+                        NeedCommit = True
+
+                    elif Action == 'CHANGE_SEGMENT':
+                        print('!!! New Segment for existing Node: vpn%02d / %s = \"%s\" -> vpn%02d' % (oldSegment, NodeInfo['MAC'], NodeInfo['Hostname'], NodeInfo['Segment']) )
+                        GitIndex.add([NewPeerFile])
+                        NeedCommit = True
+
+                    else:
+                        print('!!! Invalid Action:',Action)
+                        DnsUpdate = None
+
             if NeedCommit:
                 GitIndex.commit('Onboarding (%s) of Peer \"%s\" in Segment %02d' % (Action,NodeInfo['Hostname'],NodeInfo['Segment']))
                 GitOrigin.config_writer.set('url',AccountsDict['Git']['URL'])
@@ -1098,6 +1090,9 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 print('... doing Git push ...')
                 GitOrigin.push()
 
+                if NodeInfo['Segment'] > 0:
+                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+
                 if len(DnsUpdate.index) > 1:
                     dns.query.tcp(DnsUpdate,DnsServerIP)
 
@@ -1105,9 +1100,6 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKeyID, oldSegment, Git
                 print(MailBody)
 
                 __SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
-
-        else:
-            print('!!! ERROR - DnsUpdate is None:',Action)
 
     except:
         print('!!! ERROR on registering Node:',Action)
@@ -1228,44 +1220,42 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                             print('>>> GeoSegment =',NodeInfo['Segment'])
 
                     PeerFile = 'ffs-'+NodeInfo['NodeID']
-                    DnsDataDict = GetDnsInfo(AccountsDict['DNS']['Server'])
+                    GitDataDict = GetGitInfo(args.GITREPO)
 
-                    if DnsDataDict is not None:
-                        if NodeInfo['NodeID'] in DnsDataDict['NodeID']:
-                            KeyID = DnsDataDict['NodeID'][NodeInfo['NodeID']]['KeyID']
+                    if GitDataDict is not None:
 
-                            if KeyID == PeerKey[:12]:    # ... This Node is already registered in DNS
-                                DnsSegment = DnsDataDict['NodeID'][NodeInfo['NodeID']]['Segment']
-                                print('>>> Segment from DNS / Node =',DnsSegment,'/',NodeInfo['Segment'])
+                        if NodeInfo['NodeID'] in GitDataDict['NodeID']:
+                            GitKey     = GitDataDict['NodeID'][NodeInfo['NodeID']]['Key']
+                            GitSegment = GitDataDict['NodeID'][NodeInfo['NodeID']]['Segment']
 
-                                if DnsSegment is not None:
-                                    if NodeInfo['Segment'] is not None and NodeInfo['Segment'] != DnsSegment:
-                                        print('!! Node must be moved to other Segment: vpn%02d / %s -> vpn%02d\n' % (DnsSegment,PeerFile,NodeInfo['Segment']))
+                            print('>>> Segment from Git / Node =',GitSegment,'/',NodeInfo['Segment'])
 
-                                        if not RegisterNode('CHANGE_SEGMENT', NodeInfo, PeerKey, None, None, DnsSegment, args.GITREPO, AccountsDict):
-                                            RetCode = 1
+                            if GitKey == PeerKey:    # ... This Node is already registered in Git
 
-                                    elif NodeInfo['NodeType'] == 'old' and DnsSegment != 0:
-                                        print('!! Old Node is meshing in new Cloud: vpn%02d / %s\n' % (DnsSegment,PeerFile))
-                                    else:
-                                        print('++ Node is already registered: vpn%02d / %s\n' % (DnsSegment,PeerFile))
+                                if NodeInfo['Segment'] is not None and NodeInfo['Segment'] != GitSegment:
+                                    print('!! Node must be moved to other Segment: vpn%02d / %s -> vpn%02d\n' % (GitSegment,PeerFile,NodeInfo['Segment']))
+
+                                    if not RegisterNode('CHANGE_SEGMENT', NodeInfo, PeerKey, NodeInfo['NodeID'], GitKey, GitSegment, args.GITREPO, AccountsDict):
+                                        RetCode = 1
+
+                                elif NodeInfo['NodeType'] == 'old' and GitSegment != 0:
+                                    print('!! Old Node is meshing in new Cloud: vpn%02d / %s\n' % (GitSegment,PeerFile))
                                 else:
-                                    print('!! Invalid DNS-Entry for Node: %s-%s\n' % (PeerFile,PeerKey[:12]))
+                                    print('++ Node is already registered: vpn%02d / %s\n' % (GitSegment,PeerFile))
 
                             else:    # ... New Key for existing Node Hardware
-                                print('!! New Key for existing Node:',PeerFile,'/',NodeInfo['MAC'],'=',NodeInfo['Hostname'],'->',KeyID+'...')
+                                print('!! New Key for existing Node:',PeerFile,'/',NodeInfo['MAC'],'=',NodeInfo['Hostname'],'->',GitKeyID[:12]+'...')
 
-                                if not RegisterNode('NEW_KEY', NodeInfo, PeerKey, None, KeyID, None, args.GITREPO, AccountsDict):
+                                if not RegisterNode('NEW_KEY', NodeInfo, PeerKey, NodeInfo['NodeID'], GitKey, GitSegment, args.GITREPO, AccountsDict):
                                     RetCode = 1
 
-
                         else:    # NodeID is not registered ...
-                            if PeerKey[:12] in DnsDataDict['KeyID']:    # Key is already used ...
-                                oldNodeID = DnsDataDict['KeyID'][PeerKey[:12]]
-                                oldSegment  = DnsDataDict['NodeID'][oldNodeID]['Segment']
-                                print('!! Key is already in use (old -> new): vpn%02d / ffs-%s -> vpn%02d / %s = %s' % (oldSegment,oldNodeID, NodeInfo['Segment'],PeerFile,NodeInfo['Hostname']))
+                            if PeerKey in GitDataDict['Key']:    # Key is already used ...
+                                GitNodeID  = GitDataDict['Key'][PeerKey]
+                                GitSegment = GitDataDict['NodeID'][GitNodeID]['Segment']
+                                print('!! Key is already in use (old -> new): vpn%02d / ffs-%s -> vpn%02d / %s = %s' % (GitSegment,GitNodeID, NodeInfo['Segment'],PeerFile,NodeInfo['Hostname']))
 
-                                if not RegisterNode('NEW_MAC', NodeInfo, PeerKey, oldNodeID, PeerKey[:12], oldSegment, args.GITREPO, AccountsDict):
+                                if not RegisterNode('NEW_MAC', NodeInfo, PeerKey, GitNodeID, PeerKey, GitSegment, args.GITREPO, AccountsDict):
                                     RetCode = 1
 
                             else:    # ... is new Node ...
@@ -1273,7 +1263,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                                     NodeInfo['Segment'] = GetDefaultSegment(os.path.join(args.DATAPATH,StatFileName))
                                     print('>>> Default Segment =',NodeInfo['Segment'])
 
-                                if not RegisterNode('NEW_NODE', NodeInfo, PeerKey, None, None, None, args.GITREPO, AccountsDict):
+                                if not RegisterNode('NEW_NODE', NodeInfo, PeerKey, NodeInfo['NodeID'], 'DeadBeef', 0, args.GITREPO, AccountsDict):
                                     RetCode = 1
 
                     else:
@@ -1287,7 +1277,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             DeactivateBatman(args.BATIF,args.VPNIF)
 
         else:
-            print('++ MeshMAC (or KeyDataDict) is not available!',MeshMAC)
+            print('++ MeshMAC is not available!')
 
     else:
         print('!! ERROR: Accounts or Fastd Status Socket not available!')
