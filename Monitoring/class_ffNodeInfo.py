@@ -443,9 +443,9 @@ class ffNodeInfo:
                     if 'region' in jsonDbDict[DbIndex]:
                         self.ffNodeDict[ffNodeMAC]['Region'] = jsonDbDict[DbIndex]['region']
 
-                    if 'desiredSegment' in jsonDbDict[DbIndex]:
-                        if SegmentTemplate.match(jsonDbDict[DbIndex]['desiredSegment']):
-                            self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(jsonDbDict[DbIndex]['desiredSegment'])
+#                    if 'desiredSegment' in jsonDbDict[DbIndex]:
+#                        if SegmentTemplate.match(jsonDbDict[DbIndex]['desiredSegment']):
+#                            self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(jsonDbDict[DbIndex]['desiredSegment'])
 
                     if 'mesh_interfaces' in NodeNets:
                         for MeshMAC in NodeNets['mesh_interfaces']:
@@ -471,8 +471,8 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
                                     elif jsonDbDict[DbIndex]['software']['firmware']['release'][:13] in GoodOldGluonList:
                                         self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
-                                    else:
-                                        self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix vpn00'
+#                                    else:
+#                                        self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix vpn00'
 
                             if 'base' in jsonDbDict[DbIndex]['software']['firmware']:
                                 if jsonDbDict[DbIndex]['software']['firmware']['base'] is not None:
@@ -1295,10 +1295,12 @@ class ffNodeInfo:
             isOK = False
         else:
             for ffNodeMAC in self.ffNodeDict.keys():
-                if self.ffNodeDict[ffNodeMAC]['Status'] != '?':
+                if self.ffNodeDict[ffNodeMAC]['Status'] == '?': continue
+
+                if self.ffNodeDict[ffNodeMAC]['oldGluon'] == ' ':  # Segment aware Gluon
                     lat = None
                     lon = None
-                    Segment = None
+                    GeoSegment = None
 
                     if self.ffNodeDict[ffNodeMAC]['Latitude'] is not None and self.ffNodeDict[ffNodeMAC]['Longitude'] is not None:
 
@@ -1312,7 +1314,7 @@ class ffNodeInfo:
                         while lat > 100.0:    # missing decimal separator
                             lat /= 10.0
 
-                        Segment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
+                        GeoSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
@@ -1343,20 +1345,23 @@ class ffNodeInfo:
                                 except:
                                     ZipSegment = None
 
-#                            print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+#                            print('>>> GeoSegment / ZipSegment =',GeoSegment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-                            if Segment is not None:
-                                if ZipSegment is not None and ZipSegment != Segment:
-                                    print('!! Segment Mismatch Geo <> ZIP:',Segment,'<>',ZipSegment)
+                            if GeoSegment is not None:
+                                if ZipSegment is not None and ZipSegment != GeoSegment:
+                                    print('!! Segment Mismatch Geo <> ZIP:',GeoSegment,'<>',ZipSegment)
                             elif ZipSegment is not None:
-                                Segment = ZipSegment
-                                print('>>> Segment set by ZIP-Code:',Segment,'->',lon,'|',lat)
+                                GeoSegment = ZipSegment
+                                print('>>> Segment set by ZIP-Code:',GeoSegment,'->',lon,'|',lat)
 
                         else:
                             print('!! Invalid ZIP-Code:',ZipCode)
 
-                    if Segment is not None:
-                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = Segment
+                    if GeoSegment is not None:
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GeoSegment
+
+                else:  # old Gluon without Segment Support
+                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
 
         print('... done.\n')
         return isOK

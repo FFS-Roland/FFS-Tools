@@ -247,7 +247,7 @@ class ffGatewayInfo:
 
 
     #--------------------------------------------------------------------------
-    # private function "__GetGwInstanceDNS"
+    # private function "__GetGwInstances"
     #
     #
     #--------------------------------------------------------------------------
@@ -348,7 +348,7 @@ class ffGatewayInfo:
                     if len(GwName) == 7:
                         Segment = int(GwName[5:])
                     else:
-                        Segment = 0
+                        Segment = 0    # legacy names -> will be used for onboarding
 
                     if Segment not in self.__SegmentDict:
                         print('!! Segment in DNS but not in Git:',Segment)

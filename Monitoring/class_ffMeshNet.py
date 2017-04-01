@@ -226,7 +226,7 @@ class ffMeshNet:
     #   Handle Segment Shortcut
     #
     #-----------------------------------------------------------------------
-    def __HandleShortcut(self,CloudID,UplinkSegList,DesiredSegDict,FixedSegList):
+    def __HandleShortcut(self,CloudID,DesiredSegDict,FixedSegList):
 
         SegWeight = 0
         TargetSeg = None  # Target where all nodes of this cloud must be moved to
@@ -242,11 +242,10 @@ class ffMeshNet:
                     TargetSeg = Segment
 
         else:   #----- No fixed Nodes -----
-            for Segment in UplinkSegList:
-                if Segment in DesiredSegDict:
-                    if DesiredSegDict[Segment] > SegWeight:
-                        SegWeight = DesiredSegDict[Segment]
-                        TargetSeg = Segment
+            for Segment in DesiredSegDict:
+                if DesiredSegDict[Segment] > SegWeight:
+                    SegWeight = DesiredSegDict[Segment]
+                    TargetSeg = Segment
 
         if TargetSeg is not None:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
@@ -264,7 +263,7 @@ class ffMeshNet:
     #   Handling Geo-Location (Segments) of Mesh Cloud w/o shortcuts or fixes
     #
     #-----------------------------------------------------------------------
-    def __HandleGeoLocation(self,CloudID,ActiveSegList,DesiredSegDict):
+    def __HandleGeoLocation(self,CloudID,DesiredSegDict,ActiveSegList):
 
         SegWeight = 0
         TargetSeg = None
@@ -301,36 +300,51 @@ class ffMeshNet:
                 ActiveSegList  = []    # really used segments
                 UplinkSegList  = []    # List of segments from nodes with uplink
                 FixedSegList   = []    # List of segments from nodes with fixed segment assignment
+                hasOldGluon    = False
                 isOnline       = False
 
                 #---------- Analysing used segments with their nodes and clients ----------
                 for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
+                    VpnSeg = None
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '#':
+                    if self.__NodeInfos.IsOnline(ffNodeMAC):
                         isOnline = True
 
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in ActiveSegList:
                             ActiveSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
-                        VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
+                            VpnSeg = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
 
-                        if VpnSeg not in UplinkSegList:
-                            UplinkSegList.append(VpnSeg)
+                            if VpnSeg not in UplinkSegList:
+                                UplinkSegList.append(VpnSeg)
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
-                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
-                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] =  1
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] != ' ':
+                        hasOldGluon = True
+
+                    DestSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
+
+                    if DestSeg is None:
+                        DestSeg = VpnSeg
+                        Weight = 1
+                    elif VpnSeg is not None and VpnSeg == DestSeg:
+                        Weight = 2
+                    else:
+                        Weight = 1
+
+                    if DestSeg is not None and DestSeg != 0:
+                        if DestSeg not in DesiredSegDict:
+                            DesiredSegDict[DestSeg] =  Weight
                         else:
-                            DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += 1
+                            DesiredSegDict[DestSeg] += Weight
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['oldGluon'] != ' ':
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto':
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegList:
                             FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])  # cannot be moved!
 
                 #---------- Actions depending of situation in cloud ----------
                 if len(UplinkSegList) > 1:
-                    self.__HandleShortcut(CloudID,UplinkSegList,DesiredSegDict,FixedSegList)  # Shortcut !!
+                    self.__HandleShortcut(CloudID,DesiredSegDict,FixedSegList)  # Shortcut !!
                 else:
                     if len(UplinkSegList) == 0 and isOnline:
                         print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
@@ -339,8 +353,8 @@ class ffMeshNet:
 
                     elif len(FixedSegList) > 0:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                    else:
-                        self.__HandleGeoLocation(CloudID,ActiveSegList,DesiredSegDict)
+                    elif not hasOldGluon:
+                        self.__HandleGeoLocation(CloudID,DesiredSegDict,ActiveSegList)
 
         print('... done.\n')
         return
