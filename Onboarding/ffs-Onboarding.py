@@ -242,6 +242,7 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
             if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
                 NodeInfoDict = {
                     'NodeType' : 'new',
+                    'GluonVer' : None,
                     'NodeID'   : NodeJson['node_id'].strip(),
                     'MAC'      : NodeJson['network']['mac'].strip(),
                     'Hostname' : NodeJson['hostname'].strip(),
@@ -250,6 +251,14 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
                     'Contact'  : None
                 }
 
+                if 'software' in NodeJson:
+                    if 'firmware' in NodeJson['software']:
+                        if 'release' in NodeJson['software']['firmware']:
+                            NodeInfoDict['GluonVer'] = NodeJson['software']['firmware']['release']
+
+                            if NodeInfoDict['GluonVer'][0:3] < '0.7':
+                                NodeInfoDict['NodeType'] = 'old'
+
                 if 'owner' in NodeJson:
                     if 'contact' in NodeJson['owner']:
                         NodeInfoDict['Contact'] = NodeJson['owner']['contact']
@@ -257,6 +266,7 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
                 print('>>> NodeID   =',NodeInfoDict['NodeID'])
                 print('>>> MAC      =',NodeInfoDict['MAC'])
                 print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
+                print('>>> GluonVer =',NodeInfoDict['GluonVer'])
                 print('>>> Contact  =',NodeInfoDict['Contact'])
 
                 if 'location' in NodeJson:
@@ -308,6 +318,7 @@ def InfoFromGluonStatusPage(HttpIPv6):
 
     NodeInfoDict = {
         'NodeType' : 'old',
+        'GluonVer' : None,
         'NodeID'   : None,
         'MAC'      : None,
         'Hostname' : None,
@@ -1194,6 +1205,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                 elif PeerMAC is not None:    # No status page -> Fallback to batman
                     NodeInfo    = {
                         'NodeType' : 'unknown',
+                        'GluonVer' : None,
                         'NodeID'   : PeerMAC.replace(':',''),
                         'MAC'      : PeerMAC,
                         'Hostname' : 'ffs-'+PeerMAC.replace(':',''),
