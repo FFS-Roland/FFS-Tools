@@ -368,16 +368,19 @@ def InfoFromGluonStatusPage(HttpIPv6):
 # function "getNodeInfos"
 #
 #-----------------------------------------------------------------------
-def getNodeInfos(HttpIPv6):
+def getNodeInfos(NodeMAC,NodeIF):
 
     NodeInfoDict = None
     NodeHTML = None
     Retries = 3
 
+    HttpIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
+
     while NodeHTML is None and Retries > 0:
-        time.sleep(1)
+        time.sleep(2)
         print('Connecting to http://['+HttpIPv6+'] ...')
         Retries -= 1
+
         try:
             NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/',timeout=15)
             NodeHTML = NodeHTTP.read().decode('utf-8')
@@ -710,7 +713,7 @@ def getBatmanSegment(BatmanIF,FastdIF):
             print('++ ERROR accessing',BatmanIF)
             BatSeg = None
 
-    print('... Batman Segment =',BatSeg)
+    print('... Batman Segment =',BatSeg,'(waiting',(15-Retries)*2,'seconds)')
     return BatSeg
 
 
@@ -1040,58 +1043,64 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPa
 
         if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or DnsUpdate is None:
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
-            DnsUpdate = None
 
         else:
             if Action == 'NEW_NODE':
                 print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NodeInfo['Segment'],NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
 
-                if os.path.exists(os.path.join(GitPath,OldPeerFile)):
-                    GitIndex.remove([OldPeerFile])
-                    os.remove(os.path.join(GitPath,OldPeerFile))
-                    NeedCommit = True
-
                 if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
                     WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
                     GitIndex.add([NewPeerFile])
+                    if NodeInfo['Segment'] > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                     NeedCommit = True
                 else:
                     print('... Key File was already added by other process.')
+                    DnsUpdate = None
 
             else:    # Node already exists
-                if NewPeerFile != OldPeerFile:    # Segment + NodeID
+                if NewPeerFile != OldPeerFile:    # Segment or NodeID have changed
+
                     if os.path.exists(os.path.join(GitPath,OldPeerFile)):
                         GitIndex.remove([OldPeerFile])
                         os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
+
+                        if Action == 'NEW_MAC':
+                            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                            WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
+                            GitIndex.add([NewPeerFile])
+                            if oldSegment > 0:           DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                            if NodeInfo['Segment'] > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                            NeedCommit = True
+
+                        elif Action == 'CHANGE_SEGMENT':
+                            print('!!! New Segment for existing Node: vpn%02d / %s = \"%s\" -> vpn%02d' % (oldSegment, NodeInfo['MAC'], NodeInfo['Hostname'], NodeInfo['Segment']) )
+                            GitIndex.add([NewPeerFile])
+
+                            if NodeInfo['Segment'] > 0:
+                                if oldSegment > 0:
+                                    DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                                else:
+                                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                            else:  # this should not happen. No DNS for Legacy-Segment
+                                DnsUpdate.delete(NewPeerDnsName,'AAAA')
+
+                            NeedCommit = True
+
                     else:
                         print('... Registration of Node was already done by other process.')
                         DnsUpdate = None
 
-                if DnsUpdate is not None:
-
-                    if NewPeerDnsName != OldPeerDnsName and oldSegment > 0:    # NodeID + Key
-                        DnsUpdate.delete(OldPeerDnsName,'AAAA')
-
+                else:    # only key has changed
                     if Action == 'NEW_KEY':
                         print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
                         WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
                         GitIndex.add([NewPeerFile])
+                        if oldSegment > 0:           DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                        if NodeInfo['Segment'] > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                         NeedCommit = True
 
-                    elif Action == 'NEW_MAC':
-                        print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NodeInfo['Segment'],NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
-                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile),NodeInfo,PeerKey)
-                        GitIndex.add([NewPeerFile])
-                        NeedCommit = True
-
-                    elif Action == 'CHANGE_SEGMENT':
-                        print('!!! New Segment for existing Node: vpn%02d / %s = \"%s\" -> vpn%02d' % (oldSegment, NodeInfo['MAC'], NodeInfo['Hostname'], NodeInfo['Segment']) )
-                        GitIndex.add([NewPeerFile])
-                        NeedCommit = True
-
-                    else:
-                        print('!!! Invalid Action:',Action)
-                        DnsUpdate = None
+                if not NeedCommit and DnsUpdate is not None:
+                    print('!!! Invalid Action:',Action)
 
             if NeedCommit:
                 GitIndex.commit('Onboarding (%s) of Peer \"%s\" in Segment %02d' % (Action,NodeInfo['Hostname'],NodeInfo['Segment']))
@@ -1100,9 +1109,6 @@ def RegisterNode(Action, NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPa
                 GitOrigin.pull()
                 print('... doing Git push ...')
                 GitOrigin.push()
-
-                if NodeInfo['Segment'] > 0:
-                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
 
                 if len(DnsUpdate.index) > 1:
                     dns.query.tcp(DnsUpdate,DnsServerIP)
@@ -1186,13 +1192,13 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
         if MeshMAC is not None:
             print('... MeshMAC =',MeshMAC)
 
-            BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)
+            BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
             if BatmanVpnMAC is not None and BatmanVpnMAC == MeshMAC:
                 print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
-                NodeIPv6 = 'fe80::' + hex(int(MeshMAC[0:2],16) ^ 0x02)[2:] + MeshMAC[3:8]+'ff:fe'+MeshMAC[9:14]+MeshMAC[15:17]+'%'+args.VPNIF
-                NodeInfo = getNodeInfos(NodeIPv6)                       # Data from status page of Node via HTTP
-                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # Node's main MAC from Batman Global Translation Table
+
+                NodeInfo = getNodeInfos(MeshMAC,args.VPNIF)             # Data from status page of Node via HTTP
+                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
                 if NodeInfo is not None:
                     if PeerMAC is not None:
@@ -1218,10 +1224,15 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
 
                 if NodeInfo is not None:
+                    BatSeg = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
+                    print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSeg)
 
                     if NodeInfo['Segment'] is None:
-                        NodeInfo['Segment'] = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
+                        NodeInfo['Segment'] = BatSeg
                         print('++ No Segment on Statuspage -> Fallback to Batman:',NodeInfo['MAC'],'=',NodeInfo['Hostname'].encode('utf-8'),'->',NodeInfo['Segment'])
+                    elif BatSeg is not None:
+                        if BatSeg != NodeInfo['Segment']:
+                            print('!! Segment mismatch Statuspage <> Batman:',NodeInfo['Segment'],'<>',BatSeg)
 
                     if NodeInfo['Segment'] is None:
                         if NodeInfo['NodeType'] == 'old':
@@ -1256,7 +1267,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                                     print('++ Node is already registered: vpn%02d / %s\n' % (GitSegment,PeerFile))
 
                             else:    # ... New Key for existing Node Hardware
-                                print('!! New Key for existing Node:',PeerFile,'/',NodeInfo['MAC'],'=',NodeInfo['Hostname'],'->',GitKeyID[:12]+'...')
+                                print('!! New Key for existing Node:',PeerFile,'/',NodeInfo['MAC'],'=',NodeInfo['Hostname'],'->',GitKey[:12]+'...')
 
                                 if not RegisterNode('NEW_KEY', NodeInfo, PeerKey, NodeInfo['NodeID'], GitKey, GitSegment, args.GITREPO, AccountsDict):
                                     RetCode = 1
@@ -1279,7 +1290,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                                     RetCode = 1
 
                     else:
-                        print('!! ERROR: No DNS-Data available !!')
+                        print('!! ERROR: No Git-Data available !!')
 
                 else:
                     print('++ Node status information not available or inconsistent!')
