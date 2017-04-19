@@ -317,6 +317,32 @@ class ffNodeInfo:
 
 
     #-------------------------------------------------------------
+    # private function "__SetSegmentAwareness(NodeMAC,NodeSoftwareDict)"
+    #
+    #   check segment awareness of gluon
+    #-------------------------------------------------------------
+    def __SetSegmentAwareness(self,NodeMAC,NodeSoftwareDict):
+
+        if 'firmware' in NodeSoftwareDict:
+            self.ffNodeDict[NodeMAC]['oldGluon'] = '%'
+
+            if 'release' in NodeSoftwareDict['firmware']:
+                if NodeSoftwareDict['firmware']['release'] is not None:
+                    if NodeSoftwareDict['firmware']['release'][:11] >= '0.7+2016.03':
+                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+                    elif NodeSoftwareDict['firmware']['release'][:13] in GoodOldGluonList:
+                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+
+            if 'base' in NodeSoftwareDict['firmware']:
+                if NodeSoftwareDict['firmware']['base'] is not None:
+                    if NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.1.3' and 'status-page' in NodeSoftwareDict:
+                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+
+        return
+
+
+
+    #-------------------------------------------------------------
     # private function "__LoadNodesDbJson"
     #
     #   Load and analyse nodesdb.json
@@ -398,22 +424,12 @@ class ffNodeInfo:
                             NewestTime = jsonDbDict[DbIndex]['last_online']
 
                         if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) < MaxOfflineTime:
-                            self.ffNodeDict[ffNodeMAC]['Status'] = ' '
-
-                            if 'clients' in jsonDbDict[DbIndex]:
-                                self.ffNodeDict[ffNodeMAC]['Clients'] = int(jsonDbDict[DbIndex]['clients']['total'])
-
                             if 'neighbours' in jsonDbDict[DbIndex]:
                                 for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
                                     if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
                                         (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
 
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
-
-                        if 'addresses' in NodeNets:
-                            for NodeAddress in NodeNets['addresses']:
-                                if NodeAddress[0:9] == 'fd21:711:' and 'status-page' in jsonDbDict[DbIndex]['software']:
-                                    self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
 
                     if 'segment' in jsonDbDict[DbIndex]:
                         self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
@@ -440,13 +456,6 @@ class ffNodeInfo:
                         if 'zip' in jsonDbDict[DbIndex]['location']:
                             self.ffNodeDict[ffNodeMAC]['ZIP'] = str(jsonDbDict[DbIndex]['location']['zip'])[:5]
 
-                    if 'region' in jsonDbDict[DbIndex]:
-                        self.ffNodeDict[ffNodeMAC]['Region'] = jsonDbDict[DbIndex]['region']
-
-#                    if 'desiredSegment' in jsonDbDict[DbIndex]:
-#                        if SegmentTemplate.match(jsonDbDict[DbIndex]['desiredSegment']):
-#                            self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(jsonDbDict[DbIndex]['desiredSegment'])
-
                     if 'mesh_interfaces' in NodeNets:
                         for MeshMAC in NodeNets['mesh_interfaces']:
                             self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
@@ -462,22 +471,7 @@ class ffNodeInfo:
                                             self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
                     if 'software' in jsonDbDict[DbIndex]:
-                        if 'firmware' in jsonDbDict[DbIndex]['software']:
-                            self.ffNodeDict[ffNodeMAC]['oldGluon'] = '%'
-
-                            if 'release' in jsonDbDict[DbIndex]['software']['firmware']:
-                                if jsonDbDict[DbIndex]['software']['firmware']['release'] is not None:
-                                    if jsonDbDict[DbIndex]['software']['firmware']['release'][:11] >= '0.7+2016.03':
-                                        self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
-                                    elif jsonDbDict[DbIndex]['software']['firmware']['release'][:13] in GoodOldGluonList:
-                                        self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
-#                                    else:
-#                                        self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix vpn00'
-
-                            if 'base' in jsonDbDict[DbIndex]['software']['firmware']:
-                                if jsonDbDict[DbIndex]['software']['firmware']['base'] is not None:
-                                    if jsonDbDict[DbIndex]['software']['firmware']['base'] == 'gluon-v2016.1.3' and 'status-page' in jsonDbDict[DbIndex]['software']:
-                                        self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
+                        self.__SetSegmentAwareness(ffNodeMAC,jsonDbDict[DbIndex]['software'])
 
         if UnixTime - NewestTime > MaxOfflineTime:
             self.__alert('\n>> nodesdb.json has too old contents !!!')
@@ -565,9 +559,10 @@ class ffNodeInfo:
                         self.MAC2NodeIDDict[NodeMAC] = NodeMAC
                         print('++ Node added:    ',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
 
-                    #---------- verify Node Infos ----------
+                    #---------- updating Node Infos ----------
                     if self.ffNodeDict[NodeMAC]['Name'] != json158Dict[jsonIndex]['hostname']:
                         print('++ Hostname mismatch:',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'),'->',self.ffNodeDict[NodeMAC]['Name'].encode('utf-8'))
+                        self.ffNodeDict[NodeMAC]['Name'] = json158Dict[jsonIndex]['hostname']
 
                     if self.ffNodeDict[NodeMAC]['Status'] not in OnlineStates:
                         self.ffNodeDict[NodeMAC]['Status'] = ' '
@@ -594,8 +589,15 @@ class ffNodeInfo:
                                 else:
                                     self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
 
-                            if NodeAddress[0:9] == 'fd21:711:' and 'status-page' in json158Dict[jsonIndex]['software']:
-                                self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+                    if 'location' in json158Dict[jsonIndex]:
+                        if 'latitude' in json158Dict[jsonIndex]['location'] and 'longitude' in json158Dict[jsonIndex]['location']:
+                            self.ffNodeDict[NodeMAC]['Latitude']  = json158Dict[jsonIndex]['location']['latitude']
+                            self.ffNodeDict[NodeMAC]['Longitude'] = json158Dict[jsonIndex]['location']['longitude']
+
+                        if 'zip' in json158Dict[jsonIndex]['location']:
+                            self.ffNodeDict[NodeMAC]['ZIP'] = str(json158Dict[jsonIndex]['location']['zip'])[:5]
+
+                    self.__SetSegmentAwareness(NodeMAC,json158Dict[jsonIndex]['software'])
 
         print('... done.\n')
         return
@@ -752,6 +754,7 @@ class ffNodeInfo:
                 urllib.request.install_opener(opener)
 
                 RawJsonHTTP = urllib.request.urlopen(self.__RawAccess['URL'],timeout=15)
+                print('... is open ...')
                 RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
                 RawJsonHTTP.close()
             except:
@@ -855,8 +858,11 @@ class ffNodeInfo:
 
                     if 'addresses' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
                         for NodeAddress in RawJsonDict[ffNodeKey]['nodeinfo']['network']['addresses']:
-                            if NodeAddress[0:9] == 'fd21:711:' and 'status-page' in RawJsonDict[ffNodeKey]['nodeinfo']['software']:
-                                self.ffNodeDict[ffNodeMAC]['oldGluon'] = ' '
+                            if NodeAddress[0:12] == 'fd21:b4dc:4b':
+                                if NodeAddress[12:14] == '1e':
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = 0
+                                else:
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                     if 'gateway' in RawJsonDict[ffNodeKey]['statistics']:
                         if RawJsonDict[ffNodeKey]['statistics']['gateway'][:9] == '02:00:0a:':
@@ -910,6 +916,8 @@ class ffNodeInfo:
                                             if 'established' in GWpeers[Uplink]:
                                                 if self.ffNodeDict[ffNodeMAC]['Status'] == ' ':
                                                     self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+
+                    self.__SetSegmentAwareness(ffNodeMAC,RawJsonDict[ffNodeKey]['nodeinfo']['software'])
 
             else:
                 print('** Invalid Record:',ffNodeKey)
@@ -1165,10 +1173,10 @@ class ffNodeInfo:
             'Center_lat': None,
             'Center_lon': None,
             'ValidArea' : Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
-            'Q1_Segment': None,
-            'Q2_Segment': None,
-            'Q3_Segment': None,
-            'Q4_Segment': None,
+            'Q1_Region' : None,
+            'Q2_Region' : None,
+            'Q3_Region' : None,
+            'Q4_Region' : None,
             'Polygons'  : {},
             'Segments'  : {}
         }
@@ -1178,7 +1186,7 @@ class ffNodeInfo:
 
         try:
             for FileName in JsonFileList:
-                Region  = os.path.basename(FileName.split(".")[0])
+                GeoName = os.path.basename(FileName.split(".")[0])
                 Segment = int(os.path.dirname(FileName).split("/")[-1])
 
                 with open(FileName,"r") as JsonFile:
@@ -1200,27 +1208,32 @@ class ffNodeInfo:
 
                 Area = Polygon(Shape)
 
+                if GeoName[:1] in ['0','1','2','3','4']:
+                    Region = GeoName[1:]
+                else:
+                    Region = GeoName
+
                 RegionDict['Polygons'][Region] = Area
                 RegionDict['Segments'][Region] = Segment
                 RegionCount += 1
 
-                if Region[:1] == '0':
+                if GeoName[:1] == '0':
                     CenterPoint = Area.centroid
                     RegionDict['Center_lat'] = CenterPoint.y
                     RegionDict['Center_lon'] = CenterPoint.x
 #                    print('>>> CenterPoint (lon/lat) =',RegionDict['Center_lon'],'|',RegionDict['Center_lat'])
 
-                elif Region[:1] == '1': RegionDict['Q1_Segment'] = Segment
-                elif Region[:1] == '2': RegionDict['Q2_Segment'] = Segment
-                elif Region[:1] == '3': RegionDict['Q3_Segment'] = Segment
-                elif Region[:1] == '4': RegionDict['Q4_Segment'] = Segment
+                elif GeoName[:1] == '1': RegionDict['Q1_Region'] = Region
+                elif GeoName[:1] == '2': RegionDict['Q2_Region'] = Region
+                elif GeoName[:1] == '3': RegionDict['Q3_Region'] = Region
+                elif GeoName[:1] == '4': RegionDict['Q4_Region'] = Region
 
         except:
             RegionDict = None
         else:
             if ((RegionDict['Center_lat'] is None or RegionDict['Center_lon'] is None) or
-                (RegionDict['Q1_Segment'] is None or RegionDict['Q2_Segment'] is None) or
-                (RegionDict['Q3_Segment'] is None or RegionDict['Q4_Segment'] is None)):
+                (RegionDict['Q1_Region'] is None or RegionDict['Q2_Region'] is None) or
+                (RegionDict['Q3_Region'] is None or RegionDict['Q4_Region'] is None)):
 
                 RegionDict = None
 
@@ -1230,14 +1243,14 @@ class ffNodeInfo:
 
 
     #-------------------------------------------------------------
-    # private function "__GetSegmentFromGPS"
+    # private function "__GetRegionFromGPS"
     #
-    #     Get Segment from GPS using region polygons
+    #     Get Region from GPS using region polygons
     #
     #-------------------------------------------------------------
-    def __GetSegmentFromGPS(self,lon,lat,ffNodeMAC,RegionDict):
+    def __GetRegionFromGPS(self,lon,lat,ffNodeMAC,RegionDict):
 
-        Segment = None
+        GpsRegion = None
 
         if lat is not None and lon is not None:
             NodeLocation = Point(lon,lat)
@@ -1246,31 +1259,31 @@ class ffNodeInfo:
 
                 for Region in RegionDict['Polygons'].keys():
                     if RegionDict['Polygons'][Region].intersects(NodeLocation):
-                        Segment = RegionDict['Segments'][Region]
+                        GpsRegion = Region
                         break
 
-                if Segment is None:
+                if GpsRegion is None:
 #                    print('>>> GPS not in RegionsDict:',lon,'|',lat)
 
                     if lat > RegionDict['Center_lat']:
                         if lon > RegionDict['Center_lon']:  # Quadrant 1
 #                            print('>>> Q1')
-                            Segment = RegionDict['Q1_Segment']
+                            GpsRegion = RegionDict['Q1_Region']
                         else:  # Quadrant 2
 #                            print('>>> Q2')
-                            Segment = RegionDict['Q2_Segment']
+                            GpsRegion = RegionDict['Q2_Region']
                     else:
                         if lon < RegionDict['Center_lon']:  # Quadrant 3
 #                            print('>>> Q3')
-                            Segment = RegionDict['Q3_Segment']
+                            GpsRegion = RegionDict['Q3_Region']
                         else:  # Quadrant 4
 #                            print('>>> Q4')
-                            Segment = RegionDict['Q4_Segment']
+                            GpsRegion = RegionDict['Q4_Region']
 
             else:
                 print('!! Invalid Location:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',lon,'|',lat)
 
-        return Segment
+        return GpsRegion
 
 
 
@@ -1300,7 +1313,9 @@ class ffNodeInfo:
                 if self.ffNodeDict[ffNodeMAC]['oldGluon'] == ' ':  # Segment aware Gluon
                     lat = None
                     lon = None
-                    GeoSegment = None
+
+                    GpsRegion  = None
+                    GpsSegment = None
 
                     if self.ffNodeDict[ffNodeMAC]['Latitude'] is not None and self.ffNodeDict[ffNodeMAC]['Longitude'] is not None:
 
@@ -1314,22 +1329,25 @@ class ffNodeInfo:
                         while lat > 100.0:    # missing decimal separator
                             lat /= 10.0
 
-                        GeoSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
+                        GpsRegion = self.__GetRegionFromGPS(lon,lat,ffNodeMAC,RegionDict)
+
+                    if GpsRegion is not None:
+                        GpsSegment = RegionDict['Segments'][GpsRegion]
 
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
                         ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]
-                        ZipSegment = None
+                        ZipRegion = None
 
                         if ZipTemplate.match(ZipCode):
-                            print('++ Get Position from ZIP-Code:',ffNodeMAC,'->',ZipCode)    #<<<<<<<<<<<<<<<<<<<<<<<<<<
+#                            print('++ Get Position from ZIP-Code:',ffNodeMAC,'->',ZipCode)    #<<<<<<<<<<<<<<<<<<<<<<<<<<
 
                             if ZipCode in Zip2PosDict:
                                 lat = float(Zip2PosDict[ZipCode]['lat'])
                                 lon = float(Zip2PosDict[ZipCode]['lon'])
-                                ZipSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
+                                ZipRegion = self.__GetRegionFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
-                            if ZipSegment is None:    # Fallback to online query of OSM ...
+                            if ZipRegion is None:    # Fallback to online query of OSM ...
                                 lat = 0.0
                                 lon = 0.0
 
@@ -1340,25 +1358,31 @@ class ffNodeInfo:
                                     for relation in result.relations:
                                         lat = relation.center_lat
                                         lon = relation.center_lon
-                                        ZipSegment = self.__GetSegmentFromGPS(lon,lat,ffNodeMAC,RegionDict)
+                                        ZipRegion = self.__GetRegionFromGPS(lon,lat,ffNodeMAC,RegionDict)
                                         break
                                 except:
-                                    ZipSegment = None
+                                    ZipRegion = None
 
 #                            print('>>> GeoSegment / ZipSegment =',GeoSegment,'/',ZipSegment)    #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-                            if GeoSegment is not None:
-                                if ZipSegment is not None and ZipSegment != GeoSegment:
-                                    print('!! Segment Mismatch Geo <> ZIP:',GeoSegment,'<>',ZipSegment)
-                            elif ZipSegment is not None:
-                                GeoSegment = ZipSegment
-                                print('>>> Segment set by ZIP-Code:',GeoSegment,'->',lon,'|',lat)
+                            if ZipRegion is not None:
+                                ZipSegment = RegionDict['Segments'][ZipRegion]
+
+                                if GpsRegion is None:
+                                    GpsRegion  = ZipRegion
+                                    GpsSegment = ZipSegment
+#                                    print('>>> Segment set by ZIP-Code:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ZipCode,'->',lon,'|',lat,'->',GpsSegment)
+                                    print('>>> Segment set by ZIP-Code:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ZipCode,'->',GpsSegment)
+
+                                elif ZipSegment != GpsSegment:
+                                    print('!! Segment Mismatch Geo <> ZIP:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',GpsSegment,'<>',ZipSegment)
 
                         else:
-                            print('!! Invalid ZIP-Code:',ZipCode)
+                            print('!! Invalid ZIP-Code:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ZipCode)
 
-                    if GeoSegment is not None:
-                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GeoSegment
+                    if GpsRegion is not None:
+                        self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
 
                 else:  # old Gluon without Segment Support
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0

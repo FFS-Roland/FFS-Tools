@@ -258,12 +258,12 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
-    # private function "__HandleGeoLocation"
+    # private function "__HandleSegmentAssignment"
     #
-    #   Handling Geo-Location (Segments) of Mesh Cloud w/o shortcuts or fixes
+    #   Segment Assignment of Nodes in Mesh Cloud w/o shortcuts or fixes
     #
     #-----------------------------------------------------------------------
-    def __HandleGeoLocation(self,CloudID,DesiredSegDict,ActiveSegList):
+    def __HandleSegmentAssignment(self,CloudID,DesiredSegDict,ActiveSegList):
 
         SegWeight = 0
         TargetSeg = None
@@ -325,12 +325,15 @@ class ffMeshNet:
                     DestSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
                     if DestSeg is None:
-                        DestSeg = VpnSeg
-                        Weight = 1
+                        if VpnSeg is not None:
+                            DestSeg = VpnSeg
+                            Weight = 2
+                        else:
+                            Weight = 1
                     elif VpnSeg is not None and VpnSeg == DestSeg:
-                        Weight = 2
+                        Weight = 4
                     else:
-                        Weight = 1
+                        Weight = 2
 
                     if DestSeg is not None and DestSeg != 0:
                         if DestSeg not in DesiredSegDict:
@@ -348,13 +351,19 @@ class ffMeshNet:
                 else:
                     if len(UplinkSegList) == 0 and isOnline:
                         print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                        UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],ActiveSegList)
+                        CheckSegList = ActiveSegList
+
+                        for DestSeg in DesiredSegDict:
+                            if DestSeg not in CheckSegList:
+                                CheckSegList.append(DestSeg)
+
+                        UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],CheckSegList)
                         print('>> Uplink(s) found by Batman:',UplinkList)
 
                     elif len(FixedSegList) > 0:
                         print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
                     elif not hasOldGluon:
-                        self.__HandleGeoLocation(CloudID,DesiredSegDict,ActiveSegList)
+                        self.__HandleSegmentAssignment(CloudID,DesiredSegDict,ActiveSegList)
 
         print('... done.\n')
         return
@@ -391,10 +400,19 @@ class ffMeshNet:
                                                                                   TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8') ))
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == ' ':
-                    print('++ Node seems to be w/o VPN Uplink:',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+                    print('++ Node seems to be w/o VPN Uplink:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'/',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+                    CheckSegList = [ int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) ]
 
-                    if self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]) is not None:
-                        print('>> Has active Uplink, found by Batman.')
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is not None:
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in CheckSegList:
+                            CheckSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
+
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in CheckSegList:
+                            CheckSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
+
+                    UplinkList = self.__NodeInfos.GetUplinkList([ffNodeMAC],CheckSegList)
+                    print('>> Uplink(s) found by Batman:',UplinkList)
 
             elif ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == '?' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] == 999) and
                   (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '')):
