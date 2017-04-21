@@ -696,10 +696,12 @@ def getBatmanSegment(BatmanIF,FastdIF):
     print('Find Segment via Batman Gateways ...')
     Retries = 30
     BatSeg = None
+    CheckTime = 0
 
-    while Retries > 0 and BatSeg is None:
+    while Retries > 0:
         Retries -= 1
         time.sleep(2)
+        CheckTime += 2
 
         try:
             BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
@@ -713,16 +715,19 @@ def getBatmanSegment(BatmanIF,FastdIF):
                 else:
                     GwSeg = None
 
-                if BatSeg is None:
-                    BatSeg = GwSeg
-                elif GwSeg is not None and GwSeg != BatSeg:
-                    BatSeg = INVALID_SEGMENT    # Shortcut: Correct Segment cannot be determined
-                    break;
+                if GwSeg is not None:
+                    if BatSeg is None:
+                        BatSeg = GwSeg
+                        Retries = 2
+                    elif GwSeg != BatSeg:
+                        BatSeg = INVALID_SEGMENT    # Shortcut: Correct Segment cannot be determined
+                        Retries = 0
+                        break;
         except:
             print('++ ERROR accessing',BatmanIF)
             BatSeg = INVALID_SEGMENT
 
-    print('... Batman Segment =',BatSeg,'(waiting',(30-Retries)*2,'seconds)')
+    print('... Batman Segment =',BatSeg,'(waiting',CheckTime,'seconds)')
     return BatSeg
 
 
@@ -1016,7 +1021,7 @@ def WriteNodeKeyFile(KeyFileName,NodeInfo,PeerKey):
 #     NEW_SEGMENT
 #
 #-----------------------------------------------------------------------
-def RegisterNode(NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, AccountsDict):
+def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitPath, AccountsDict):
 
     DnsKeyRing = None
     DnsUpdate  = None
@@ -1025,8 +1030,11 @@ def RegisterNode(NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, Acco
     Action     = None
     ErrorCode  = 0
 
-#    print('>>> NodeInfo:',NodeInfo)
-#    print('>>> moreData:',PeerKey, oldNodeID, oldKey, oldSegment)
+
+    if NodeInfo['Segment'] is None:
+        print('++ Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment,GitNodeID,GitKey[:12]))
+        return 0
+
 
     NewSegment     = NodeInfo['Segment']
     NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment,NodeInfo['NodeID'])
@@ -1059,10 +1067,10 @@ def RegisterNode(NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, Acco
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
 
         else:
-            if oldNodeID is not None:    # existing Node ...
-                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (oldSegment,oldNodeID)
-                OldPeerDnsName = 'ffs-%s-%s' % (oldNodeID,oldKey[:12])
-                print('>>> Old Peer Data:', oldSegment, '/', oldNodeID, '=', oldKey[:12])
+            if GitNodeID is not None:    # existing Node ...
+                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,GitNodeID)
+                OldPeerDnsName = 'ffs-%s-%s' % (GitNodeID,GitKey[:12])
+                print('>>> Old Peer Data:', OldPeerDnsName,'=',OldPeerFile)
 
                 if NewPeerFile != OldPeerFile:    # MAC or Segment have changed
                     if os.path.exists(os.path.join(GitPath,OldPeerFile)):
@@ -1072,12 +1080,12 @@ def RegisterNode(NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, Acco
                         GitIndex.add([NewPeerFile])
                         NeedCommit = True
 
-                        if NodeInfo['NodeID'] != oldNodeID:
+                        if NodeInfo['NodeID'] != GitNodeID:
                             Action = 'NEW_MAC'
-                            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (GitSegment,GitNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
                         else:
                             Action = 'NEW_SEGMENT'
-                            print('!!! New Segment or Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (oldSegment,oldNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                            print('!!! New Segment or Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (GitSegment,GitNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
 
                     else:
                         print('... Key File was already changed by other process.')
@@ -1090,16 +1098,16 @@ def RegisterNode(NodeInfo, PeerKey, oldNodeID, oldKey, oldSegment, GitPath, Acco
                     print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
 
                 if NewPeerDnsName != OldPeerDnsName:
-                    if oldSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                    if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
                     if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
 
                 else:
                     if NewSegment > 0:
-                        if oldSegment > 0:
+                        if GitSegment > 0:
                             DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                         else:
                             DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                    elif oldSegment > 0:  # no DNS for Legacy-Segment
+                    elif GitSegment > 0:  # no DNS for Legacy-Segment
                         DnsUpdate.delete(NewPeerDnsName,'AAAA')
 
             else:    # new Node ...
@@ -1237,26 +1245,28 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
 
                 if NodeInfo is not None:
-                    BatSeg = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
+                    BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
 
-                    print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSeg)
+                    print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
 
                     if NodeInfo['NodeType'] == 'old':
-                        if BatSeg is None:
-                            BatSeg = 0
+                        if BatSegment is None:
+                            BatSegment = 0
                             print('>>> Old Gluon must be in Segment 0 = Legacy')
-                        elif BatSeg != 0:
-                            BatSeg = INVALID_SEGMENT
+                        elif BatSegment != 0:
+                            BatSegment = INVALID_SEGMENT
                             print('!! Old Node cannot be put to new Segment\n')
+                    elif BatSegment == 0:
+                        BatSegment = INVALID_SEGMENT
+                        print('!! New Node cannot be put to Legacy Segment\n')
 
-                    if BatSeg != INVALID_SEGMENT:
+                    if BatSegment != INVALID_SEGMENT:
                         GitDataDict = GetGitInfo(args.GITREPO)
                     else:
                         GitDataDict = None
 
 
                     if GitDataDict is not None:
-                        PeerFile = 'ffs-'+NodeInfo['NodeID']
 
                         if NodeInfo['NodeID'] in GitDataDict['NodeID']:
                             GitNodeID  = NodeInfo['NodeID']
@@ -1265,7 +1275,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
                             print('>>> Segment from Git / Node =',GitSegment,'/',NodeInfo['Segment'])
 
-                        else:    # NodeID is not registered ...
+                        else:    # NodeID is not registered, but maybe Key is known ...
                             if PeerKey in GitDataDict['Key']:    # Key is already used ...
                                 GitNodeID  = GitDataDict['Key'][PeerKey]
                                 GitKey     = PeerKey
@@ -1276,28 +1286,30 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                                 GitKey     = None
                                 GitSegment = None
 
-                                if BatSeg is None:
-                                    if NodeInfo['Segment'] is not None:
-                                        BatSeg = NodeInfo['Segment']
-                                    else:
-                                        BatSeg = GetGeoSegment(NodeInfo['Location'],os.path.join(args.DATAPATH,RegionDataFolder))
 
-                                        if BatSeg is None:
-                                            BatSeg = GetDefaultSegment(os.path.join(args.DATAPATH,StatFileName))
+                        if GitNodeID is not None and NodeInfo['NodeID'] == GitNodeID and PeerKey == GitKey:
+                            if BatSegment is None or BatSegment == GitSegment:
+                                NodeInfo['Segment'] = None    # Node is already registered correctly
+                            else:
+                                NodeInfo['Segment'] = BatSegment    # existing Node is meshing in other Cloud
 
-                        if BatSeg is not None:
-                            NodeInfo['Segment'] = BatSeg    # Meshing or new Node
-                        else:
-                            NodeInfo['Segment'] = GitSegment
+                        elif BatSegment is not None:    # new Node is already meshing
+                            NodeInfo['Segment'] = BatSegment
 
-                        if NodeInfo['NodeID'] == GitNodeID and PeerKey == GitKey and NodeInfo['Segment'] == GitSegment:
-                            print('++ Node is already registered: vpn%02d / %s-%s\n' % (GitSegment,PeerFile,GitKey[:12]))
-                        else:    # new registration neccessary ...
-                            RetCode = RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, args.GITREPO, AccountsDict)
+                        elif NodeInfo['Segment'] is None:
+                            NodeInfo['Segment'] = GetGeoSegment(NodeInfo['Location'],os.path.join(args.DATAPATH,RegionDataFolder))
+
+                            if NodeInfo['Segment'] is None:
+                                if GitSegment is not None:
+                                    NodeInfo['Segment'] = GitSegment
+                                else:
+                                    NodeInfo['Segment'] = GetDefaultSegment(os.path.join(args.DATAPATH,StatFileName))
+
+                        RetCode = RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, args.GITREPO, AccountsDict)
 
 
-                    elif BatSeg == INVALID_SEGMENT:
-                        print('!! ERROR: Shortcut / no unique segment detected !!')
+                    elif BatSegment == INVALID_SEGMENT:
+                        print('!! ERROR: Shortcut / multiple segments detected !!')
                     else:
                         print('!! ERROR: No Git-Data available !!')
 
