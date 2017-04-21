@@ -51,11 +51,6 @@ BLACKLIST=/var/freifunk/blacklist
 date >> $LOGFILE
 echo Starting new ffs-Onboarding Process ... >> $LOGFILE
 
-#----- Removing old GitScript -----
-if [ -f $GITSCRIPT ]; then
-    rm $GITSCRIPT
-fi
-
 /usr/local/bin/ffs-Onboarding.py --pid $FASTD_PID --fastd $INTERFACE --batman batWW --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
 
 if [ $? != 0 ]; then
