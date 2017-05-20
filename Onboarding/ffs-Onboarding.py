@@ -181,7 +181,7 @@ def getFastdStatusSocket(pid):
 def getMeshMAC(FastdStatusSocket):
 
     MeshMAC = None
-    Retries = 5
+    Retries = 10
 
     while MeshMAC is None and Retries > 0:
         Retries -= 1
@@ -370,13 +370,16 @@ def InfoFromGluonStatusPage(HttpIPv6):
 # function "getNodeInfos"
 #
 #-----------------------------------------------------------------------
-def getNodeInfos(NodeMAC,NodeIF):
+def getNodeInfos(NodeMAC,IPv6Net,NodeIF):
 
     NodeInfoDict = None
     NodeHTML = None
     Retries = 3
 
-    HttpIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
+    HttpIPv6 = IPv6Net + '::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17]
+
+    if NodeIF is not None:
+        HttpIPv6 += '%'+NodeIF
 
     while NodeHTML is None and Retries > 0:
         time.sleep(2)
@@ -479,7 +482,7 @@ def GetGitInfo(GitPath):
 def ActivateBatman(BatmanIF,FastdIF):
 
     print('... Activating Batman ...')
-    Retries = 15
+    Retries = 30
     NeighborMAC = None
 
     try:
@@ -660,19 +663,18 @@ def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
                 if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
                     if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
 
-                        if ((BatctlInfo[1][:1] == BatctlInfo[5][:1] and BatctlInfo[1][9:] == BatctlInfo[5][9:]) and
-                            (BatctlInfo[5][:1] == BatmanVpnMAC[:1]  and BatctlInfo[5][9:] == BatmanVpnMAC[9:])):  # old MAC schema
+                        if  BatctlInfo[1][0] == BatmanVpnMAC[0] and BatctlInfo[1][9:] == BatmanVpnMAC[9:]:
                             print('... checking old schema:',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = GenerateGluonMACsOld(BatctlInfo[1])
 #                            print('>>> Old MacList:',BatmanMacList)
-                        elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:  # new MAC schema
+                        elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:
                             print('... checking new schema:',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
 #                            print('>>> New MacList:',BatmanMacList)
                         else:
                             BatmanMacList = []
 
-                        if BatctlInfo[5] in BatmanMacList and BatmanVpnMAC in BatmanMacList:
+                        if BatmanVpnMAC in BatmanMacList:
                             NodeMainMAC = BatctlInfo[1]
                             print('>>> found Batman TG =',BatctlLine)
                             break
@@ -1218,7 +1220,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
             if BatmanVpnMAC is not None and BatmanVpnMAC == MeshMAC:
                 print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
 
-                NodeInfo = getNodeInfos(MeshMAC,args.VPNIF)             # Data from status page of Node via HTTP
+                NodeInfo = getNodeInfos(MeshMAC,'fe80',args.VPNIF)      # Data from status page of Node via HTTP
                 PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
                 if NodeInfo is not None:
@@ -1229,20 +1231,28 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         else:
                             print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
-                elif PeerMAC is not None:    # No status page -> Fallback to batman
-                    NodeInfo    = {
-                        'NodeType' : 'unknown',
-                        'GluonVer' : None,
-                        'NodeID'   : PeerMAC.replace(':',''),
-                        'MAC'      : PeerMAC,
-                        'Hostname' : 'ffs-'+PeerMAC.replace(':',''),
-                        'Segment'  : None,
-                        'Location' : None,
-                        'Contact'  : None
-                    }
+                elif PeerMAC is not None:    # No status page via fastd -> Fallback to batman
+                    NodeInfo = getNodeInfos(PeerMAC,'fd21:711',None)
 
-                    print('++ Statuspage not available -> Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
+                    if NodeInfo is None:
+                        NodeInfo    = {
+                            'NodeType' : 'unknown',
+                            'GluonVer' : None,
+                            'NodeID'   : PeerMAC.replace(':',''),
+                            'MAC'      : PeerMAC,
+                            'Hostname' : 'ffs-'+PeerMAC.replace(':',''),
+                            'Segment'  : None,
+                            'Location' : None,
+                            'Contact'  : None
+                        }
 
+                        print('++ Statuspage not available -> Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
+
+                    elif PeerMAC != NodeInfo['MAC']:
+                        print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
+                        NodeInfo = None
+                    else:
+                        print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
                 if NodeInfo is not None:
                     BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
@@ -1297,7 +1307,10 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                             NodeInfo['Segment'] = BatSegment
 
                         elif NodeInfo['Segment'] is None:
-                            NodeInfo['Segment'] = GetGeoSegment(NodeInfo['Location'],os.path.join(args.DATAPATH,RegionDataFolder))
+                            if NodeInfo['Location'] is not None:
+                                NodeInfo['Segment'] = GetGeoSegment(NodeInfo['Location'],os.path.join(args.DATAPATH,RegionDataFolder))
+                            else:
+                                print('... no Location available ...')
 
                             if NodeInfo['Segment'] is None:
                                 if GitSegment is not None:
