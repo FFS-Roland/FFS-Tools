@@ -610,7 +610,7 @@ class ffGatewayInfo:
             for Segment in sorted(self.__SegmentDict.keys()):
                 if Segment > 0:
                     for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                        if len(GwName) == 7 and GwName not in ['gw05n01']:
+                        if len(GwName) == 7:
                             InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(Segment/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                             InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
@@ -625,7 +625,9 @@ class ffGatewayInfo:
                                         DnsResult = None
 
                                     if DnsResult is None:
-                                        print('!! Error on DNS-Server:',Segment,'->',GwName,'=',DnsServer,'->',DnsTestTarget,'/',DnsType)
+#                                        print('!! Error on DNS-Server:',Segment,'->',GwName,'=',DnsServer,'->',DnsTestTarget,'/',DnsType)
+                                        self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s / %s' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
+#                                        print('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s / %s' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
 
         print('... done.\n')
         return
@@ -885,19 +887,28 @@ class ffGatewayInfo:
 
             if GwName not in GwIgnoreList:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['Segments']):
-                    FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkGwDomain,ffSeg)
+                    if ffSeg > 0:
+                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                        FastdJsonURL = 'http://%s/data/vpn%02d.json' % (InternalGwIPv4,ffSeg)
+#                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
+#                        FastdJsonURL = 'http://[%s]/data/vpn%02d.json' % (InternalGwIPv6,ffSeg)
+                    else:
+                        FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkGwDomain,ffSeg)
+
                     ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                    print('...',GwName,ffSeg,'=',ActiveConnections)
+                    if ActiveConnections is not None:
+                        print('... %ss%02d = %d' % (GwName,ffSeg,ActiveConnections))
 
                     if GwName[:4] == 'gw05':  # on gw05 we have separate fastd instances for IPv4 and IPv6
                         FastdJsonURL = 'http://%s.%s/data/vpn%02dip6.json' % (GwName,FreifunkGwDomain,ffSeg)
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                        print('...',GwName,ffSeg,'(IPv6) =',ActiveConnections)
+                        if ActiveConnections is not None:
+                            print('... %ss%02d (IPv6) = %d' % (GwName,ffSeg,ActiveConnections))
 
             else:
                 print('...',GwName,'... ignored.')
 
-        print('... done.')
+        print('\n... done.')
         print('-------------------------------------------------------')
         return
 

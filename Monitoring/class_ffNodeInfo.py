@@ -115,6 +115,7 @@ class ffNodeInfo:
         # public Attributes
         self.MAC2NodeIDDict  = {}       # Dictionary of all Nodes' MAC-Addresses and related Main Address
         self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
+        self.NeighbourList   = []       # List of all Neighbours
         self.Alerts          = []       # List of  Alert-Messages
         self.AnalyseOnly     = False    # Locking automatic Actions due to inconsistent Data
 
@@ -202,11 +203,11 @@ class ffNodeInfo:
     #   /package/gluon-core/luasrc/usr/lib/lua/gluon/util.lua
     #
     # function generate_mac(i)
-    # -- 0 + 8: client0; WAN
+    # -- 0 + 8: client0; Mesh-on-WAN
     # -- 1 + 9: mesh0
     # -- 2 + a: ibss0
     # -- 3 + b: wan_radio0 (private WLAN); batman-adv primary address
-    # -- 4 + c: client1; LAN
+    # -- 4 + c: client1; Mesh-on-LAN
     # -- 5 + d: mesh1
     # -- 6 + e: ibss1
     # -- 7 + f: wan_radio1 (private WLAN); mesh VPN
@@ -258,11 +259,12 @@ class ffNodeInfo:
         if MeshMAC != '':
             GluonMacList = self.GenerateGluonMACsNew(MainMAC)
 
-            if not MeshMAC in GluonMacList:
+            if MeshMAC not in GluonMacList:
                 GluonMacList = self.GenerateGluonMACsOld(MainMAC)
 
-                if not MeshMAC in GluonMacList:
-                    GluonMacList = [MeshMAC]
+                if MeshMAC not in GluonMacList:
+#                    print('\n!! Invalid Mesh-MAC:',MeshMAC,'->',MainMAC,'=',self.ffNodeDict[MainMAC]['Name'].encode('utf-8'))
+                    GluonMacList = [ MeshMAC ]    # neither new nor old mac schema
 
         else:   # only MainMAC available
             GluonMacList = self.GenerateGluonMACsNew(MainMAC)
@@ -270,7 +272,8 @@ class ffNodeInfo:
             knownMAC = False
 
             for NewMAC in GluonMacList:
-                if NewMAC in self.MAC2NodeIDDict:
+                if NewMAC in self.NeighbourList:
+                    MeshMAC = NewMAC
                     knownMAC = True
                     break
 
@@ -278,34 +281,39 @@ class ffNodeInfo:
                 GluonMacList = self.GenerateGluonMACsOld(MainMAC)
 
                 for NewMAC in GluonMacList:
-                    if NewMAC in self.MAC2NodeIDDict:
+                    if NewMAC in self.NeighbourList:
+                        MeshMAC = NewMAC
                         knownMAC = True
                         break
 
-            if knownMAC:
+            if not knownMAC:
                 GluonMacList = []
+            else:
+                print('>>> Neighbour Reference found:',MeshMAC,'->',MainMAC)
+
 
         for NewMAC in GluonMacList:
             if NewMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[NewMAC] != MainMAC:
-                    print('\n!! MAC-Collision:',NewMAC,'=',MainMAC,'->',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
+                    print('\n!! MAC-Collision:',NewMAC,'=',MainMAC,'/',MeshMAC,'=',self.ffNodeDict[MainMAC]['Name'].encode('utf-8'))
+                    print('  stored Partner:',self.MAC2NodeIDDict[NewMAC],'=',self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name'].encode('utf-8'))
 
                     if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['last_online']:
                         BadMAC = self.MAC2NodeIDDict[NewMAC]
                         self.MAC2NodeIDDict[NewMAC] = MainMAC
 
-                        for MAC in self.MAC2NodeIDDict:
-                            if self.MAC2NodeIDDict[MAC] == BadMAC:
-                                self.MAC2NodeIDDict[MAC] = MainMAC
+#                        for MAC in self.MAC2NodeIDDict:
+#                            if self.MAC2NodeIDDict[MAC] == BadMAC:
+#                                self.MAC2NodeIDDict[MAC] = MainMAC
 
                     else:
                         BadMAC = MainMAC
 
-                    print('   Bad Node:',BadMAC,'=',self.ffNodeDict[BadMAC]['Name'].encode('utf-8'))
-                    self.ffNodeDict[BadMAC]['Status'] = '?'
-                    self.ffNodeDict[BadMAC]['Name'] = '<killme>'
-                    self.ffNodeDict[BadMAC]['DestSeg'] = 999    # kill this Node
-                    self.ffNodeDict[BadMAC]['Neighbours'] = []
+                    print('>>      Bad Node:',BadMAC,'=',self.ffNodeDict[BadMAC]['Name'].encode('utf-8'))
+#                    self.ffNodeDict[BadMAC]['Status'] = '?'
+#                    self.ffNodeDict[BadMAC]['Name'] = '<killme>'
+#                    self.ffNodeDict[BadMAC]['DestSeg'] = 999    # kill this Node
+#                    self.ffNodeDict[BadMAC]['Neighbours'] = []
                     print()
                     break
 
@@ -324,19 +332,23 @@ class ffNodeInfo:
     def __SetSegmentAwareness(self,NodeMAC,NodeSoftwareDict):
 
         if 'firmware' in NodeSoftwareDict:
-            self.ffNodeDict[NodeMAC]['oldGluon'] = '%'
+            self.ffNodeDict[NodeMAC]['GluonType'] = 1
 
             if 'release' in NodeSoftwareDict['firmware']:
                 if NodeSoftwareDict['firmware']['release'] is not None:
-                    if NodeSoftwareDict['firmware']['release'][:11] >= '0.7+2016.03':
-                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+                    if NodeSoftwareDict['firmware']['release'][:8] >= '1.0+2017':
+                        self.ffNodeDict[NodeMAC]['GluonType'] = 3
+                    elif NodeSoftwareDict['firmware']['release'][:11] >= '0.7+2016.03':
+                        self.ffNodeDict[NodeMAC]['GluonType'] = 2
                     elif NodeSoftwareDict['firmware']['release'][:13] in GoodOldGluonList:
-                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+                        self.ffNodeDict[NodeMAC]['GluonType'] = 2
 
             if 'base' in NodeSoftwareDict['firmware']:
                 if NodeSoftwareDict['firmware']['base'] is not None:
-                    if NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.1.3' and 'status-page' in NodeSoftwareDict:
-                        self.ffNodeDict[NodeMAC]['oldGluon'] = ' '
+                    if NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.2.3':
+                        self.ffNodeDict[NodeMAC]['GluonType'] = 3
+                    elif NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.1.3' and 'status-page' in NodeSoftwareDict:
+                        self.ffNodeDict[NodeMAC]['GluonType'] = 2
 
         return
 
@@ -405,7 +417,7 @@ class ffNodeInfo:
                         'ZIP': None,
                         'Region': '??',
                         'DestSeg': None,
-                        'oldGluon': '?',
+                        'GluonType': 0,
                         'Segment': None,
                         'SegMode': 'auto',
                         'KeyDir': '',
@@ -424,29 +436,29 @@ class ffNodeInfo:
                             NewestTime = jsonDbDict[DbIndex]['last_online']
 
                         if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) < MaxOfflineTime:
+                            if 'segment' in jsonDbDict[DbIndex]:
+                                self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
+
+                            if 'gateway' in jsonDbDict[DbIndex]:
+                                if jsonDbDict[DbIndex]['gateway'][:9] == '02:00:0a:':
+                                    GwSeg = int(jsonDbDict[DbIndex]['gateway'][12:14])
+                                elif GwNewMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
+                                    GwSeg = int(jsonDbDict[DbIndex]['gateway'][9:11])
+                                else:
+                                    GwSeg = None
+
+                                if GwSeg is not None:
+                                    if self.ffNodeDict[ffNodeMAC]['Segment'] is None:
+                                        self.ffNodeDict[ffNodeMAC]['Segment'] = GwSeg
+                                    elif self.ffNodeDict[ffNodeMAC]['Segment'] != GwSeg:
+                                        print('!! Segment mismatch:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment'],'<>',GwSeg,'=',self.ffNodeDict[ffNodeMAC]['Name'])
+
                             if 'neighbours' in jsonDbDict[DbIndex]:
                                 for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
                                     if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
                                         (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
 
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
-
-                    if 'segment' in jsonDbDict[DbIndex]:
-                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
-
-                    if 'gateway' in jsonDbDict[DbIndex]:
-                        if jsonDbDict[DbIndex]['gateway'][:9] == '02:00:0a:':
-                            GwSeg = int(jsonDbDict[DbIndex]['gateway'][13:14])
-                        elif GwNewMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
-                            GwSeg = int(jsonDbDict[DbIndex]['gateway'][10:11])
-                        else:
-                            GwSeg = None
-
-                        if not GwSeg is None:
-                            if self.ffNodeDict[ffNodeMAC]['Segment'] is None:
-                                self.ffNodeDict[ffNodeMAC]['Segment'] = GwSeg
-                            elif self.ffNodeDict[ffNodeMAC]['Segment'] != GwSeg:
-                                print('!! Segment mismatch:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment'],'<>',GwSeg,'=',self.ffNodeDict[ffNodeMAC]['Name'])
 
                     if 'location' in jsonDbDict[DbIndex]:
                         if 'latitude' in jsonDbDict[DbIndex]['location'] and 'longitude' in jsonDbDict[DbIndex]['location']:
@@ -458,7 +470,6 @@ class ffNodeInfo:
 
                     if 'mesh_interfaces' in NodeNets:
                         for MeshMAC in NodeNets['mesh_interfaces']:
-                            self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
                             self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
                     if 'mesh' in NodeNets:
@@ -467,7 +478,6 @@ class ffNodeInfo:
                                 for InterfaceType in NodeNets['mesh']['bat0']['interfaces']:
                                     if InterfaceType in ['tunnel','wireless','other']:
                                         for MeshMAC in NodeNets['mesh']['bat0']['interfaces'][InterfaceType]:
-                                            self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
                                             self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
                     if 'software' in jsonDbDict[DbIndex]:
@@ -546,7 +556,7 @@ class ffNodeInfo:
                             'ZIP': None,
                             'Region': '??',
                             'DestSeg': None,
-                            'oldGluon': '?',
+                            'GluonType': 0,
                             'Segment': None,
                             'SegMode': 'auto',
                             'KeyDir': '',
@@ -568,26 +578,22 @@ class ffNodeInfo:
                         self.ffNodeDict[NodeMAC]['Status'] = ' '
 #                        print('++ Node is online:',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
 
+                        if 'addresses' in json158Dict[jsonIndex]['network']:
+                            for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
+                                if NodeAddress[0:12] == 'fd21:b4dc:4b':
+                                    if NodeAddress[12:14] == '1e':
+                                        self.ffNodeDict[NodeMAC]['Segment'] = 0
+                                    else:
+                                        self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
+
                     if 'mesh' in json158Dict[jsonIndex]['network']:
                         if 'bat0' in json158Dict[jsonIndex]['network']['mesh']:
                             if 'interfaces' in json158Dict[jsonIndex]['network']['mesh']['bat0']:
                                 for InterfaceType in json158Dict[jsonIndex]['network']['mesh']['bat0']['interfaces']:
                                     if InterfaceType in ['tunnel','wireless','other']:
                                         for MeshMAC in json158Dict[jsonIndex]['network']['mesh']['bat0']['interfaces'][InterfaceType]:
-                                            if MeshMAC not in self.MAC2NodeIDDict:
-                                                print('++ Mesh MAC added:',MeshMAC,'->',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
-                                                self.MAC2NodeIDDict[MeshMAC] = NodeMAC
-                                                self.__AddGluonMACs(NodeMAC,MeshMAC)
-                                            elif self.MAC2NodeIDDict[MeshMAC] != NodeMAC:
-                                                print('!! Mesh MAC mismatch:',MeshMAC,'->',NodeMAC,'<>',self.MAC2NodeIDDict[MeshMAC])
-
-                    if 'addresses' in json158Dict[jsonIndex]['network']:
-                        for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
-                            if NodeAddress[0:12] == 'fd21:b4dc:4b':
-                                if NodeAddress[12:14] == '1e':
-                                    self.ffNodeDict[NodeMAC]['Segment'] = 0
-                                else:
-                                    self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
+#                                            self.MAC2NodeIDDict[MeshMAC] = NodeMAC
+                                            self.__AddGluonMACs(NodeMAC,MeshMAC)
 
                     if 'location' in json158Dict[jsonIndex]:
                         if 'latitude' in json158Dict[jsonIndex]['location'] and 'longitude' in json158Dict[jsonIndex]['location']:
@@ -715,10 +721,14 @@ class ffNodeInfo:
                                         (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
 
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
-    #                                    print('++ New Neigbour found:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'->',ffNeighbour)
 
-                                        if ffNeighbour not in self.MAC2NodeIDDict:
-                                            print('++ Neigbour MAC unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ffNeighbour)
+                                        if ffNeighbour not in self.NeighbourList:
+                                            self.NeighbourList.append(ffNeighbour)
+
+#                                        print('++ New Neigbour found:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'->',ffNeighbour)
+
+#                                        if ffNeighbour not in self.MAC2NodeIDDict:
+#                                            print('++ Neigbour MAC unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ffNeighbour)
             else:
                 print('++ Node unknown:',ffNodeMAC)
 
@@ -832,7 +842,7 @@ class ffNodeInfo:
                             'ZIP': None,
                             'Region': '??',
                             'DestSeg': None,
-                            'oldGluon': '?',
+                            'GluonType': 0,
                             'Segment': None,
                             'SegMode': 'auto',
                             'KeyDir': '',
@@ -856,20 +866,6 @@ class ffNodeInfo:
                         print('++ Hostname mismatch:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('utf-8'))
                         self.ffNodeDict[ffNodeMAC]['Name'] = RawJsonDict[ffNodeKey]['nodeinfo']['hostname']
 
-                    if 'addresses' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
-                        for NodeAddress in RawJsonDict[ffNodeKey]['nodeinfo']['network']['addresses']:
-                            if NodeAddress[0:12] == 'fd21:b4dc:4b':
-                                if NodeAddress[12:14] == '1e':
-                                    self.ffNodeDict[ffNodeMAC]['Segment'] = 0
-                                else:
-                                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
-
-                    if 'gateway' in RawJsonDict[ffNodeKey]['statistics']:
-                        if RawJsonDict[ffNodeKey]['statistics']['gateway'][:9] == '02:00:0a:':
-                            self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][13:14])
-                        elif GwNewMacTemplate.match(RawJsonDict[ffNodeKey]['statistics']['gateway']):
-                            self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][10:11])
-
                     if 'location' in RawJsonDict[ffNodeKey]['nodeinfo']:
                         if 'latitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location'] and 'longitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
                             self.ffNodeDict[ffNodeMAC]['Latitude']  = RawJsonDict[ffNodeKey]['nodeinfo']['location']['latitude']
@@ -888,34 +884,48 @@ class ffNodeInfo:
                             self.MAC2NodeIDDict[MeshMAC] = ffNodeMAC
                             self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
-                    if 'neighbours' in RawJsonDict[ffNodeKey]:
-                        for InterfaceType in ['batadv','wifi']:
-                            if InterfaceType in RawJsonDict[ffNodeKey]['neighbours']:
-                                for MeshMAC in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType]:
-
-                                    if 'neighbours' in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType][MeshMAC]:
-                                        for ffNeighbour in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType][MeshMAC]['neighbours']:
-                                            if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
-                                                (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
-
-                                                self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
                     if UnixTime - LastSeen < MaxOfflineTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # -> online
+
+                        if 'neighbours' in RawJsonDict[ffNodeKey]:
+                            for InterfaceType in ['batadv','wifi']:
+                                if InterfaceType in RawJsonDict[ffNodeKey]['neighbours']:
+                                    for MeshMAC in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType]:
+
+                                        if 'neighbours' in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType][MeshMAC]:
+                                            for ffNeighbour in RawJsonDict[ffNodeKey]['neighbours'][InterfaceType][MeshMAC]['neighbours']:
+                                                if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
+                                                    (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
+
+                                                    self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
+
+                        if 'addresses' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
+                            for NodeAddress in RawJsonDict[ffNodeKey]['nodeinfo']['network']['addresses']:
+                                if NodeAddress[0:12] == 'fd21:b4dc:4b':
+                                    if NodeAddress[12:14] == '1e':
+                                        self.ffNodeDict[ffNodeMAC]['Segment'] = 0
+                                    else:
+                                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
+                        if 'gateway' in RawJsonDict[ffNodeKey]['statistics']:
+                            if RawJsonDict[ffNodeKey]['statistics']['gateway'][:9] == '02:00:0a:':
+                                self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][12:14])
+                            elif GwNewMacTemplate.match(RawJsonDict[ffNodeKey]['statistics']['gateway']):
+                                self.ffNodeDict[ffNodeMAC]['Segment'] = int(RawJsonDict[ffNodeKey]['statistics']['gateway'][9:11])
+
+                        if 'mesh_vpn' in RawJsonDict[ffNodeKey]['statistics']:
+                            if 'groups' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']:
+                                if 'backbone' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']:
+                                    if 'peers' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']['backbone']:
+                                        GWpeers = RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']['backbone']['peers']
+
+                                        for Uplink in GWpeers:
+                                            if GWpeers[Uplink] is not None:
+                                                if 'established' in GWpeers[Uplink]:
+                                                    self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+
                     elif UnixTime - LastSeen > MaxInactiveTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # -> inactive
-
-                    if 'mesh_vpn' in RawJsonDict[ffNodeKey]['statistics']:
-                        if 'groups' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']:
-                            if 'backbone' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']:
-                                if 'peers' in RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']['backbone']:
-                                    GWpeers = RawJsonDict[ffNodeKey]['statistics']['mesh_vpn']['groups']['backbone']['peers']
-
-                                    for Uplink in GWpeers:
-                                        if GWpeers[Uplink] is not None:
-                                            if 'established' in GWpeers[Uplink]:
-                                                if self.ffNodeDict[ffNodeMAC]['Status'] == ' ':
-                                                    self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
 
                     self.__SetSegmentAwareness(ffNodeMAC,RawJsonDict[ffNodeKey]['nodeinfo']['software'])
 
@@ -956,7 +966,7 @@ class ffNodeInfo:
                     'ZIP': None,
                     'Region': '??',
                     'DestSeg': None,
-                    'oldGluon': '?',
+                    'GluonType': 0,
                     'Segment': int(KeyInfo['SegDir'][3:]),
                     'SegMode': KeyInfo['SegMode'],
                     'KeyDir': KeyInfo['SegDir'],
@@ -1043,17 +1053,16 @@ class ffNodeInfo:
                             if BatctlInfo[5] in BatmanMacList:  # Data is from Node
                                 NodeCount += 1
 
-                                if BatctlInfo[5] in self.MAC2NodeIDDict:
-                                    if self.MAC2NodeIDDict[BatctlInfo[5]] != BatctlInfo[1]:
+                                if BatctlInfo[1] in self.ffNodeDict:
+                                    if BatctlInfo[5] in self.MAC2NodeIDDict and self.MAC2NodeIDDict[BatctlInfo[5]] != BatctlInfo[1]:
                                         print('!! MAC mismatch Tunnel -> Client: Batman <> Alfred:',BatctlInfo[5],'->',BatctlInfo[1],'<>',self.MAC2NodeIDDict[BatctlInfo[5]])
-                                    elif BatctlInfo[1] in self.ffNodeDict:
+                                    else:
+                                        self.ffNodeDict[BatctlInfo[1]]['Segment'] = ffSeg
+
                                         if self.ffNodeDict[BatctlInfo[1]]['Status'] != 'V':
                                             self.ffNodeDict[BatctlInfo[1]]['Status'] = ' '
-                                    else:
-                                        print('++ New Node in Batman:',ffSeg,'/',BatctlInfo[1])
-
                                 else:
-                                    print('++ Unknown MAC in Batman:',ffSeg,'->',BatctlInfo[5],'=',BatctlInfo[1])
+                                    print('++ New Node in Batman:',ffSeg,'/',BatctlInfo[1])
 
                             else:  # Data is from Client
                                 ClientCount += 1
@@ -1097,10 +1106,10 @@ class ffNodeInfo:
                                 MeshMAC = BatctlInfo[3]
                             elif MeshMAC is not None:
                                 if MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
-#                                    print(BatctlInfo[1],'<>',MeshMAC)
                                     if BatctlInfo[1] == MeshMAC:
                                         UplinkList.append(ffNodeMAC)
-                                        self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+
+                                    self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
                                     break
 
         if len(UplinkList) < 1:
@@ -1310,7 +1319,7 @@ class ffNodeInfo:
             for ffNodeMAC in self.ffNodeDict.keys():
                 if self.ffNodeDict[ffNodeMAC]['Status'] == '?': continue
 
-                if self.ffNodeDict[ffNodeMAC]['oldGluon'] == ' ':  # Segment aware Gluon
+                if self.ffNodeDict[ffNodeMAC]['GluonType'] >= 2:  # Segment aware Gluon
                     lat = None
                     lon = None
 
@@ -1383,6 +1392,14 @@ class ffNodeInfo:
                     if GpsRegion is not None:
                         self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
                         self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
+
+                        if GpsSegment > 8 and self.ffNodeDict[ffNodeMAC]['GluonType'] < 3:
+                            print('!! Invalid Segment for Gluon-Version:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',GpsSegment)
+
+                    if self.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
+                        GpsSegment = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
+#                        print('+++ Segment is fix:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',GpsSegment)
 
                 else:  # old Gluon without Segment Support
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
