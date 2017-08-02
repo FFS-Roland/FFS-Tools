@@ -39,7 +39,7 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/vpnWW_$(date +%y%m%d)_established.log
+LOGFILE=/var/freifunk/logs/${INTERFACE}_$(date +%y%m%d)_established.log
 
 
 #----- Path Definitions -----
@@ -49,9 +49,10 @@ BLACKLIST=/var/freifunk/blacklist
 
 
 date >> $LOGFILE
-echo Starting new ffs-Onboarding Process ... >> $LOGFILE
 
-/usr/local/bin/ffs-Onboarding.py --pid $FASTD_PID --fastd $INTERFACE --batman batWW --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
+echo Starting new ffs-Onboarding Process on $INTERFACE ... >> $LOGFILE
+
+/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW2 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
 
 if [ $? != 0 ]; then
     date >> $LOGFILE

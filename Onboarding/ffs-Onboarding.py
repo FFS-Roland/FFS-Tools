@@ -84,17 +84,17 @@ ZipTableName    = 'ZIP2GPS_DE.json'    # Data merged from OpenStreetMap and Open
 
 
 #----- Global Constants -----
-SEGMENT_FALLBACK = 5
-INVALID_SEGMENT  = 999
+SEGMENT_WITHOUT_LOCATION = 10
+SEGMENT_FALLBACK         = 1
+INVALID_SEGMENT          = 999
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SEGASSIGN_PREFIX = '2001:2:0:711::'
 
+LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{3,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
 IPv6NodeTemplate = re.compile('^'+SEGASSIGN_PREFIX+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
-
-RegionDataFolder = 'regions'
 
 
 
@@ -227,7 +227,17 @@ def getMeshMAC(FastdStatusSocket):
 #-----------------------------------------------------------------------
 def InfoFromGluonNodeinfoPage(HttpIPv6):
 
-    NodeInfoDict = None
+    NodeInfoDict = {
+        'NodeType' : 'new',
+        'GluonVer' : '',
+        'NodeID'   : None,
+        'MAC'      : None,
+        'Hostname' : None,
+        'Segment'  : None,
+        'Location' : None,
+        'Contact'  : None
+    }
+
     print('Connecting to http://['+HttpIPv6+']/cgi-bin/nodeinfo ...')
 
     try:
@@ -236,21 +246,14 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
         NodeHTTP.close()
     except:
         print('++ Error on loading /cgi-bin/nodeinfo')
-        return None
+        return NodeInfoDict
 
     if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
         if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
             if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
-                NodeInfoDict = {
-                    'NodeType' : 'new',
-                    'GluonVer' : None,
-                    'NodeID'   : NodeJson['node_id'].strip(),
-                    'MAC'      : NodeJson['network']['mac'].strip(),
-                    'Hostname' : NodeJson['hostname'].strip(),
-                    'Segment'  : None,
-                    'Location' : None,
-                    'Contact'  : None
-                }
+                NodeInfoDict['NodeID']   = NodeJson['node_id'].strip()
+                NodeInfoDict['MAC']      = NodeJson['network']['mac'].strip()
+                NodeInfoDict['Hostname'] = NodeJson['hostname'].strip()
 
                 if 'software' in NodeJson:
                     if 'firmware' in NodeJson['software']:
@@ -306,7 +309,17 @@ def InfoFromGluonNodeinfoPage(HttpIPv6):
 #-----------------------------------------------------------------------
 def InfoFromGluonStatusPage(HttpIPv6):
 
-    NodeInfoDict = None
+    NodeInfoDict = {
+        'NodeType' : 'old',
+        'GluonVer' : '',
+        'NodeID'   : None,
+        'MAC'      : None,
+        'Hostname' : None,
+        'Segment'  : None,
+        'Location' : None,
+        'Contact'  : None
+    }
+
     NodeHTML = None
     print('Connecting to http://['+HttpIPv6+']/cgi-bin/status ...')
 
@@ -316,18 +329,7 @@ def InfoFromGluonStatusPage(HttpIPv6):
         NodeHTTP.close()
     except:
         print('++ Error on loading /cgi-bin/status')
-        return None
-
-    NodeInfoDict = {
-        'NodeType' : 'old',
-        'GluonVer' : None,
-        'NodeID'   : None,
-        'MAC'      : None,
-        'Hostname' : None,
-        'Segment'  : None,
-        'Location' : None,
-        'Contact'  : None
-    }
+        return NodeInfoDict
 
     pStart = NodeHTML.find('<body><h1>')
     if pStart > 0:
@@ -401,15 +403,29 @@ def getNodeInfos(NodeMAC,IPv6Net,NodeIF):
         elif  NodeHTML.find('/cgi-bin/status') > 0:
             print('... is old Gluon ...')
             NodeInfoDict = InfoFromGluonStatusPage(HttpIPv6)
-        else:
-            print('+++ unknown System!')
-            NodeInfoDict =  None
 
-        if NodeInfoDict is not None:
-            if NodeInfoDict['NodeID'] is None or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
-                NodeInfoDict = None
-            elif len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
-                NodeInfoDict = None
+    if NodeInfoDict is None:
+        print('+++ unknown System!')
+        NodeInfoDict = {
+            'NodeType' : 'unknown',
+            'GluonVer' : '',
+            'NodeID'   : None,
+            'MAC'      : None,
+            'Hostname' : None,
+            'Segment'  : None,
+            'Location' : None,
+            'Contact'  : None
+        }
+    else:
+        if NodeInfoDict['NodeID'] is not None:
+            if len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
+                print('+++ corrupted Status Page!')
+                NodeInfoDict['NodeID'] = None
+            elif NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
+                print('+++ inconsistent Data on Status Page!')
+                NodeInfoDict['NodeID'] = None
+        else:
+            print('>>> no Detail Data available!')
 
     return NodeInfoDict
 
@@ -439,24 +455,29 @@ def GetGitInfo(GitPath):
         else:
             GitDataDict = { 'NodeID':{}, 'Key':{} }
             GitOrigin.pull()
-            SegmentDirs = glob(os.path.join(GitPath,'vpn*'))
+            KeyFileList = glob(os.path.join(GitPath,'vpn*/peers/ffs-*'))
 
-            for VpnPath in SegmentDirs:
-                ffNodeSeg = int(os.path.basename(VpnPath)[3:])
-                KeyFileList = glob('%s/peers/ffs-*' % (VpnPath))
+            for KeyFilePath in KeyFileList:
+                ffNodeSeg = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
 
-                for KeyFilePath in KeyFileList:
-                    with open(KeyFilePath,'r') as KeyFile:
-                        KeyData = KeyFile.read()
+                with open(KeyFilePath,'r') as KeyFile:
+                    KeyData  = KeyFile.read()
+                    ffNodeID = None
+                    fixedSeg = None
 
-                        for DataLine in KeyData.split('\n'):
-                            if DataLine.startswith('key '):
-                                NodeCount += 1
-                                ffNodeID  = os.path.basename(KeyFilePath)[4:]
-                                ffNodeKey = DataLine.split(' ')[1][1:-2]
+                    for DataLine in KeyData.split('\n'):
+                        if DataLine.lower().startswith('key '):
+                            NodeCount += 1
+                            ffNodeID  = os.path.basename(KeyFilePath)[4:]
+                            ffNodeKey = DataLine.split(' ')[1][1:-2]
 
-                                GitDataDict['NodeID'][ffNodeID] = { 'Key':ffNodeKey, 'Segment':ffNodeSeg }
-                                GitDataDict['Key'][ffNodeKey] = ffNodeID
+                            GitDataDict['NodeID'][ffNodeID] = { 'Key':ffNodeKey, 'Segment':ffNodeSeg, 'fixed':None }
+                            GitDataDict['Key'][ffNodeKey] = ffNodeID
+                        elif DataLine.lower().startswith('#segment: '):
+                            fixedSeg = DataLine[10:].lower()
+
+                    if ffNodeID is not None and fixedSeg is not None:
+                        GitDataDict['NodeID'][ffNodeID]['fixed'] = fixedSeg
 
     except:
         print('!!! ERROR accessing Git Reository!')
@@ -488,27 +509,30 @@ def ActivateBatman(BatmanIF,FastdIF):
     try:
         subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
         subprocess.run(['/sbin/ip','link','set','dev',BatmanIF,'up'])
-        print('... Batman Interface',BatmanIF,'is up ...')
     except:
         print('++ Cannot bring up',BatmanIF,'!')
     else:
+        print('... Batman Interface',BatmanIF,'is up ...')
+
         while(Retries > 0):
             Retries -= 1
             time.sleep(2)
+            NeighborMAC = None
 
             try:
                 BatctlN = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'n'], stdout=subprocess.PIPE)
                 BatctlResult = BatctlN.stdout.decode('utf-8')
-
-                for NeighborInfo in BatctlResult.split('\n'):
-                    NeighborDetails = NeighborInfo.split()
-                    if NeighborDetails[0] == FastdIF:
-                        NeighborMAC = NeighborDetails[1]
-                        Retries = 0
-                        break
             except:
-#                print('++ ERROR on running batctl n:',BatmanIF,'->',FastdIF)
-                NeighborMAC = None
+                print('++ ERROR on running batctl n:',BatmanIF,'->',FastdIF)
+            else:
+                for NeighborInfo in BatctlResult.split('\n'):
+                    if len(NeighborInfo.strip()) > 0:
+                        NeighborDetails = NeighborInfo.split()
+
+                        if NeighborDetails[0] == FastdIF:
+                            NeighborMAC = NeighborDetails[1]
+                            Retries = 0
+                            break
 
     return NeighborMAC
 
@@ -740,14 +764,14 @@ def getBatmanSegment(BatmanIF,FastdIF):
 #     Load ZIP File of OpenGeoDB Project
 #
 #-------------------------------------------------------------
-def __SetupZipData(Path):
+def __SetupZipData(DatabasePath):
 
     print('... Setting up ZIP Data ...')
     Zip2GpsDict = None
     ZipCount = 0
 
     try:
-        with open(os.path.join(Path,ZipTableName), mode='r') as Zip2GpsFile:
+        with open(os.path.join(DatabasePath,ZipTableName), mode='r') as Zip2GpsFile:
             Zip2GpsDict = json.load(Zip2GpsFile)
     except:
         print('!! ERROR on setting up ZIP-Data')
@@ -766,70 +790,70 @@ def __SetupZipData(Path):
 #     Load Region Json Files and setup polygons
 #
 #-------------------------------------------------------------
-def __SetupRegionData(Path):
+def __SetupRegionData(GitPath):
 
     print('... Setting up Region Data ...')
 
     RegionDict = {
-        'Center_lat': None,
-        'Center_lon': None,
-        'ValidArea' : Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
-        'Q1_Segment': None,
-        'Q2_Segment': None,
-        'Q3_Segment': None,
-        'Q4_Segment': None,
-        'Polygons'  : {},
-        'Segments'  : {}
+        'ValidArea': Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
+        'unknown'  : [],
+        'Polygons' : {},
+        'Segments' : {}
     }
 
-    JsonFileList = glob(os.path.join(Path,'*/*.json'))
+    JsonFileList = glob(os.path.join(GitPath,'vpn*/regions/*.json'))
     RegionCount = 0
 
     try:
         for FileName in JsonFileList:
-            Region  = os.path.basename(FileName.split(".")[0])
-            Segment = int(os.path.dirname(FileName).split("/")[-1])
+            Region  = os.path.basename(FileName.split('.')[0])
+            Segment = int(os.path.dirname(FileName).split('/')[-2][3:])
 
-            with open(FileName,"r") as JsonFile:
+            with open(FileName,'r') as JsonFile:
                 GeoJson = json.load(JsonFile)
 
-            if "geometries" in GeoJson:
-                Track = GeoJson["geometries"][0]["coordinates"][0][0]
-            elif "coordinates" in GeoJson:
-                Track = GeoJson["coordinates"][0][0]
+            if 'type' in GeoJson:
+                if GeoJson['type'] == 'DefaultSegment':
+                    if GeoJson['region'] == 'outside':
+                        RegionDict['Segments']['outside'] = Segment
+                    elif GeoJson['region'] == 'unknown':
+                        RegionDict['unknown'].append(Segment)
+                    else:
+                        print('!! Invalid Default Region in File: %s' % FileName)
+                        RegionDict = None
+                        break
+
+                else: # type == GeometryCollection
+                    if 'geometries' in GeoJson:
+                        TrackBase = GeoJson['geometries'][0]['coordinates']
+                    elif 'coordinates' in GeoJson:
+                        TrackBase = GeoJson['coordinates']
+                    else:
+                        TrackBase = None
+                        print('Problem parsing %s' % FileName)
+                        continue
+
+                        RegionDict['Polygons'][Region] = []
+                        RegionDict['Segments'][Region] = Segment
+                        RegionCount += 1
+
+                    for Track in TrackBase:
+                        Shape = []
+
+                        for t in Track[0]:
+                            Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
+
+                        RegionDict['Polygons'][Region].append(Polygon(Shape))
+
             else:
-                Track = None
-                print('Problem parsing %s' % FileName)
-                continue
-
-            Shape = []
-
-            for t in Track:
-                Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
-
-            Area = Polygon(Shape)
-
-            RegionDict['Polygons'][Region] = Area
-            RegionDict['Segments'][Region] = Segment
-            RegionCount += 1
-
-            if Region[:1] == '0':
-                CenterPoint = Area.centroid
-                RegionDict['Center_lat'] = CenterPoint.y
-                RegionDict['Center_lon'] = CenterPoint.x
-
-            if Region[:1] == '1': RegionDict['Q1_Segment'] = Segment
-            if Region[:1] == '2': RegionDict['Q2_Segment'] = Segment
-            if Region[:1] == '3': RegionDict['Q3_Segment'] = Segment
-            if Region[:1] == '4': RegionDict['Q4_Segment'] = Segment
+                print('!! Invalid File: %s' % FileName)
+                RegionDict = None
+                break
 
     except:
         RegionDict = None
     else:
-        if ((RegionDict['Center_lat'] is None or RegionDict['Center_lon'] is None) or
-            (RegionDict['Q1_Segment'] is None or RegionDict['Q2_Segment'] is None) or
-            (RegionDict['Q3_Segment'] is None or RegionDict['Q4_Segment'] is None)):
-
+        if len(RegionDict['Segments']) == 0 or len(RegionDict['unknown']) == 0:
             RegionDict = None
 
     print('... Region Areas loaded:',RegionCount)
@@ -853,21 +877,15 @@ def GetSegmentFromGPS(lon,lat,RegionDict):
 
         if RegionDict['ValidArea'].intersects(NodeLocation):
             for Region in RegionDict['Polygons'].keys():
-                if RegionDict['Polygons'][Region].intersects(NodeLocation):
+                MatchCount = 0
+
+                for RegionPart in RegionDict['Polygons'][Region]:
+                    if RegionPart.intersects(NodeLocation):
+                        MatchCount += 1
+
+                if MatchCount == 1:
                     Segment = RegionDict['Segments'][Region]
                     break
-
-            if Segment is None:
-                if lat > RegionDict['Center_lat']:
-                    if lon > RegionDict['Center_lon']:  # Quadrant 1
-                        Segment = RegionDict['Q1_Segment']
-                    else:  # Quadrant 2
-                        Segment = RegionDict['Q2_Segment']
-                else:
-                    if lon < RegionDict['Center_lon']:  # Quadrant 3
-                        Segment = RegionDict['Q3_Segment']
-                    else:  # Quadrant 4
-                        Segment = RegionDict['Q4_Segment']
 
         else:
             print('++ Invalid Location (lon|lat):',lon,'|',lat)
@@ -881,11 +899,11 @@ def GetSegmentFromGPS(lon,lat,RegionDict):
 #
 #   Get Segment from Regions
 #-----------------------------------------------------------------------
-def GetGeoSegment(Location,RegionDataPath):
+def GetGeoSegment(Location,GitPath,DatabasePath):
 
     print('Get Segment from Position ...',Location)
 
-    RegionDict  = __SetupRegionData(RegionDataPath)
+    RegionDict  = __SetupRegionData(GitPath)
     Segment = None
     ZipSegment = None
 
@@ -896,24 +914,31 @@ def GetGeoSegment(Location,RegionDataPath):
             lon = Location['longitude']
             lat = Location['latitude']
 
-            if lat < lon:
-                lon = Location['latitude']
-                lat = Location['longitude']
+            if LocationTemplate.match(str(lat)) and LocationTemplate.match(str(lon)):
+                if lat < lon:
+                    lon = Location['latitude']
+                    lat = Location['longitude']
 
-            Segment = GetSegmentFromGPS(lon,lat,RegionDict)
+                Segment = GetSegmentFromGPS(lon,lat,RegionDict)
 
         if 'zip' in Location:
             ZipCode = str(Location['zip'])[:5]
             print('... Checking ZIP-Code',ZipCode)
 
             if ZipTemplate.match(ZipCode):
-                Zip2PosDict = __SetupZipData(RegionDataPath)
+                for Region in RegionDict['Segments'].keys():
+                    if Region[:5] == ZipCode:
+                        ZipSegment = RegionDict['Segments'][Region]
+                        break;
 
-                if Zip2PosDict is not None:
-                    if ZipCode in Zip2PosDict:
-                        lon = float(Zip2PosDict[ZipCode]['lon'])
-                        lat = float(Zip2PosDict[ZipCode]['lat'])
-                        ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
+                if ZipSegment is None:
+                    Zip2PosDict = __SetupZipData(DatabasePath)
+
+                    if Zip2PosDict is not None:
+                        if ZipCode in Zip2PosDict:
+                            lon = float(Zip2PosDict[ZipCode]['lon'])
+                            lat = float(Zip2PosDict[ZipCode]['lat'])
+                            ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
 
                 if ZipSegment is None:  # Fallback to OpenStreetMap online request
                     lon = 0.0
@@ -956,41 +981,12 @@ def GetGeoSegment(Location,RegionDataPath):
 # function "GetDefaultSegment"
 #
 #-----------------------------------------------------------------------
-def GetDefaultSegment(StatisticsJsonName):
+def GetDefaultSegment(GluonVersion):
 
-    MinWeight  = 9999
-    DefaultSeg = None
-
-    try:
-        LockFile = open('/tmp/.SegStatistics.lock', mode='w+')
-        fcntl.lockf(LockFile,fcntl.LOCK_EX)
-
-        if os.path.exists(StatisticsJsonName):
-            print('... reading Statistics-DB from Json File ...')
-            StatisticsJsonFile = open(StatisticsJsonName, mode='r')
-            StatisticsJsonDict = json.load(StatisticsJsonFile)
-            StatisticsJsonFile.close()
-        else:
-            StatisticsJsonDict = {}
-
-        for JsonSegIdx in StatisticsJsonDict.keys():
-            Segment = int(JsonSegIdx)
-
-            if Segment > 0  and Segment != 6 and Segment < 9:  #....................................... must be changed later !!
-                if StatisticsJsonDict[JsonSegIdx]['Count'] != '0':
-                    SegWeight = int(int(StatisticsJsonDict[JsonSegIdx]['Sum']) / int(StatisticsJsonDict[JsonSegIdx]['Count']))
-
-                    if SegWeight < MinWeight:
-                        MinWeight  = SegWeight
-                        DefaultSeg = Segment
-
-    except:
-        print('++ Using Fallback Segment because statistics not available.')
+    if GluonVersion[:8] >= '1.0+2017':
+        DefaultSeg = SEGMENT_WITHOUT_LOCATION
+    else:
         DefaultSeg = SEGMENT_FALLBACK
-
-    finally:
-        fcntl.lockf(LockFile,fcntl.LOCK_UN)
-        LockFile.close()
 
     print('... Default Segment =',DefaultSeg)
     return DefaultSeg
@@ -998,15 +994,44 @@ def GetDefaultSegment(StatisticsJsonName):
 
 
 #-----------------------------------------------------------------------
+# function "GetSegment4Node"
+#
+#-----------------------------------------------------------------------
+def GetSegment4Node(NodeInfo,GitPath,DatabasePath,GitSegment):
+
+    NodeSegment = None
+
+    if NodeInfo['Location'] is not None:
+        print('*** Location =',NodeInfo['Location'])
+        NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
+    else:
+        print('... no Location available ...')
+
+    if NodeSegment is None:
+        if GitSegment is not None and (NodeInfo['NodeType'] == 'old' or GitSegment != 0):
+            NodeSegment = GitSegment
+        else:
+            NodeSegment = GetDefaultSegment(NodeInfo['GluonVer'])
+
+    return NodeSegment
+
+
+
+#-----------------------------------------------------------------------
 # function "WriteNodeKeyFile"
 #
 #-----------------------------------------------------------------------
-def WriteNodeKeyFile(KeyFileName,NodeInfo,PeerKey):
+def WriteNodeKeyFile(KeyFileName, NodeInfo, GitFixSeg, PeerKey):
 
     print('... Writing KeyFile:',KeyFileName)
 
     KeyFile = open(KeyFileName, mode='w')
-    KeyFile.write('#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey))
+
+    if GitFixSeg is not None:
+        KeyFile.write('#MAC: %s\n#Hostname: %s\n#Segment: %s\nkey \"%s\";\n' % (NodeInfo['MAC'],NodeInfo['Hostname'],GitFixSeg,PeerKey))
+    else:
+        KeyFile.write('#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey))
+
     KeyFile.close()
     print('... done.')
     return
@@ -1023,7 +1048,7 @@ def WriteNodeKeyFile(KeyFileName,NodeInfo,PeerKey):
 #     NEW_SEGMENT
 #
 #-----------------------------------------------------------------------
-def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitPath, AccountsDict):
+def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, GitPath, AccountsDict):
 
     DnsKeyRing = None
     DnsUpdate  = None
@@ -1078,7 +1103,7 @@ def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitPath, Acco
                     if os.path.exists(os.path.join(GitPath,OldPeerFile)):
                         GitIndex.remove([OldPeerFile])
                         os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
+                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                         GitIndex.add([NewPeerFile])
                         NeedCommit = True
 
@@ -1093,7 +1118,7 @@ def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitPath, Acco
                         print('... Key File was already changed by other process.')
 
                 else:    # only Key has changed
-                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
+                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                     GitIndex.add([NewPeerFile])
                     NeedCommit = True
                     Action = 'NEW_KEY'
@@ -1114,7 +1139,7 @@ def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitPath, Acco
 
             else:    # new Node ...
                 if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
-                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, PeerKey)
+                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                     GitIndex.add([NewPeerFile])
                     NeedCommit = True
                     if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
@@ -1223,7 +1248,7 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                 NodeInfo = getNodeInfos(MeshMAC,'fe80',args.VPNIF)      # Data from status page of Node via HTTP
                 PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
-                if NodeInfo is not None:
+                if NodeInfo['NodeID'] is not None:
                     if PeerMAC is not None:
                         if PeerMAC != NodeInfo['MAC']:
                             print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
@@ -1232,29 +1257,22 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                             print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
                 elif PeerMAC is not None:    # No status page via fastd -> Fallback to batman
-                    NodeInfo = getNodeInfos(PeerMAC,'fd21:711',None)
+                    if NodeInfo['NodeType'] != 'old':
+                        NodeInfo = getNodeInfos(PeerMAC,'fd21:711',None)
 
-                    if NodeInfo is None:
-                        NodeInfo    = {
-                            'NodeType' : 'unknown',
-                            'GluonVer' : None,
-                            'NodeID'   : PeerMAC.replace(':',''),
-                            'MAC'      : PeerMAC,
-                            'Hostname' : 'ffs-'+PeerMAC.replace(':',''),
-                            'Segment'  : None,
-                            'Location' : None,
-                            'Contact'  : None
-                        }
-
-                        print('++ Statuspage not available -> Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
+                    if NodeInfo['NodeID'] is None:
+                        NodeInfo['NodeID']   = PeerMAC.replace(':','')
+                        NodeInfo['MAC']      = PeerMAC
+                        NodeInfo['Hostname'] = 'ffs-'+PeerMAC.replace(':','')
+                        print('++ Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
 
                     elif PeerMAC != NodeInfo['MAC']:
-                        print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
-                        NodeInfo = None
+                        print('!! PeerMAC mismatch: Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
+                        NodeInfo['NodeID'] = None
                     else:
                         print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
-                if NodeInfo is not None:
+                if NodeInfo['NodeID'] is not None:
                     BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
 
                     print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
@@ -1280,8 +1298,9 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
 
                         if NodeInfo['NodeID'] in GitDataDict['NodeID']:
                             GitNodeID  = NodeInfo['NodeID']
-                            GitKey     = GitDataDict['NodeID'][NodeInfo['NodeID']]['Key']
-                            GitSegment = GitDataDict['NodeID'][NodeInfo['NodeID']]['Segment']
+                            GitKey     = GitDataDict['NodeID'][GitNodeID]['Key']
+                            GitSegment = GitDataDict['NodeID'][GitNodeID]['Segment']
+                            GitFixSeg  = GitDataDict['NodeID'][GitNodeID]['fixed']
 
                             print('>>> Segment from Git / Node =',GitSegment,'/',NodeInfo['Segment'])
 
@@ -1290,15 +1309,22 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                                 GitNodeID  = GitDataDict['Key'][PeerKey]
                                 GitKey     = PeerKey
                                 GitSegment = GitDataDict['NodeID'][GitNodeID]['Segment']
+                                GitFixSeg  = GitDataDict['NodeID'][GitNodeID]['fixed']
 
                             else:    # ... is new Node ...
                                 GitNodeID  = None
                                 GitKey     = None
                                 GitSegment = None
+                                GitFixSeg  = None
 
 
                         if GitNodeID is not None and NodeInfo['NodeID'] == GitNodeID and PeerKey == GitKey:
-                            if BatSegment is None or BatSegment == GitSegment:
+                            if BatSegment is None:
+                                if (NodeInfo['NodeType'] == 'new' and GitSegment == 0) or (NodeInfo['GluonVer'][:8] < '1.0+2017' and GitSegment > 8):
+                                    NodeInfo['Segment'] = GetSegment4Node(NodeInfo, args.GITREPO, args.DATAPATH, None)
+                                else:
+                                    NodeInfo['Segment'] = None    # Node is already registered correctly
+                            elif BatSegment == GitSegment:
                                 NodeInfo['Segment'] = None    # Node is already registered correctly
                             else:
                                 NodeInfo['Segment'] = BatSegment    # existing Node is meshing in other Cloud
@@ -1307,18 +1333,9 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                             NodeInfo['Segment'] = BatSegment
 
                         elif NodeInfo['Segment'] is None:
-                            if NodeInfo['Location'] is not None:
-                                NodeInfo['Segment'] = GetGeoSegment(NodeInfo['Location'],os.path.join(args.DATAPATH,RegionDataFolder))
-                            else:
-                                print('... no Location available ...')
+                            NodeInfo['Segment'] = GetSegment4Node(NodeInfo, args.GITREPO, args.DATAPATH, GitSegment)
 
-                            if NodeInfo['Segment'] is None:
-                                if GitSegment is not None:
-                                    NodeInfo['Segment'] = GitSegment
-                                else:
-                                    NodeInfo['Segment'] = GetDefaultSegment(os.path.join(args.DATAPATH,StatFileName))
-
-                        RetCode = RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, args.GITREPO, AccountsDict)
+                        RetCode = RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, args.GITREPO, AccountsDict)
 
 
                     elif BatSegment == INVALID_SEGMENT:

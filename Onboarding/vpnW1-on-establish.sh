@@ -2,13 +2,10 @@
 
 ###########################################################################################
 #                                                                                         #
-#  on-verify.sh                                                                           #
+#  on-establis.sh                                                                         #
 #                                                                                         #
-#  This shell script is launched by fastd whenever a peer requests a connection which     #
-#  must be checked for beeing allowed.                                                    #
-#                                                                                         #
-#  Exit Code 0 = Request accepted                                                         #
-#            1 = Request denied because of blacklisting or other instance still running.  # 
+#  This shell script is launched by fastd whenever a new connection is established.       #
+#  It will run python script "ffs-Onboarding.py" to handle unknown peers.                 #
 #                                                                                         #
 #  Available Environment Variables from fastd:                                            #
 #                                                                                         #
@@ -42,39 +39,29 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/vpnWW_$(date +%y%m%d)_verify.log
-
-#exit 1    # for blocking during test phase only - will be removed later!
+LOGFILE=/var/freifunk/logs/${INTERFACE}_$(date +%y%m%d)_established.log
 
 
 #----- Path Definitions -----
+PEERGITREPO=/var/freifunk/peers-ffs
+DATAPATH=/var/freifunk/database
 BLACKLIST=/var/freifunk/blacklist
 
 
 date >> $LOGFILE
-echo $PEER_KEY >> $LOGFILE
-echo $INTERFACE >> $LOGFILE
 
-if [ $(ps -x | grep -v "grep" |  grep -c "ffs-Onboarding.py --fastd $INTERFACE") -gt 0 ]; then
-  echo ++ Another ffs-Onboarding Process is still running >> $LOGFILE
-  echo --------------------- >> $LOGFILE
-  exit 1
+echo Starting new ffs-Onboarding Process on $INTERFACE ... >> $LOGFILE
+
+/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW1 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
+
+if [ $? != 0 ]; then
+    date >> $LOGFILE
+    echo ++ ERROR >> $LOGFILE
+    kill -s 12 $FASTD_PID    # SIGUSR2 = drop all connections
+    kill -s 17 $FASTD_PID    # SIGCHLD = unlink zombies
+else
+    date >> $LOGFILE
+    echo OK. >> $LOGFILE
 fi
 
-if [ -f $BLACKLIST/$PEER_KEY ]; then
-  LOCKTIME=$(cat $BLACKLIST/$PEER_KEY)
-  NOW=$(date +%s)
-  DELTA=$((NOW - LOCKTIME))
-  if [ $DELTA -gt 600 ]; then
-    rm $BLACKLIST/$PEER_KEY
-    echo Blocking removed. >> $LOGFILE
-  else
-    echo Node is blacklisted. >> $LOGFILE
-    echo --------------------- >> $LOGFILE
-    exit 1
-  fi
-fi
-
-echo OK >> $LOGFILE
-echo --------------------- >> $LOGFILE
-exit 0
+echo ---------------------------------------- >> $LOGFILE
