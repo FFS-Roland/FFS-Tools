@@ -63,12 +63,15 @@ done
 
 #----- start Monitoring -----
 
-if [ $? -eq 0 ]; then
-  /usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --logs=$LOGDIR >> $LOGFILE
+if [ $(ps -e | grep -c "ffs-Monitoring") -gt 0 ]; then
+  echo ++ Still running ffs-Monitoring Process >> $LOGFILE
+  exit 1
+fi
 
-  if [ $? -ne 0 ]; then
-    echo "++ERROR!" >> $LOGFILE
-  fi
+/usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --logs=$LOGDIR >> $LOGFILE
+
+if [ $? -ne 0 ]; then
+  echo "++ERROR!" >> $LOGFILE
 fi
 
 date >> $LOGFILE

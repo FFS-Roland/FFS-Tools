@@ -77,10 +77,10 @@ class ffMeshNet:
         self.__GwInfos   = GwInfos
 
         self.__MeshCloudDict  = {}      # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks','Weight' }
+        self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks' }
         self.__NodeMoveDict   = {}      # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget  = 5       # Target Segment to use if no better Data available
+        self.__DefaultTarget  = 1       # Target Segment to use if no better Data available
 
         # Initializations
         self.__CheckConsistency()
@@ -120,8 +120,10 @@ class ffMeshNet:
                 self.__MeshCloudDict[CloudID]['CloudMembers'].append(ffNeighbourMAC)
                 self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud'] = CloudID
 
-                if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < self.__MeshCloudDict[CloudID]['GluonType']:
+                if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < self.__MeshCloudDict[CloudID]['GluonType'] and self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Status'] == 'V':
                     self.__MeshCloudDict[CloudID]['GluonType'] = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType']
+#                    if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < 3:
+#                        print('>>> GluonType:',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'])
 
                 for MeshMAC in self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Neighbours']:
                     if MeshMAC in self.__NodeInfos.MAC2NodeIDDict:
@@ -287,6 +289,9 @@ class ffMeshNet:
                     if DesiredSegDict[Segment] > SegWeight:
                         SegWeight = DesiredSegDict[Segment]
                         TargetSeg = Segment
+
+                else:
+                    print('>>> No Segament Assignment:',CloudID,'=',Segment,'->',self.__MeshCloudDict[CloudID]['GluonType'])
 
         if TargetSeg is not None:
             self.__MoveNodesInCloud(CloudID,TargetSeg)
@@ -469,7 +474,7 @@ class ffMeshNet:
 
                     if ffSeg in self.__GwInfos.Segments():
                         if not ffSeg in self.__SegmentDict:
-                            self.__SegmentDict[ffSeg] = { 'Nodes':0, 'Clients':0, 'Uplinks':0, 'Weight':9999 }
+                            self.__SegmentDict[ffSeg] = { 'Nodes':0, 'Clients':0, 'Uplinks':0 }
 
                         self.__SegmentDict[ffSeg]['Nodes'] += 1
                         self.__SegmentDict[ffSeg]['Clients'] += self.__NodeInfos.ffNodeDict[ffNodeMAC]['Clients']
@@ -480,93 +485,9 @@ class ffMeshNet:
                         print('>> Bad Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',ffSeg)
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
-                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].lower():
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():
                             print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
                                   '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
-
-        print('... done.\n')
-        return
-
-
-
-    #-----------------------------------------------------------------------
-    # private function "__SetSegmentWeight"
-    #
-    #   Set Weight of Segment (Average Sum of Nodes + Clients)
-    #
-    # __SegmentDict[Segment][Weight]
-    #-----------------------------------------------------------------------
-    def __SetSegmentWeight(self):
-
-        print('Set Segment weight ...')
-        SegWeight = 9999
-
-        for Segment in self.__SegmentDict.keys():
-            if self.__SegmentDict[Segment]['Weight'] is None:
-                self.__SegmentDict[Segment]['Weight'] = self.__SegmentDict[Segment]['Nodes'] + self.__SegmentDict[Segment]['Clients']
-
-            if Segment > 0  and Segment != 6 and Segment < 9:  #....................................... must be changed later !!
-                if self.__SegmentDict[Segment]['Weight'] < SegWeight:
-                    SegWeight = self.__SegmentDict[Segment]['Weight']
-                    self.__DefaultTarget = Segment
-
-        print('... Default Target =',self.__DefaultTarget)
-
-        return
-
-
-
-    #==============================================================================
-    # Method "UpdateStatistikDB"
-    #
-    #   Write updates Statistik-json
-    #==============================================================================
-    def UpdateStatistikDB(self,Path):
-
-        print('Update Statistik-DB ...')
-        StatisticsJsonDict = {}
-        StatisticsJsonName = os.path.join(Path,StatFileName)
-
-        try:
-            LockFile = open('/tmp/.SegStatistics.lock', mode='w+')
-            fcntl.lockf(LockFile,fcntl.LOCK_EX)
-
-            if os.path.exists(StatisticsJsonName):
-                print('... reading Statistics-DB from Json File ...')
-                StatisticsJsonFile = open(StatisticsJsonName, mode='r')
-                StatisticsJsonDict = json.load(StatisticsJsonFile)
-                StatisticsJsonFile.close()
-            else:
-                StatisticsJsonDict = {}
-
-            print('... updateing statistics ...')
-            for Segment in self.__SegmentDict.keys():
-                JsonSegIdx = str(Segment)
-
-                if JsonSegIdx not in StatisticsJsonDict:
-                    StatisticsJsonDict[JsonSegIdx] = { 'Sum':0, 'Count':0 }
-
-                StatisticsJsonDict[JsonSegIdx]['Sum']   += self.__SegmentDict[Segment]['Nodes']+self.__SegmentDict[Segment]['Clients']
-                StatisticsJsonDict[JsonSegIdx]['Count'] += 1
-
-                if StatisticsJsonDict[JsonSegIdx]['Count'] > MaxStatisticsData:
-                    StatisticsJsonDict[JsonSegIdx]['Sum']   -= int(StatisticsJsonDict[JsonSegIdx]['Sum']/StatisticsJsonDict[JsonSegIdx]['Count'])
-                    StatisticsJsonDict[JsonSegIdx]['Count'] -= 1
-
-                self.__SegmentDict[Segment]['Weight'] = int(StatisticsJsonDict[JsonSegIdx]['Sum']/StatisticsJsonDict[JsonSegIdx]['Count'])
-
-            print('... writing Statistics-DB as json-File ...')
-
-            StatisticsJsonFile = open(StatisticsJsonName, mode='w+')
-            json.dump(StatisticsJsonDict,StatisticsJsonFile)
-            StatisticsJsonFile.close()
-
-        except:
-            self.__alert('\n!! Error on Updating Statistics Databases as json-File!')
-
-        finally:
-            fcntl.lockf(LockFile,fcntl.LOCK_UN)
-            LockFile.close()
 
         print('... done.\n')
         return
@@ -580,8 +501,6 @@ class ffMeshNet:
     #
     #==============================================================================
     def CheckSegments(self):
-
-        self.__SetSegmentWeight()
 
         self.__CreateMeshCloudList()
         self.__CheckMeshClouds()
@@ -630,6 +549,7 @@ class ffMeshNet:
                 TotalNodes    = 0
                 TotalClients  = 0
                 TotalUplinks  = 0
+                OldGluon      = 0
                 CurrentSeg    = None
                 CurrentVPN    = None
                 CurrentRegion = None
@@ -685,17 +605,20 @@ class ffMeshNet:
                     if self.__NodeInfos.ffNodeDict[ffnb]['Status'] == 'V':
                         TotalUplinks += 1
 
+                    if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < 3:
+                        OldGluon += 1
+
                 NeighborOutFile.write('\n         Total Nodes / Clients / Uplinks = %3d / %3d / %3d\n' % (TotalNodes,TotalClients,TotalUplinks))
 
                 if CurrentRegion is None:
                     CurrentRegion = '??'
 
                 if CurrentRegion not in RegionDict:
-                    RegionDict[CurrentRegion] = { 'Nodes':TotalNodes, 'Clients':TotalClients }
+                    RegionDict[CurrentRegion] = { 'Nodes':TotalNodes, 'Clients':TotalClients, 'OldGluon':OldGluon, 'Segment':CurrentSeg }
                 else:
-                    RegionDict[CurrentRegion]['Nodes']   += TotalNodes
-                    RegionDict[CurrentRegion]['Clients'] += TotalClients
-
+                    RegionDict[CurrentRegion]['Nodes']    += TotalNodes
+                    RegionDict[CurrentRegion]['Clients']  += TotalClients
+                    RegionDict[CurrentRegion]['OldGluon'] += OldGluon
 
         print('\nWriting out Single Nodes ...')
 
@@ -735,11 +658,13 @@ class ffMeshNet:
                 Region = self.__NodeInfos.ffNodeDict[ffnb]['Region']
 
                 if Region not in RegionDict:
-                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'] }
+                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] }
                 else:
                     RegionDict[Region]['Nodes']   += 1
                     RegionDict[Region]['Clients'] += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
 
+                if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < 3:
+                    RegionDict[Region]['OldGluon'] += 1
 
         print('\nWrite out Statistics ...')
 
@@ -765,7 +690,7 @@ class ffMeshNet:
         NeighborOutFile.write('Stress of Regions:\n\n')
 
         for Region in sorted(RegionDict):
-            NeighborOutFile.write('%-25s: %4d + %4d = %4d\n' % (Region, RegionDict[Region]['Nodes'], RegionDict[Region]['Clients'], RegionDict[Region]['Nodes']+RegionDict[Region]['Clients']))
+            NeighborOutFile.write('%-25s: %4d + %4d = %4d  (Seg.%02d / old = %2d)\n' % (Region, RegionDict[Region]['Nodes'], RegionDict[Region]['Clients'], RegionDict[Region]['Nodes']+RegionDict[Region]['Clients'], RegionDict[Region]['Segment'], RegionDict[Region]['OldGluon']))
 
         NeighborOutFile.close()
         print()

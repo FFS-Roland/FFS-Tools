@@ -56,6 +56,8 @@ import dns.update
 from dns.rdataclass import *
 from dns.rdatatype import *
 
+from glob import glob
+
 
 
 #-------------------------------------------------------------
@@ -88,12 +90,10 @@ MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
 
 PeerTemplate        = re.compile('^ffs-[0-9a-f]{12}')
-PeerTemplate1       = re.compile('^ffs[-_][0-9a-f]{12}')
-PeerTemplate2       = re.compile('^ffs[0-9a-f]{12}')
 
 SegmentTemplate     = re.compile('^[0-9]{2}$')
-
 KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
+
 FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
 
 
@@ -116,7 +116,7 @@ class ffGatewayInfo:
         self.__DnsAccDict  = DnsAccDict  # DNS Account
         self.__DnsServerIP = None
 
-        self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, Segments
+        self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, DnsSegments, BatmanSegments
         self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
         self.__GwAliasDict = {}          # GwAliasDict[LegacyName]     -> current new Gateway
         self.__Key2FileNameDict = {}     # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
@@ -174,22 +174,22 @@ class ffGatewayInfo:
                 self.AnalyseOnly = True
                 self.__alert('!! Git Repository is dirty - switched to analyse only mode!')
 
-            for SegDir in os.listdir(self.__GitPath):
-                SegPath = os.path.join(self.__GitPath,SegDir)
+            GwFileList = glob(os.path.join(self.__GitPath,'vpn*/bb/gw*'))
 
-                if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
-                    Segment = int(SegDir[3:])
+            for KeyFilePath in GwFileList:
+                Segment  = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
+                FileName = os.path.basename(KeyFilePath)
 
-                    if Segment not in self.__SegmentDict:
-                        self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
-#                        print('>>> New Segment =',Segment)
+                if Segment not in self.__SegmentDict:
+                    self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
 
-                    VpnBackbonePath = os.path.join(SegPath,'bb')
-
-                    if os.path.isdir(VpnBackbonePath):
-                        for KeyFileName in os.listdir(VpnBackbonePath):
-                            if GwSegmentTemplate.match(KeyFileName):
-                                self.__SegmentDict[Segment]['GwGitNames'].append(KeyFileName.split('s')[0])
+                if GwSegmentTemplate.match(FileName):
+                    if int(FileName.split('s')[1]) == Segment:
+                        self.__SegmentDict[Segment]['GwGitNames'].append(FileName.split('s')[0])
+                    else:
+                        print('++ Invalid File Name in Git:',KeyFilePath)
+                else:
+                    print('!! Bad File in Git:',KeyFilePath)
 
         except:
             self.__alert('!! Fatal ERROR on accessing Git for Gateways!')
@@ -203,6 +203,7 @@ class ffGatewayInfo:
 #        print()
 #        for Segment in sorted(self.__SegmentDict):
 #            print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwGitNames'])))
+#        exit(1)
 
         print('... done.\n')
         return
@@ -352,7 +353,7 @@ class ffGatewayInfo:
 
                 if GwInstanceTemplate.match(GwName):
                     if GwName not in self.__GatewayDict:
-                        self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+                        self.__GatewayDict[GwName] = { 'IPs':[], 'DnsSegments':[], 'BatmanSegments':[] }
 
                     self.__GetGwInstances(GwName,FreifunkGwDomain,node.rdatasets)
 
@@ -388,6 +389,9 @@ class ffGatewayInfo:
             for GwName in self.__GwAliasDict:
                 del self.__GatewayDict[GwName]
 
+            print()
+            for GwIP in sorted(Ip2GwDict):
+                print(GwIP,'->',Ip2GwDict[GwIP])
 
             #----- setting up Segment to GwInstanceNames -----
             print()
@@ -401,11 +405,11 @@ class ffGatewayInfo:
                         if GwName not in self.__SegmentDict[Segment]['GwDnsNames']:
                             self.__SegmentDict[Segment]['GwDnsNames'].append(GwName)
 
-                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0:
+                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment < 99:
                                 self.__alert('!! DNS entry without Key in Git: '+GwName+' -> '+str(Segment))
 
-                            if Segment not in self.__GatewayDict[GwName]['Segments']:
-                                self.__GatewayDict[GwName]['Segments'].append(Segment)
+                            if Segment not in self.__GatewayDict[GwName]['DnsSegments']:
+                                self.__GatewayDict[GwName]['DnsSegments'].append(Segment)
                             else:
                                 self.__alert('!! DNS entries are inconsistent: '+GwName+' -> '+str(Segment))
                     else:
@@ -418,11 +422,7 @@ class ffGatewayInfo:
 
             print()
             for GwName in sorted(self.__GatewayDict):
-                print(GwName,'->',sorted(self.__GatewayDict[GwName]['Segments']))
-
-            print()
-            for GwIP in sorted(Ip2GwDict):
-                print(GwIP,'->',Ip2GwDict[GwIP])
+                print(GwName,'->',sorted(self.__GatewayDict[GwName]['DnsSegments']))
 
         print('\n... done.\n')
         return
@@ -564,11 +564,12 @@ class ffGatewayInfo:
 
             for GwName in GwList:
                 if GwName not in self.__GatewayDict:
-                    self.__GatewayDict[GwName] = { 'IPs':[],'Segments':[] }
+                    self.__GatewayDict[GwName] = { 'IPs':[], 'DnsSegments':[], 'BatmanSegments':[] }
                     print('++ Inofficial Gateway found:',GwName)
 
-                if Segment not in self.__GatewayDict[GwName]['Segments']:
-                    self.__GatewayDict[GwName]['Segments'].append(Segment)
+                if Segment not in self.__GatewayDict[GwName]['BatmanSegments']:
+                    self.__GatewayDict[GwName]['BatmanSegments'].append(Segment)
+#                    print('++ Gateway in Batman but not in DNS:',Segment,GwName)
 
                 if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
                     self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
@@ -583,7 +584,7 @@ class ffGatewayInfo:
 
         print()
         for GwName in sorted(self.__GatewayDict):
-            print(GwName,'->',sorted(self.__GatewayDict[GwName]['Segments']))
+            print(GwName,'->',sorted(self.__GatewayDict[GwName]['BatmanSegments']))
 
         print('\n... done.\n')
         return
@@ -610,7 +611,7 @@ class ffGatewayInfo:
             for Segment in sorted(self.__SegmentDict.keys()):
                 if Segment > 0:
                     for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                        if len(GwName) == 7:
+                        if len(GwName) == 7 and GwName not in GwIgnoreList:
                             InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(Segment/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                             InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
@@ -634,149 +635,94 @@ class ffGatewayInfo:
 
 
 
-    #-----------------------------------------------------------------------
-    # private function "__LoadKeyFile"
-    #
-    #   Load and analyse fastd-Keyfile from Git
-    #
-    # GitPeerDict[KeyFileName] -> SegDir, PeerMAC, PeerName, PeerKey
-    #-----------------------------------------------------------------------
-    def __LoadKeyFile(self,SegDir,KeyFileName):
-
-        PeerMAC = ''
-        PeerName = ''
-        PeerKey = ''
-        SegMode = 'auto'
-
-        KeyFilePath = os.path.join(SegDir,'peers',KeyFileName)
-        PeerInFile  = open(os.path.join(self.__GitPath,KeyFilePath), 'r', 1, 'utf-8')
-
-        for PeerData in PeerInFile:
-            PeerLine = PeerData.rstrip('\n')
-
-            if PeerLine[:6].lower() == '#mac: ':
-                if MacAdrTemplate.match(PeerLine[6:23]):
-                    PeerMAC = PeerLine[6:23]
-                elif NodeIdTemplate.match(PeerLine[6:18]):
-                    PeerMAC = PeerLine[6:8] + ':' + PeerLine[8:10] + ':' + PeerLine[10:12] + ':' + PeerLine[12:14] + ':' + PeerLine[14:16] + ':' + PeerLine[16:18]
-                    print('++ Peer MAC invalid Format:', KeyFilePath, '=', PeerMAC)
-                else:
-                    print('++ Peer MAC invalid contents:', KeyFilePath, '=', PeerLine)
-            elif PeerLine[:11].lower() == '#hostname: ':
-                PeerName = PeerLine[11:]
-            elif PeerLine[:10].lower() == '#segment: ':
-                SegMode = PeerLine[10:].lower()
-            elif PeerLine[:4].lower() == 'key ':
-                PeerKey = PeerLine[5:69]
-
-        PeerInFile.close()
-
-        if not FastdKeyTemplate.match(PeerKey):
-            print('++ Invalid PeerKey:', KeyFilePath, '=', PeerKey, PeerMAC, PeerName.encode('utf-8'))
-            return
-
-        PeerFileMAC = ''
-
-        if PeerTemplate1.match(KeyFileName):
-            PeerFileMAC = KeyFileName[4:6] + ':' + KeyFileName[6:8] + ':' + KeyFileName[8:10] + ':' + KeyFileName[10:12] + ':' + KeyFileName[12:14] + ':' + KeyFileName[14:16]
-        elif PeerTemplate2.match(KeyFileName):
-            PeerFileMAC = KeyFileName[3:5] + ':' + KeyFileName[5:7] + ':' + KeyFileName[7:9] + ':' + KeyFileName[9:11] + ':' + KeyFileName[11:13] + ':' + KeyFileName[13:15]
-
-        if PeerMAC == '':
-            if MacAdrTemplate.match(PeerName):
-                PeerMAC = PeerName
-                PeerName = ''
-                print('++ PeerHostName is PeerMAC:', KeyFilePath, '=', PeerMAC, PeerName)
-            elif PeerTemplate1.match(PeerName):
-                PeerMAC = PeerName[4:6] + ':' + PeerName[6:8] + ':' + PeerName[8:10] + ':' + PeerName[10:12] + ':' + PeerName[12:14] + ':' + PeerName[14:16]
-                if PeerFileMAC != '' and PeerMAC != PeerFileMAC:
-                    print('++ MAC of KeyFileName doesn\'t match Hostname \#1:', KeyFilePath, '=', PeerMAC, PeerName)
-            elif PeerTemplate2.match(PeerName):
-                PeerMAC = PeerName[3:5] + ':' + PeerName[5:7] + ':' + PeerName[7:9] + ':' + PeerName[9:11] + ':' + PeerName[11:13] + ':' + PeerName[13:15]
-                if PeerFileMAC != '' and PeerMAC != PeerFileMAC:
-                    print('++ MAC of KeyFileName doesn\'t match Hostname \#2:', KeyFilePath, '=', PeerMAC, PeerName)
-            elif PeerFileMAC != '':
-                PeerMAC = PeerFileMAC
-            else:
-                print('++ No PeerMAC found:', KeyFilePath)
-        elif PeerFileMAC != '' and PeerFileMAC != PeerMAC:
-            print('++ KeyFileName doesn\'t match PeerMAC:', KeyFilePath, '=', PeerMAC, PeerName)
-
-        if KeyFileName in self.FastdKeyDict:
-            self.__alert('!! Duplicate KeyFile: '+KeyFileName+' = '+SegDir+' + '+self.FastdKeyDict[KeyFileName]['SegDir'])
-            self.AnalyseOnly = True
-
-            if self.FastdKeyDict[KeyFileName]['PeerMAC'] != PeerMAC:
-                print('!! Different PeerMAC:',KeyFileName,'=',PeerMAC,'<>',self.FastdKeyDict[KeyFileName]['PeerMAC'])
-
-            if self.FastdKeyDict[KeyFileName]['PeerName'] != PeerName:
-                print('!! Different PeerName:',KeyFileName,'=',PeerName.encode('utf-8'),'<>',self.FastdKeyDict[KeyFileName]['PeerName'].encode('utf-8'))
-
-            if self.FastdKeyDict[KeyFileName]['PeerKey'] != PeerKey:
-                print('!! Different PeerKey:',KeyFileName,'=',PeerKey,'<>',self.FastdKeyDict[KeyFileName]['PeerKey'])
-
-        self.FastdKeyDict[KeyFileName] = {
-            'SegDir':SegDir,
-            'SegMode':SegMode,
-            'PeerMAC':PeerMAC,
-            'PeerName':PeerName,
-            'PeerKey':PeerKey,
-            'VpnMAC':'',
-            'LastConn':0,
-            'DnsSeg':None
-        }
-
-        if PeerKey != '' and PeerKey in self.__Key2FileNameDict:
-            self.__alert('!! Duplicate fastd-Key: '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+SegDir+'/peers/'+KeyFileName)
-            self.AnalyseOnly = True
-
-        self.__Key2FileNameDict[PeerKey] = {
-            'SegDir':SegDir,
-            'KeyFile':KeyFileName
-        }
-
-        return
-
-
-
     #=======================================================================
     # private function "__LoadKeysFromGit"
     #
     #   Load and analyse fastd-Keys from Git
     #
-    #     self.FastdKeyDict[KeyFileName] = { 'SegDir','PeerMAC','PeerName','PeerKey' }
-    #     self.__Key2FileNameDict[PeerKey]    = { 'SegDir','KeyFile' }
+    #     self.FastdKeyDict[KeyFileName]   = { 'SegDir','PeerMAC','PeerName','PeerKey' }
+    #     self.__Key2FileNameDict[PeerKey] = { 'SegDir','KeyFile' }
     #
     #-----------------------------------------------------------------------
     def __LoadKeysFromGit(self):
 
         print('Load and analyse fastd-Keys from Git ...')
 
-        for SegDir in os.listdir(self.__GitPath):
-            SegPath = os.path.join(self.__GitPath,SegDir)
+        KeyFileList = glob(os.path.join(self.__GitPath,'vpn*/peers/*'))
 
-            if os.path.isdir(SegPath) and SegDir[:3] == 'vpn':
-                Segment = int(SegDir[3:])
+        for KeyFilePath in KeyFileList:
+            SegDir   = os.path.dirname(KeyFilePath).split("/")[-2]
+            Segment  = int(SegDir[3:])
+            FileName = os.path.basename(KeyFilePath)
 
-                if Segment not in self.__SegmentDict:
-                    self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
-                    print('!! Segment without Gateway:',Segment)
+            if Segment not in self.__SegmentDict:
+                self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
+                print('!! Segment without Gateway:',Segment)
 
-                VpnPeerPath = os.path.join(SegPath,'peers')
+            if PeerTemplate.match(FileName):
+                with open(KeyFilePath,'r') as KeyFile:
+                    KeyData  = KeyFile.read()
 
-                for KeyFileName in os.listdir(VpnPeerPath):
-                    if KeyFileName[:1] != '.':
-                        if not PeerTemplate.match(KeyFileName):
-                            print('++ Invalid Key Filename:', os.path.join(SegDir,'peers',KeyFileName))
+                    ffNodeID = FileName.lower()[4:]
+                    PeerMAC  = None
+                    PeerName = ''
+                    PeerKey  = None
+                    SegMode  = 'auto'
 
-                        if GwNameTemplate.match(KeyFileName):
-                            print('++ GW in peer folder:',os.path.join(SegDir,'peers',KeyFileName))
+                    for DataLine in KeyData.split('\n'):
+                        LowerCharLine = DataLine.lower().strip()
+
+                        if LowerCharLine.startswith('#mac: '):
+                            PeerMAC = LowerCharLine[6:]
+                            if not MacAdrTemplate.match(PeerMAC) or PeerMAC.replace(':','') != ffNodeID:
+                                self.__alert('!! Invalid MAC in Key File: '+KeyFilePath+' -> '+PeerMAC)
+                                PeerMAC = None
+
+                        elif LowerCharLine.startswith('#hostname: '):
+                            PeerName = DataLine[11:]
+
+                        elif LowerCharLine.startswith('#segment: '):
+                            SegMode = LowerCharLine[10:]
+
+                        elif LowerCharLine.startswith('key '):
+                            PeerKey = LowerCharLine.split(' ')[1][1:-2]
+                            if not FastdKeyTemplate.match(PeerKey):
+                                self.__alert('!! Invalid Key in Key File: '+KeyFilePath+' -> '+PeerKey)
+                                PeerKey = None
+
+                        elif not LowerCharLine.startswith('#comment: ') and LowerCharLine != '':
+                            self.__alert('!! Invalid Entry in Key File: '+KeyFilePath+' -> '+DataLine)
+
+                    if PeerMAC is not None and PeerKey is not None:
+                        if FileName in self.FastdKeyDict or PeerKey in self.__Key2FileNameDict:
+                            self.__alert('!! Duplicate Key File: '+FileName+' -> '+SegDir+' / '+self.FastdKeyDict[FileName]['SegDir'])
+                            self.__alert('                       '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+KeyFilePath)
+                            self.AnalyseOnly = True
                         else:
-                            self.__LoadKeyFile(SegDir,KeyFileName)
+                            self.FastdKeyDict[FileName] = {
+                                'SegDir': SegDir,
+                                'SegMode': SegMode,
+                                'PeerMAC': PeerMAC,
+                                'PeerName': PeerName,
+                                'PeerKey': PeerKey,
+                                'VpnMAC': '',
+                                'LastConn': 0,
+                                'DnsSeg': None
+                            }
+
+                            self.__Key2FileNameDict[PeerKey] = {
+                                'SegDir': SegDir,
+                                'KeyFile': FileName
+                            }
+
+                    else:
+                        self.__alert('!! Invalid Key File: '+KeyFilePath)
+
+            else:
+                print('++ Invalid Key Filename:', KeyFilePath)
 
         print('... done.\n')
         return
-
 
 
 
@@ -817,7 +763,7 @@ class ffGatewayInfo:
                         print('!! PeerKey not in FastdKeyDict:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
                         print()
 
-                elif PeerTemplate1.match(FastdPeersDict[PeerKey]['name']):
+                else:
                     print('!! PeerKey not in Git:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
                     print()
 
@@ -883,10 +829,10 @@ class ffGatewayInfo:
         print('Loading fastd Status Infos ...')
 
         for GwName in sorted(self.__GatewayDict):
-            if len(self.__GatewayDict[GwName]['Segments']) > 0 : print()
+            if len(self.__GatewayDict[GwName]['BatmanSegments']) > 0 : print()
 
             if GwName not in GwIgnoreList:
-                for ffSeg in sorted(self.__GatewayDict[GwName]['Segments']):
+                for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                         FastdJsonURL = 'http://%s/data/vpn%02d.json' % (InternalGwIPv4,ffSeg)
@@ -967,7 +913,7 @@ class ffGatewayInfo:
                         print('++ Unknown or old DNS Entry: '+DnsPeerID+' = '+IPv6)
                         isOK = False
 
-                elif DnsPeerID != '@':
+                elif DnsPeerID != '@' and DnsPeerID != '*':
                     self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
                     isOK = False
 
@@ -983,9 +929,9 @@ class ffGatewayInfo:
             if ((PeerTemplate.match(PeerFileName)) and
                 (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
                 (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
-                (self.FastdKeyDict[PeerFileName]['DnsSeg'] is None)):
+                (self.FastdKeyDict[PeerFileName]['DnsSeg'] != self.FastdKeyDict[PeerFileName]['SegDir'])):
 
-                self.__alert('!! DNS Entry missing: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'])
+                self.__alert('!! DNS Entry missing or wrong: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'])
 
                 if DnsUpdate is None:
                     DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
@@ -994,8 +940,13 @@ class ffGatewayInfo:
                 if DnsUpdate is not None:
                     PeerDnsName = PeerFileName+'-'+self.FastdKeyDict[PeerFileName]['PeerKey'][:12]
                     PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,int(self.FastdKeyDict[PeerFileName]['SegDir'][3:]))
-                    DnsUpdate.add(PeerDnsName, 300, 'AAAA',PeerDnsIPv6)
-                    print('>>> Adding Peer to DNS:',PeerDnsName,'->',PeerDnsIPv6)
+
+                    if self.FastdKeyDict[PeerFileName]['DnsSeg'] is None:
+                        DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
+                        print('>>> Adding Peer to DNS:',PeerDnsName,'->',PeerDnsIPv6)
+                    else:
+                        DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
+                        print('>>> Updating Peer in DNS:',PeerDnsName,'->',PeerDnsIPv6)
 
                 isOK = False
 
@@ -1007,12 +958,12 @@ class ffGatewayInfo:
 
 
     #=========================================================================
-    # Method "CheckNodesInDNS"
+    # Method "CheckNodesInSegassignDNS"
     #
     #   Returns True if everything is OK
     #
     #=========================================================================
-    def CheckNodesInDNS(self):
+    def CheckNodesInSegassignDNS(self):
 
         DnsZone     = None
         isOK        = True
@@ -1061,6 +1012,7 @@ class ffGatewayInfo:
         print('Moving Nodes in GIT and DNS ...')
 
         if len(NodeMoveDict) < 1:
+#        if True:
             print('++ There are no Peers to be moved.')
             return
 
@@ -1068,6 +1020,7 @@ class ffGatewayInfo:
             print('!! Account Data is not available!')
             return
 
+ #       exit(1)
 
         try:
             GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')

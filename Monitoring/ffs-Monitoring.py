@@ -68,8 +68,6 @@ from class_ffMeshNet import *
 
 AccountsFileName  = '.Accounts.json'
 
-JsonRegionFolder  = 'regions'
-
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
 
@@ -157,7 +155,7 @@ if AccountsDict is None:
 print('====================================================================================\n\nSetting up Gateway Data ...\n')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
-isOK = ffsGWs.CheckNodesInDNS()    # Check DNS entries of Nodes against keys from Git
+isOK = ffsGWs.CheckNodesInSegassignDNS()    # Check DNS entries of Nodes against keys from Git
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
@@ -171,7 +169,7 @@ ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
-if not ffsNodes.SetDesiredSegments(os.path.join(args.DATAPATH,JsonRegionFolder)):
+if not ffsNodes.SetDesiredSegments(args.GITREPO,args.DATAPATH):
     print('!! FATAL ERROR: Regions / Segments not available!')
     exit(1)
 
@@ -179,8 +177,6 @@ if not ffsNodes.SetDesiredSegments(os.path.join(args.DATAPATH,JsonRegionFolder))
 print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
 
 ffsNet = ffMeshNet(ffsNodes,ffsGWs)
-
-ffsNet.UpdateStatistikDB(args.DATAPATH)
 
 ffsNet.CheckSegments()    # Find Mesh-Clouds with analysing for shortcuts
 
@@ -191,7 +187,9 @@ ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 NodeMoveDict = ffsNet.GetMoveDict()
 MailBody = ''
 
-if NodeMoveDict is not None:
+if NodeMoveDict is None:
+    ffsNodes.CheckNodesInNodesDNS(AccountsDict['DNS'])
+else:
     print('\nMoving Nodes ...')
 
     if ffsNodes.AnalyseOnly or ffsGWs.AnalyseOnly or ffsNet.AnalyseOnly:
