@@ -833,9 +833,9 @@ def __SetupRegionData(GitPath):
                         print('Problem parsing %s' % FileName)
                         continue
 
-                        RegionDict['Polygons'][Region] = []
-                        RegionDict['Segments'][Region] = Segment
-                        RegionCount += 1
+                    RegionDict['Polygons'][Region] = []
+                    RegionDict['Segments'][Region] = Segment
+                    RegionCount += 1
 
                     for Track in TrackBase:
                         Shape = []
