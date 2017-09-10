@@ -39,6 +39,7 @@
 
 GITREPO=/var/freifunk/peers-ffs
 DATADIR=/var/freifunk/database
+ALFRED=http://netinfo.freifunk-stuttgart.de/json/
 
 LOGDIR=/var/freifunk/logs
 LOGFILE=$LOGDIR/$(date +%s).log
@@ -68,7 +69,7 @@ if [ $(ps -e | grep -c "ffs-Monitoring") -gt 0 ]; then
   exit 1
 fi
 
-/usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --logs=$LOGDIR >> $LOGFILE
+/usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --alfred=$ALFRED --logs=$LOGDIR >> $LOGFILE
 
 if [ $? -ne 0 ]; then
   echo "++ERROR!" >> $LOGFILE

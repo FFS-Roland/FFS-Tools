@@ -10,6 +10,7 @@
 #                                                                                         #
 #       --gitrepo  = Git Repository with fastd KeyFiles                                   #
 #       --data     = Path to Databases Statistics                                         #
+#       --alfred   = URL with alfred-json-???.json                                        #
 #       --logs     = Path to LogFiles                                                     #
 #                                                                                         #
 #  Needed json-Files from Webserver:                                                      #
@@ -62,21 +63,14 @@ from class_ffMeshNet import *
 
 
 
-#-------------------------------------------------------------
+#=============================================================
 # Local File Names
-#-------------------------------------------------------------
+#=============================================================
 
 AccountsFileName  = '.Accounts.json'
 
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
-
-
-#-------------------------------------------------------------
-# Global Constants
-#-------------------------------------------------------------
-
-AlfredURL         = 'http://netinfo.freifunk-stuttgart.de/json/'
 
 
 
@@ -141,6 +135,7 @@ def __SendEmail(Subject,MailBody,Account):
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
 parser.add_argument('--data', dest='DATAPATH', action='store', required=True, help='Path to Databases')
+parser.add_argument('--alfred', dest='ALFREDURL', action='store', required=True, help='URL with alfred-json-???.json')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
 args = parser.parse_args()
 
@@ -159,7 +154,7 @@ isOK = ffsGWs.CheckNodesInSegassignDNS()    # Check DNS entries of Nodes against
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
-ffsNodes = ffNodeInfo(AlfredURL,AccountsDict['raw.json'])
+ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'])
 
 print('Merging fastd-Infos to Nodes ...')
 for KeyIndex in ffsGWs.FastdKeyDict.keys():

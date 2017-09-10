@@ -42,6 +42,7 @@ import subprocess
 import urllib.request
 import time
 import datetime
+import calendar
 import json
 import re
 import fcntl
@@ -70,7 +71,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw05n08','gw05n09','gw07', 'gw08n04']
+GwIgnoreList        = ['gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -82,9 +83,9 @@ GwGroupTemplate     = re.compile('^gw[0-6][0-9](s[0-9]{2})?$')
 GwInstanceTemplate  = re.compile('^gw[0-6][0-9](n[0-9]{2})?$')
 GwSegmentTemplate   = re.compile('^gw[0-6][0-9](n[0-9]{2})?(s[0-9]{2})$')
 
-GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[4-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate    = re.compile('^02:00:3[4-9](:[0-9a-f]{2}){3}')
-GwOldMacTemplate    = re.compile('^02:00:0a:3[4-9]:00:[0-9a-f]{2}')
+GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
+GwNewMacTemplate    = re.compile('^02:00:3[1-9](:[0-9a-f]{2}){3}')
+GwOldMacTemplate    = re.compile('^02:00:0a:3[1-9]:00:[0-9a-f]{2}')
 
 MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
@@ -96,6 +97,9 @@ KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
 
 FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
 
+
+BATMAN_DEBUG_FILES  = '/sys/kernel/debug/batman_adv'
+BATMAN_GATEWAYS     = 'gateways'
 
 
 
@@ -405,7 +409,7 @@ class ffGatewayInfo:
                         if GwName not in self.__SegmentDict[Segment]['GwDnsNames']:
                             self.__SegmentDict[Segment]['GwDnsNames'].append(GwName)
 
-                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment < 99:
+                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment <= 16:
                                 self.__alert('!! DNS entry without Key in Git: '+GwName+' -> '+str(Segment))
 
                             if Segment not in self.__GatewayDict[GwName]['DnsSegments']:
@@ -508,19 +512,18 @@ class ffGatewayInfo:
         GwList    = []
 
         try:
-            BatctlGwl = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'gwl'], stdout=subprocess.PIPE)
-            BatResult = BatctlGwl.stdout.decode('utf-8')
+            with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_GATEWAYS), mode='r') as GatewayList:
+                BatResult = GatewayList.read().splitlines()
         except:
-            print('!! ERROR on batctl -m',BatmanIF)
+            print('!! ERROR on Batman GatewayList of',BatmanIF)
             BatResult = None
-
-        if BatResult is not None:
-            for BatLine in BatResult.split('\n'):
+        else:
+            for BatLine in BatResult:
                 GwName = None
                 GwMAC = BatLine.strip()[:17]
 
                 if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
-                    if int(GwMAC[9:11]) == Segment:
+                    if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
                         GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
                     else:
                         self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
@@ -535,8 +538,11 @@ class ffGatewayInfo:
                     else:
                         self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
 
-                elif MacAdrTemplate.match(GwMAC):
-                    self.__alert('!! Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+#                elif MacAdrTemplate.match(GwMAC):
+#                    if GwMAC == '00:0d:b9:47:68:bd':    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#                        GwName = 'gw08n02'
+#                    else:
+#                        self.__alert('!! Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
                 if GwName is not None:
                     if GwName not in GwList:
@@ -620,10 +626,14 @@ class ffGatewayInfo:
                                 DnsResolver.nameservers = [DnsServer]
 
                                 for DnsType in ['a','aaaa']:
-                                    try:
-                                        DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
-                                    except:
-                                        DnsResult = None
+                                    for i in range(3):
+                                        try:
+                                            DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
+                                        except:
+                                            time.sleep(1)
+                                            DnsResult = None
+                                        else:
+                                            break
 
                                     if DnsResult is None:
 #                                        print('!! Error on DNS-Server:',Segment,'->',GwName,'=',DnsServer,'->',DnsTestTarget,'/',DnsType)
@@ -786,25 +796,22 @@ class ffGatewayInfo:
 
         try:
             FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
-            HttpDate = datetime.datetime.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
-            StatusAge = datetime.datetime.utcnow() - HttpDate
+            HttpDate = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+            StatusAge = int(time.time()) - HttpDate
             jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
             FastdJsonHTTP.close()
         except:
-#            print('++ ERROR fastd status connect!',URL)
+            print('++ ERROR fastd status connect!',URL)
             return None
         else:
-            StatusAge = datetime.datetime.utcnow() - HttpDate
-
-            if StatusAge.total_seconds() < 900:
+            if StatusAge < 900:
                 if 'peers' in jsonFastdDict:
                     if 'interface' in jsonFastdDict:
                         if int(jsonFastdDict['interface'][3:5]) != Segment:
                             print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
                             return None
 
-                    LastConnTime = int(time.mktime(HttpDate.timetuple()))
-                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,LastConnTime)
+                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpDate)
                 else:
                     print('!! Bad fastd status file!',URL)
             else:
@@ -845,11 +852,19 @@ class ffGatewayInfo:
                     if ActiveConnections is not None:
                         print('... %ss%02d = %d' % (GwName,ffSeg,ActiveConnections))
 
-                    if GwName[:4] == 'gw05':  # on gw05 we have separate fastd instances for IPv4 and IPv6
-                        FastdJsonURL = 'http://%s.%s/data/vpn%02dip6.json' % (GwName,FreifunkGwDomain,ffSeg)
+                    if ffSeg > 0 and (GwName[:7] == 'gw05n02' or GwName[:7] == 'gw05n03'):  # here we have separate fastd instances for IPv4 and IPv6
+                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+
+                        FastdJsonURL = 'http://%s/data/vpn%02dmtu.json' % (InternalGwIPv4,ffSeg)
+#                        FastdJsonURL = 'http://%s.%s/data/vpn%02dip6.json' % (GwName,FreifunkGwDomain,ffSeg)
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
                         if ActiveConnections is not None:
-                            print('... %ss%02d (IPv6) = %d' % (GwName,ffSeg,ActiveConnections))
+                            print('... %ss%02d (MTU 1312) = %d' % (GwName,ffSeg,ActiveConnections))
+
+                        FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
+                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                        if ActiveConnections is not None:
+                            print('... %ss%02d (MTU 1340) = %d' % (GwName,ffSeg,ActiveConnections))
 
             else:
                 print('...',GwName,'... ignored.')
@@ -998,7 +1013,14 @@ class ffGatewayInfo:
     #
     #=========================================================================
     def Segments(self):
-        return self.__SegmentDict.keys()
+
+        SegmentList = []
+
+        for Segment in self.__SegmentDict.keys():
+            if len(self.__SegmentDict[Segment]['GwBatNames']) > 0:
+                SegmentList.append(Segment)
+
+        return SegmentList
 
 
 
@@ -1020,7 +1042,7 @@ class ffGatewayInfo:
             print('!! Account Data is not available!')
             return
 
- #       exit(1)
+#        exit(1)
 
         try:
             GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')

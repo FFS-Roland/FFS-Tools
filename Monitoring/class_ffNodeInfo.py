@@ -49,6 +49,7 @@ import subprocess
 import urllib.request
 import time
 import datetime
+import calendar
 import json
 import re
 import hashlib
@@ -74,6 +75,7 @@ from dns.rdatatype import *
 
 MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
 MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
+MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
 OnlineStates       = [' ','V']      # online, online with VPN-Uplink
 
@@ -90,8 +92,8 @@ ZipTableName   = 'ZIP2GPS_DE.json'  # Data merged from OpenStreetMap and OpenGeo
 ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9a-f]{2}:0:')
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
-GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[4-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate  = re.compile('^02:00:(3[4-9])(:[0-9a-f]{2}){3}')
+GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
+GwNewMacTemplate  = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
@@ -106,6 +108,11 @@ LocationTemplate  = re.compile('[0-9]{1,2}[.][0-9]{3,}')
 
 KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
 FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
+
+
+BATMAN_DEBUG_FILES  = '/sys/kernel/debug/batman_adv'
+BATMAN_TRANS_TABLE  = 'transtable_global'
+
 
 
 GoodOldGluonList  = [
@@ -128,7 +135,6 @@ class ffNodeInfo:
         # public Attributes
         self.MAC2NodeIDDict  = {}       # Dictionary of all Nodes' MAC-Addresses and related Main Address
         self.ffNodeDict      = {}       # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
-        self.NeighbourList   = []       # List of all Neighbours
         self.Alerts          = []       # List of  Alert-Messages
         self.AnalyseOnly     = False    # Locking automatic Actions due to inconsistent Data
 
@@ -175,9 +181,9 @@ class ffNodeInfo:
     # -- (1, 0): WAN (for mesh-on-WAN)
     # -- (1, 1): LAN (for mesh-on-LAN)
     # -- (2, n): client interface for the n'th radio
-    # -- (3, n): adhoc interface for n'th radio
+    # -- (3, n): adhoc interface for n'th radio)
     # -- (4, 0): mesh VPN
-    # -- (5, n): mesh interface for n'th radio (802.11s)
+    # -- (5, n): mesh interface for n'th radio (IEEE 802.11s)
     #
     #  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
     #  m2 = (tonumber(m2, 16)+f) % 0x100
@@ -217,11 +223,11 @@ class ffNodeInfo:
     #
     # function generate_mac(i)
     # -- 0 + 8: client0; Mesh-on-WAN
-    # -- 1 + 9: mesh0
+    # -- 1 + 9: mesh0 (IEEE 802.11s)
     # -- 2 + a: ibss0
     # -- 3 + b: wan_radio0 (private WLAN); batman-adv primary address
     # -- 4 + c: client1; Mesh-on-LAN
-    # -- 5 + d: mesh1
+    # -- 5 + d: mesh1 (IEEE 802.11s)
     # -- 6 + e: ibss1
     # -- 7 + f: wan_radio1 (private WLAN); mesh VPN
     #
@@ -280,30 +286,7 @@ class ffNodeInfo:
                     GluonMacList = [ MeshMAC ]    # neither new nor old mac schema
 
         else:   # only MainMAC available
-            GluonMacList = self.GenerateGluonMACsNew(MainMAC)
-
-            knownMAC = False
-
-            for NewMAC in GluonMacList:
-                if NewMAC in self.NeighbourList:
-                    MeshMAC = NewMAC
-                    knownMAC = True
-                    break
-
-            if not knownMAC:
-                GluonMacList = self.GenerateGluonMACsOld(MainMAC)
-
-                for NewMAC in GluonMacList:
-                    if NewMAC in self.NeighbourList:
-                        MeshMAC = NewMAC
-                        knownMAC = True
-                        break
-
-            if not knownMAC:
-                GluonMacList = []
-            else:
-                print('>>> Neighbour Reference found:',MeshMAC,'->',MainMAC)
-
+            GluonMacList = []
 
         BadMAC = None
 
@@ -386,14 +369,17 @@ class ffNodeInfo:
     def __LoadNodesDbJson(self):
 
         print('Loading nodesdb.json ...')
+        UnixTime = int(time.time())
         NewestTime = 0
 
         try:
             NodesDbJsonHTTP = urllib.request.urlopen(self.__AlfredURL+NodesDbName,timeout=10)
-            HttpDate = datetime.datetime.strptime(NodesDbJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
-            StatusAge = datetime.datetime.utcnow() - HttpDate
+            HttpDate = int(calendar.timegm(time.strptime(NodesDbJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+            StatusAge = UnixTime - HttpDate
 
-            if StatusAge.total_seconds() > 900:
+            print('>>> Age =',StatusAge,'Sec.')
+
+            if StatusAge > MaxStatusAge:
                 NodesDbJsonHTTP.close()
                 self.__alert('++ nodesdb.json is too old !!!\n')
                 self.AnalyseOnly = True
@@ -407,8 +393,6 @@ class ffNodeInfo:
             return
 
         print('Analysing nodesdb.json ...')
-
-        UnixTime = time.mktime(datetime.datetime.utcnow().timetuple())
 
         for DbIndex in jsonDbDict:
             NodeNets  = jsonDbDict[DbIndex]['network']
@@ -443,7 +427,7 @@ class ffNodeInfo:
                         'KeyDir': '',
                         'KeyFile': '',
                         'FastdKey': '',
-                        'InCloud': 0,
+                        'InCloud': None,
                         'Neighbours': []
                     }
 
@@ -456,6 +440,8 @@ class ffNodeInfo:
                             NewestTime = jsonDbDict[DbIndex]['last_online']
 
                         if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) < MaxOfflineTime:
+                            self.ffNodeDict[ffNodeMAC]['Status'] = ' '
+
                             if 'segment' in jsonDbDict[DbIndex]:
                                 self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
 
@@ -530,12 +516,12 @@ class ffNodeInfo:
 
         try:
             Afred158HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred158Name,timeout=10)
-            HttpDate = datetime.datetime.strptime(Afred158HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
-            StatusAge = datetime.datetime.utcnow() - HttpDate
+            HttpDate = int(calendar.timegm(time.strptime(Afred158HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+            StatusAge = int(time.time()) - HttpDate
 
-            JsonUnixTime = int(time.mktime(HttpDate.timetuple()))
+            print('>>> Age =',StatusAge,'Sec.')
 
-            if StatusAge.total_seconds() > 900:
+            if StatusAge > MaxStatusAge:
                 Afred158HTTP.close()
                 self.__alert('++ alfred-json-158.json is too old !!!\n')
                 self.AnalyseOnly = True
@@ -548,7 +534,7 @@ class ffNodeInfo:
             self.AnalyseOnly = True
             return
 
-        print('Analysing alfred-json-158.json ...')
+        print('Analysing alfred-json-158.json ...',len(json158Dict))
 
         for jsonIndex in json158Dict:
             if ((not 'node_id' in json158Dict[jsonIndex]) or
@@ -576,7 +562,7 @@ class ffNodeInfo:
                             'RawKey': None,
                             'Name': json158Dict[jsonIndex]['hostname'],
                             'Status': ' ',
-                            'last_online': JsonUnixTime,
+                            'last_online': HttpDate,
                             'Clients': 0,
                             'Latitude': None,
                             'Longitude': None,
@@ -590,7 +576,7 @@ class ffNodeInfo:
                             'KeyDir': '',
                             'KeyFile': '',
                             'FastdKey':'',
-                            'InCloud': 0,
+                            'InCloud': None,
                             'Neighbours': []
                         }
 
@@ -606,15 +592,15 @@ class ffNodeInfo:
                         self.ffNodeDict[NodeMAC]['Status'] = ' '
 #                        print('++ Node is online:',NodeMAC,'=',json158Dict[jsonIndex]['hostname'].encode('utf-8'))
 
-                        if 'addresses' in json158Dict[jsonIndex]['network']:
-                            for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
-                                if ffsIPv6Template.match(NodeAddress):
-                                    self.ffNodeDict[NodeMAC]['IPv6'] = NodeAddress
+                    if 'addresses' in json158Dict[jsonIndex]['network']:
+                        for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
+                            if ffsIPv6Template.match(NodeAddress):
+                                self.ffNodeDict[NodeMAC]['IPv6'] = NodeAddress
 
-                                    if NodeAddress[12:14] == '1e':
-                                        self.ffNodeDict[NodeMAC]['Segment'] = 0
-                                    else:
-                                        self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
+                                if NodeAddress[12:14] == '1e':
+                                    self.ffNodeDict[NodeMAC]['Segment'] = 0
+                                else:
+                                    self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                     if 'mesh' in json158Dict[jsonIndex]['network']:
                         if 'bat0' in json158Dict[jsonIndex]['network']['mesh']:
@@ -634,6 +620,9 @@ class ffNodeInfo:
 
                     self.__SetSegmentAwareness(NodeMAC,json158Dict[jsonIndex]['software'])
 
+                else:
+                    print('++ Gateway found:',NodeMAC)
+
         print('... done.\n')
         return
 
@@ -652,10 +641,12 @@ class ffNodeInfo:
 
         try:
             Afred159HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred159Name,timeout=10)
-            HttpDate = datetime.datetime.strptime(Afred159HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
-            StatusAge = datetime.datetime.utcnow() - HttpDate
+            HttpDate = int(calendar.timegm(time.strptime(Afred159HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+            StatusAge = int(time.time()) - HttpDate
 
-            if StatusAge.total_seconds() > 900:
+            print('>>> Age =',StatusAge,'Sec.')
+
+            if StatusAge > MaxStatusAge:
                 Afred159HTTP.close()
                 self.__alert('++ alfred-json-159.json is too old !!!\n')
                 self.AnalyseOnly = True
@@ -668,7 +659,7 @@ class ffNodeInfo:
             self.AnalyseOnly = True
             return
 
-        print('Analysing alfred-json-159.json ...')
+        print('Analysing alfred-json-159.json ...',len(json159Dict))
 
         for jsonIndex in json159Dict:
             NodeID = json159Dict[jsonIndex]['node_id'].strip().lower()
@@ -682,6 +673,9 @@ class ffNodeInfo:
                     print('+++ Not in self.ffNodeDict:',NodeMAC)
 
                 else:
+                    if self.ffNodeDict[NodeMAC]['Status'] not in OnlineStates:
+                        self.ffNodeDict[NodeMAC]['Status'] = ' '
+
                     if 'mesh_vpn' in json159Dict[jsonIndex]:
                         if 'groups' in json159Dict[jsonIndex]['mesh_vpn']:
                             if 'backbone' in json159Dict[jsonIndex]['mesh_vpn']['groups']:
@@ -714,50 +708,48 @@ class ffNodeInfo:
 
         try:
             Afred160HTTP = urllib.request.urlopen(self.__AlfredURL+Alfred160Name,timeout=10)
-            HttpDate = datetime.datetime.strptime(Afred160HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')
-            StatusAge = datetime.datetime.utcnow() - HttpDate
+            HttpDate = int(calendar.timegm(time.strptime(Afred160HTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+            StatusAge = int(time.time()) - HttpDate
 
-            if StatusAge.total_seconds() > 900:
+            print('>>> Age =',StatusAge,'Sec.')
+
+            if StatusAge > MaxStatusAge:
                 Afred160HTTP.close()
                 self.__alert('++ alfred-json-160.json is too old !!!\n')
                 self.AnalyseOnly = True
                 return
 
-            json160 = json.loads(Afred160HTTP.read().decode('utf-8'))
+            json160Dict = json.loads(Afred160HTTP.read().decode('utf-8'))
             Afred160HTTP.close()
         except:
             self.__alert('++ Error on loading alfred-json-160.json !!!\n')
             self.AnalyseOnly = True
             return
 
-        print('Analysing alfred-json-160.json ...')
+        print('Analysing alfred-json-160.json ...',len(json160Dict))
 
-        for NodeItem in json160:
-            ffNodeID = json160[NodeItem]['node_id'].strip().lower()
+        for NodeItem in json160Dict:
+            ffNodeID = json160Dict[NodeItem]['node_id'].strip().lower()
             ffNodeMAC = ffNodeID[0:2] + ':' + ffNodeID[2:4] + ':' + ffNodeID[4:6] + ':' + ffNodeID[6:8] + ':' + ffNodeID[8:10] + ':' + ffNodeID[10:22]
 
-            if ffNodeMAC in self.ffNodeDict and self.ffNodeDict[ffNodeMAC]['Status'] != '?':
+            if ffNodeMAC in self.ffNodeDict:
+                if self.ffNodeDict[ffNodeMAC]['Status'] not in OnlineStates:
+                    self.ffNodeDict[ffNodeMAC]['Status'] = ' '
+
                 for MeshIF in ['batadv','wifi']:
-                    if MeshIF in json160[NodeItem]:
-                        for batXX in json160[NodeItem][MeshIF]:
+                    if MeshIF in json160Dict[NodeItem]:
+                        for batXX in json160Dict[NodeItem][MeshIF]:
                             if batXX not in self.MAC2NodeIDDict:
                                 print('++ batXX missing:',batXX)
                                 self.MAC2NodeIDDict[batXX] = ffNodeMAC
 
-                            if 'neighbours' in json160[NodeItem][MeshIF][batXX]:
-                                for ffNeighbour in json160[NodeItem][MeshIF][batXX]['neighbours']:
+                            if 'neighbours' in json160Dict[NodeItem][MeshIF][batXX]:
+                                for ffNeighbour in json160Dict[NodeItem][MeshIF][batXX]['neighbours']:
                                     if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
                                         (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
 
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
-                                        if ffNeighbour not in self.NeighbourList:
-                                            self.NeighbourList.append(ffNeighbour)
-
-#                                        print('++ New Neigbour found:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'->',ffNeighbour)
-
-#                                        if ffNeighbour not in self.MAC2NodeIDDict:
-#                                            print('++ Neigbour MAC unknown:',self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ffNeighbour)
             else:
                 print('++ Node unknown:',ffNodeMAC)
 
@@ -808,8 +800,7 @@ class ffNodeInfo:
 
         print('Analysing raw.json ...')
 
-        UtcTime  = datetime.datetime.utcnow()
-        UnixTime = int(time.mktime(UtcTime.timetuple()))
+        UnixTime = int(time.time())
 
         for ffNodeKey in RawJsonDict.keys():
             if 'nodeinfo' in RawJsonDict[ffNodeKey] and 'statistics' in RawJsonDict[ffNodeKey] and 'lastseen' in RawJsonDict[ffNodeKey]:
@@ -839,30 +830,24 @@ class ffNodeInfo:
                         print('++ Invalid Record:',ffNodeKey,'=',ffNodeMAC)
                         continue
 
-                    LastSeen = int(time.mktime(datetime.datetime.strptime(RawJsonDict[ffNodeKey]['lastseen'], '%Y-%m-%dT%H:%M:%S.%fZ').timetuple()))
+                    LastSeen = int(calendar.timegm(time.strptime(RawJsonDict[ffNodeKey]['lastseen'], '%Y-%m-%dT%H:%M:%S.%fZ')))
 
                     if ffNodeMAC in self.ffNodeDict:
-
                         if self.ffNodeDict[ffNodeMAC]['RawKey'] is None:
-                            if self.ffNodeDict[ffNodeMAC]['last_online'] > LastSeen:
-                                continue    # Alfred is newer
-#                            else:
-#                                print('-+ Updating:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
+                            self.ffNodeDict[ffNodeMAC]['RawKey'] = ffNodeKey
                         else:
-                            if self.ffNodeDict[ffNodeMAC]['last_online'] > RawJsonDict[ffNodeKey]['lastseen']:
+                            if self.ffNodeDict[ffNodeMAC]['last_online'] > LastSeen:
                                 continue    # newer Duplicate already in raw.json
                             else:
                                 print('-+ Upd. RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
-                    else:
-                        if UnixTime - LastSeen > MaxInactiveTime:
-                            print('>>> Old RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
-                            continue    # data is too old
+                                self.ffNodeDict[ffNodeMAC]['RawKey'] = ffNodeKey
 
+                    else:
                         print('++ New Node:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                         self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
 
                         self.ffNodeDict[ffNodeMAC] = {
-                            'RawKey': None,
+                            'RawKey': ffNodeKey,
                             'Name': RawJsonDict[ffNodeKey]['nodeinfo']['hostname'],
                             'Status': '#',
                             'last_online': 0,
@@ -879,48 +864,48 @@ class ffNodeInfo:
                             'KeyDir': '',
                             'KeyFile': '',
                             'FastdKey': '',
-                            'InCloud': 0,
+                            'InCloud': None,
                             'Neighbours': []
                         }
 
 
-                    #---------- new Node or newer info than alfred ----------
-                    self.ffNodeDict[ffNodeMAC]['RawKey'] = ffNodeKey
-                    self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
+                    if LastSeen > self.ffNodeDict[ffNodeMAC]['last_online']:
+                        self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
 
-                    if 'clients' in RawJsonDict[ffNodeKey]['statistics']:
-                        self.ffNodeDict[ffNodeMAC]['Clients'] = int(RawJsonDict[ffNodeKey]['statistics']['clients']['total'])
-                    else:
-                        self.ffNodeDict[ffNodeMAC]['Clients'] = 0
+                        if 'clients' in RawJsonDict[ffNodeKey]['statistics']:
+                            self.ffNodeDict[ffNodeMAC]['Clients'] = int(RawJsonDict[ffNodeKey]['statistics']['clients']['total'])
+                        else:
+                            self.ffNodeDict[ffNodeMAC]['Clients'] = 0
 
-                    if self.ffNodeDict[ffNodeMAC]['Name'] != RawJsonDict[ffNodeKey]['nodeinfo']['hostname']:
-                        print('++ Hostname mismatch:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('utf-8'))
-                        self.ffNodeDict[ffNodeMAC]['Name'] = RawJsonDict[ffNodeKey]['nodeinfo']['hostname']
+                        if self.ffNodeDict[ffNodeMAC]['Name'] != RawJsonDict[ffNodeKey]['nodeinfo']['hostname']:
+                            print('++ Hostname mismatch:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('utf-8'))
+                            self.ffNodeDict[ffNodeMAC]['Name'] = RawJsonDict[ffNodeKey]['nodeinfo']['hostname']
 
-                    if 'location' in RawJsonDict[ffNodeKey]['nodeinfo']:
-                        if 'latitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location'] and 'longitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
-                            self.ffNodeDict[ffNodeMAC]['Latitude']  = RawJsonDict[ffNodeKey]['nodeinfo']['location']['latitude']
-                            self.ffNodeDict[ffNodeMAC]['Longitude'] = RawJsonDict[ffNodeKey]['nodeinfo']['location']['longitude']
+                        if 'location' in RawJsonDict[ffNodeKey]['nodeinfo']:
+                            if 'latitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location'] and 'longitude' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
+                                self.ffNodeDict[ffNodeMAC]['Latitude']  = RawJsonDict[ffNodeKey]['nodeinfo']['location']['latitude']
+                                self.ffNodeDict[ffNodeMAC]['Longitude'] = RawJsonDict[ffNodeKey]['nodeinfo']['location']['longitude']
 
-                        if 'zip' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
-                            self.ffNodeDict[ffNodeMAC]['ZIP'] = str(RawJsonDict[ffNodeKey]['nodeinfo']['location']['zip'])[:5]
+                            if 'zip' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
+                                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(RawJsonDict[ffNodeKey]['nodeinfo']['location']['zip'])[:5]
 
-                    if 'mesh' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
-                        for InterfaceType in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces']:
-                            for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
+                        if 'mesh' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
+                            for InterfaceType in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces']:
+                                for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
+                                    if self.__AddGluonMACs(ffNodeMAC,MeshMAC) is not None:
+                                        LastSeen = 0
+                                        break
+
+                        elif 'mesh_interfaces' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
+                            for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh_interfaces']:
                                 if self.__AddGluonMACs(ffNodeMAC,MeshMAC) is not None:
                                     LastSeen = 0
                                     break
 
-                    elif 'mesh_interfaces' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
-                        for MeshMAC in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh_interfaces']:
-                            if self.__AddGluonMACs(ffNodeMAC,MeshMAC) is not None:
-                                LastSeen = 0
-                                break
-
-
                     if UnixTime - LastSeen < MaxOfflineTime:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # -> online
+                        if self.ffNodeDict[ffNodeMAC]['Status'] not in OnlineStates:
+                            self.ffNodeDict[ffNodeMAC]['Status'] = ' '   # -> online
+#                            print('>>> Node is online:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
 
                         if 'neighbours' in RawJsonDict[ffNodeKey]:
                             for InterfaceType in ['batadv','wifi']:
@@ -962,6 +947,7 @@ class ffNodeInfo:
                                                     self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
 
                     elif UnixTime - LastSeen > MaxInactiveTime:
+#                        print('>>> Old RAW:',ffNodeKey,'=',ffNodeMAC,'=',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('UTF-8'))
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # -> inactive
 
                     self.__SetSegmentAwareness(ffNodeMAC,RawJsonDict[ffNodeKey]['nodeinfo']['software'])
@@ -1010,15 +996,15 @@ class ffNodeInfo:
                     'KeyDir': KeyInfo['SegDir'],
                     'KeyFile': KeyIndex,
                     'FastdKey': KeyInfo['PeerKey'],
-                    'InCloud': 0,
+                    'InCloud': None,
                     'Neighbours': []
                 }
 
                 self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
-                self.__AddGluonMACs(ffNodeMAC,KeyInfo['VpnMAC'])
 
                 if KeyInfo['VpnMAC'] != '':
                     print('!! New Node:      ',KeyInfo['SegDir'],'/',ffNodeMAC,'=',KeyInfo['PeerName'].encode('utf-8'))
+                    self.__AddGluonMACs(ffNodeMAC,KeyInfo['VpnMAC'])
 
                     if KeyInfo['SegDir'] > 'vpn08':
                         self.ffNodeDict[ffNodeMAC]['GluonType'] = 3
@@ -1039,7 +1025,9 @@ class ffNodeInfo:
 
                 self.ffNodeDict[ffNodeMAC]['Segment'] = int(KeyInfo['SegDir'][3:])
                 self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
-                self.ffNodeDict[ffNodeMAC]['last_online'] = KeyInfo['LastConn']
+
+                if KeyInfo['LastConn'] > self.ffNodeDict[ffNodeMAC]['last_online']:
+                    self.ffNodeDict[ffNodeMAC]['last_online'] = KeyInfo['LastConn']
 
         return
 
@@ -1068,50 +1056,60 @@ class ffNodeInfo:
     def GetBatmanNodeMACs(self,SegmentList):
 
         print('\nAnalysing Batman TG ...')
+        TotalNodes = 0
+        TotalClients = 0
 
         for ffSeg in SegmentList:
             print('... Segment',ffSeg,'...')
-            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()
+            BatmanIF  = 'bat%02d' % (ffSeg)
             NodeCount = 0
             ClientCount = 0
 
             try:
-                BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
-                BatctlResult = BatctlTG.stdout.decode('utf-8')
+                with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_TRANS_TABLE), mode='r') as TransTableFile:
+                    BatmanTransTable = TransTableFile.read().splitlines()
             except:
-                print('++ ERROR accessing batman:',BatctlCmd)
+                print('!! ERROR on Batman Translation Table of',BatmanIF)
+                BatmanTransTable = None
             else:
-                for BatctlLine in BatctlResult.split('\n'):
-                    BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
-                    #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
+                for TransItem in BatmanTransTable:
+                    BatctlInfo = TransItem.replace('(',' ').replace(')',' ').split()
 
                     if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
-                        if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
+                        ffNodeMAC = BatctlInfo[1]
+                        ffMeshMAC = BatctlInfo[5]
 
-                            if BatctlInfo[5][:1] == BatctlInfo[1][:1] and BatctlInfo[5][9:] == BatctlInfo[1][9:]:  # old Gluon MAC schema
-                                BatmanMacList = self.GenerateGluonMACsOld(BatctlInfo[1])
+                        if BatctlInfo[2] == '-1' and MacAdrTemplate.match(ffMeshMAC) and not GwAllMacTemplate.match(ffMeshMAC):
+
+                            if ffMeshMAC[:1] == ffNodeMAC[:1] and ffMeshMAC[9:] == ffNodeMAC[9:]:  # old Gluon MAC schema
+                                BatmanMacList = self.GenerateGluonMACsOld(ffNodeMAC)
                             else:  # new Gluon MAC schema
-                                BatmanMacList = self.GenerateGluonMACsNew(BatctlInfo[1])
+                                BatmanMacList = self.GenerateGluonMACsNew(ffNodeMAC)
 
-                            if BatctlInfo[5] in BatmanMacList:  # Data is from Node
+                            if ffMeshMAC in BatmanMacList:  # Data is from Node
                                 NodeCount += 1
 
-                                if BatctlInfo[1] in self.ffNodeDict:
-                                    if BatctlInfo[5] in self.MAC2NodeIDDict and self.MAC2NodeIDDict[BatctlInfo[5]] != BatctlInfo[1]:
-                                        print('!! MAC mismatch Tunnel -> Client: Batman <> Alfred:',BatctlInfo[5],'->',BatctlInfo[1],'<>',self.MAC2NodeIDDict[BatctlInfo[5]])
-                                    else:
-                                        self.ffNodeDict[BatctlInfo[1]]['Segment'] = ffSeg
+                                if ffNodeMAC in self.ffNodeDict:
+                                    if ffMeshMAC in self.MAC2NodeIDDict and self.MAC2NodeIDDict[ffMeshMAC] != ffNodeMAC:
+                                        print('!! MAC mismatch Tunnel -> Client: Batman <> Alfred:',ffMeshMAC,'->',ffNodeMAC,'<>',self.MAC2NodeIDDict[ffMeshMAC])
 
-                                        if self.ffNodeDict[BatctlInfo[1]]['Status'] != 'V':
-                                            self.ffNodeDict[BatctlInfo[1]]['Status'] = ' '
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+
+                                    if self.ffNodeDict[ffNodeMAC]['Status'] not in OnlineStates:
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = ' '
+                                        print('    >> Node is online:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
                                 else:
-                                    print('++ New Node in Batman:',ffSeg,'/',BatctlInfo[1])
+                                    print('++ New Node in Batman:',ffSeg,'/',ffNodeMAC)
 
                             else:  # Data is from Client
                                 ClientCount += 1
 
             print('... Nodes / Clients:',NodeCount,'/',ClientCount)
+            TotalNodes   += NodeCount
+            TotalClients += ClientCount
 
+        print('\nTotalNodes / TotalClients =',TotalNodes,'/',TotalClients)
         print('... done.\n')
         return
 
