@@ -85,7 +85,7 @@ ZipTableName    = 'ZIP2GPS_DE.json'    # Data merged from OpenStreetMap and Open
 
 #----- Global Constants -----
 SEGMENT_WITHOUT_LOCATION = 10
-SEGMENT_FALLBACK         = 1
+SEGMENT_FALLBACK         = 3
 INVALID_SEGMENT          = 999
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
@@ -1002,7 +1002,7 @@ def GetSegment4Node(NodeInfo,GitPath,DatabasePath,GitSegment):
     NodeSegment = None
 
     if NodeInfo['Location'] is not None:
-        print('*** Location =',NodeInfo['Location'])
+#        print('*** Location =',NodeInfo['Location'])
         NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
     else:
         print('... no Location available ...')
