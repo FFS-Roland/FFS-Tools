@@ -52,7 +52,7 @@ date >> $LOGFILE
 
 echo Starting new ffs-Onboarding Process on $INTERFACE ... >> $LOGFILE
 
-/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW1 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
+/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW0 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
 
 if [ $? != 0 ]; then
     date >> $LOGFILE

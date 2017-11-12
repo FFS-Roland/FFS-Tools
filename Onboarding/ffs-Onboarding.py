@@ -88,6 +88,10 @@ SEGMENT_WITHOUT_LOCATION = 10
 SEGMENT_FALLBACK         = 3
 INVALID_SEGMENT          = 999
 
+NODETYPE_LEGACY          = 1
+NODETYPE_SEGMENT_LIST    = 2
+NODETYPE_DNS_SEGASSIGN   = 3
+
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SEGASSIGN_PREFIX = '2001:2:0:711::'
 
@@ -106,7 +110,9 @@ IPv6NodeTemplate = re.compile('^'+SEGASSIGN_PREFIX+'(([0-9a-f]{1,4}:){1,2})?[0-9
 #-----------------------------------------------------------------------
 def LoadAccounts(AccountFile):
 
+    print('... loading Account Data ...')
     AccountsDict = None
+
     try:
         AccountJsonFile = open(AccountFile, mode='r')
         AccountsDict = json.load(AccountJsonFile)
@@ -117,317 +123,6 @@ def LoadAccounts(AccountFile):
         AccountsDict = None
 
     return AccountsDict
-
-
-
-#-----------------------------------------------------------------------
-# Function "__SendEmail"
-#
-#   Sending an Email
-#
-#-----------------------------------------------------------------------
-def __SendEmail(Subject,MailBody,Account):
-
-    if MailBody != '':
-        try:
-            Email = MIMEText(MailBody)
-
-            Email['Subject'] = Subject
-            Email['From']    = Account['Username']
-            Email['To']      = Account['MailTo']
-            Email['Bcc']     = Account['MailBCC']
-
-            server = smtplib.SMTP(Account['Server'])
-            server.starttls()
-            server.login(Account['Username'],Account['Password'])
-            server.send_message(Email)
-            server.quit()
-            print('Email was sent to',Account['MailTo'])
-
-        except:
-            print('!! ERROR on sending Email to',Account['MailTo'])
-
-    return
-
-
-
-#-----------------------------------------------------------------------
-# function "getFastdStatusSocket"
-#
-#-----------------------------------------------------------------------
-def getFastdStatusSocket(pid):
-
-    fastdSocket = ''
-
-    try:
-        p = psutil.Process(pid)
-        connections = p.connections(kind='unix')
-    except:
-        pass
-    else:
-        for f in connections:
-            if f.laddr.startswith("/var/run"):
-                fastdSocket = f.laddr
-                break
-
-    return fastdSocket
-
-
-
-#-----------------------------------------------------------------------
-# function "getMeshMAC"
-#
-#-----------------------------------------------------------------------
-def getMeshMAC(FastdStatusSocket):
-
-    MeshMAC = None
-    Retries = 10
-
-    while MeshMAC is None and Retries > 0:
-        Retries -= 1
-        StatusData = ''
-        time.sleep(2)
-
-        try:
-            FastdLiveStatus = socket.socket( socket.AF_UNIX, socket.SOCK_STREAM )
-            FastdLiveStatus.connect(FastdStatusSocket)
-#            print('... Fastd-Socket connected, Retries =',Retries,'...')
-
-            while True:
-                tmpData = FastdLiveStatus.recv(1024*1024).decode('utf-8')
-                if tmpData == '':
-                    break;
-
-                StatusData += tmpData
-
-            FastdLiveStatus.close()
-#            print('... Fastd-Data ->',StatusData)
-
-            if StatusData != '':
-                FastdStatusJson = json.loads(StatusData)
-
-                if PeerKey in FastdStatusJson['peers']:
-                    if FastdStatusJson['peers'][PeerKey]['connection'] is not None:
-                        if 'mac_addresses' in FastdStatusJson['peers'][PeerKey]['connection']:
-                            for MeshMAC in FastdStatusJson['peers'][PeerKey]['connection']['mac_addresses']:
-                                break
-        except:
-            MeshMAC = None
-
-    return MeshMAC
-
-
-
-#-----------------------------------------------------------------------
-# function "InfoFromGluonNodeinfoPage"
-#
-#    can be used on Gluon >= v2016.1
-#
-#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
-#-----------------------------------------------------------------------
-def InfoFromGluonNodeinfoPage(HttpIPv6):
-
-    NodeInfoDict = {
-        'NodeType' : 'new',
-        'GluonVer' : '',
-        'NodeID'   : None,
-        'MAC'      : None,
-        'Hostname' : None,
-        'Segment'  : None,
-        'Location' : None,
-        'Contact'  : None
-    }
-
-    print('Connecting to http://['+HttpIPv6+']/cgi-bin/nodeinfo ...')
-
-    try:
-        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/nodeinfo',timeout=10)
-        NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
-        NodeHTTP.close()
-    except:
-        print('++ Error on loading /cgi-bin/nodeinfo')
-        return NodeInfoDict
-
-    if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
-        if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
-            if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
-                NodeInfoDict['NodeID']   = NodeJson['node_id'].strip()
-                NodeInfoDict['MAC']      = NodeJson['network']['mac'].strip()
-                NodeInfoDict['Hostname'] = NodeJson['hostname'].strip()
-
-                if 'software' in NodeJson:
-                    if 'firmware' in NodeJson['software']:
-                        if 'release' in NodeJson['software']['firmware']:
-                            NodeInfoDict['GluonVer'] = NodeJson['software']['firmware']['release']
-
-                            if NodeInfoDict['GluonVer'][0:3] < '0.7':
-                                NodeInfoDict['NodeType'] = 'old'
-
-                if 'owner' in NodeJson:
-                    if 'contact' in NodeJson['owner']:
-                        NodeInfoDict['Contact'] = NodeJson['owner']['contact']
-
-                print('>>> NodeID   =',NodeInfoDict['NodeID'])
-                print('>>> MAC      =',NodeInfoDict['MAC'])
-                print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
-                print('>>> GluonVer =',NodeInfoDict['GluonVer'])
-                print('>>> Contact  =',NodeInfoDict['Contact'])
-
-                if 'location' in NodeJson:
-                    if ('longitude' in NodeJson['location'] and 'latitude' in NodeJson['location']) or 'zip' in NodeJson['location']:
-                        NodeInfoDict['Location'] = NodeJson['location']
-
-                Segment = None
-
-                for NodeIPv6 in NodeJson['network']['addresses']:
-                    print('>>> IPv6 =',NodeIPv6)
-                    if NodeIPv6[0:12] == 'fd21:b4dc:4b':
-                        if NodeIPv6[12:14] == '1e':
-                            Segment = 0
-                        else:
-                            Segment = int(NodeIPv6[12:14])
-
-                        if NodeInfoDict['Segment'] is None:
-                            NodeInfoDict['Segment'] = Segment
-                        elif NodeInfoDict['Segment'] != Segment:
-                            print('!! Addresses of multiple Segments:',NodeInfoDict['Segment'],'<>',Segment)
-                            NodeInfoDict['Segment'] = None
-                            break
-
-                print('>>> NodeInfo Segment =',NodeInfoDict['Segment'])
-
-    return NodeInfoDict
-
-
-
-#-----------------------------------------------------------------------
-# function "InfoFromGluonStatusPage"
-#
-#    must be used on Gluon < v2016.1
-#
-#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
-#-----------------------------------------------------------------------
-def InfoFromGluonStatusPage(HttpIPv6):
-
-    NodeInfoDict = {
-        'NodeType' : 'old',
-        'GluonVer' : '',
-        'NodeID'   : None,
-        'MAC'      : None,
-        'Hostname' : None,
-        'Segment'  : None,
-        'Location' : None,
-        'Contact'  : None
-    }
-
-    NodeHTML = None
-    print('Connecting to http://['+HttpIPv6+']/cgi-bin/status ...')
-
-    try:
-        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/status',timeout=10)
-        NodeHTML = NodeHTTP.read().decode('utf-8')
-        NodeHTTP.close()
-    except:
-        print('++ Error on loading /cgi-bin/status')
-        return NodeInfoDict
-
-    pStart = NodeHTML.find('<body><h1>')
-    if pStart > 0:
-        pStart += 10
-        pStop = NodeHTML.find('</h1>',pStart)
-
-        if pStop > pStart:
-            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop].strip()
-            print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
-
-    pStart = NodeHTML.find('link/ether ')
-    if pStart > 0:
-        pStart += 11
-        print('>>> link/ether =',NodeHTML[pStart:pStart+20])
-        pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
-
-        if pStop >= pStart + 17:
-            NodeInfoDict['MAC'] = NodeHTML[pStart:pStart+17]
-            NodeInfoDict['NodeID'] =  NodeInfoDict['MAC'].replace(':','')
-            print('>>> MAC =',NodeInfoDict['MAC'])
-
-    pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
-    if pStart > 0:
-        pStart += 18
-        pStop = NodeHTML.find('/64 scope global',pStart)
-
-        if pStop > pStart + 2:
-            if NodeHTML[pStart:pStart+2] == '1e':
-                NodeInfoDict['Segment'] = 0
-                print('>>> StatusInfo Segment =',NodeInfoDict['Segment'])
-            else:
-                NodeInfoDict['Segment'] = None
-                print('!! Old Node in new Mesh Cloud!')
-
-    return NodeInfoDict
-
-
-
-#-----------------------------------------------------------------------
-# function "getNodeInfos"
-#
-#-----------------------------------------------------------------------
-def getNodeInfos(NodeMAC,IPv6Net,NodeIF):
-
-    NodeInfoDict = None
-    NodeHTML = None
-    Retries = 3
-
-    HttpIPv6 = IPv6Net + '::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17]
-
-    if NodeIF is not None:
-        HttpIPv6 += '%'+NodeIF
-
-    while NodeHTML is None and Retries > 0:
-        time.sleep(2)
-        print('Connecting to http://['+HttpIPv6+'] ...')
-        Retries -= 1
-
-        try:
-            NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/',timeout=15)
-            NodeHTML = NodeHTTP.read().decode('utf-8')
-            NodeHTTP.close()
-        except:
-            NodeHTML = None
-            pass
-
-    if NodeHTML is not None:
-        if NodeHTML.find('/cgi-bin/nodeinfo') > 0:
-            print('... is new Gluon ...')
-            NodeInfoDict = InfoFromGluonNodeinfoPage(HttpIPv6)
-        elif  NodeHTML.find('/cgi-bin/status') > 0:
-            print('... is old Gluon ...')
-            NodeInfoDict = InfoFromGluonStatusPage(HttpIPv6)
-
-    if NodeInfoDict is None:
-        print('+++ unknown System!')
-        NodeInfoDict = {
-            'NodeType' : 'unknown',
-            'GluonVer' : '',
-            'NodeID'   : None,
-            'MAC'      : None,
-            'Hostname' : None,
-            'Segment'  : None,
-            'Location' : None,
-            'Contact'  : None
-        }
-    else:
-        if NodeInfoDict['NodeID'] is not None:
-            if len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
-                print('+++ corrupted Status Page!')
-                NodeInfoDict['NodeID'] = None
-            elif NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
-                print('+++ inconsistent Data on Status Page!')
-                NodeInfoDict['NodeID'] = None
-        else:
-            print('>>> no Detail Data available!')
-
-    return NodeInfoDict
 
 
 
@@ -494,6 +189,300 @@ def GetGitInfo(GitPath):
 
     return GitDataDict
 
+
+
+#-----------------------------------------------------------------------
+# function "getFastdStatusSocket"
+#
+#-----------------------------------------------------------------------
+def getFastdStatusSocket(pid):
+
+    print('... getting Fastd Status Socket ...')
+    fastdSocket = ''
+
+    try:
+        p = psutil.Process(pid)
+        connections = p.connections(kind='unix')
+    except:
+        pass
+    else:
+        for f in connections:
+            if f.laddr.startswith("/var/run"):
+                fastdSocket = f.laddr
+                break
+
+    return fastdSocket
+
+
+
+#-----------------------------------------------------------------------
+# function "getNodeFastdMAC"
+#
+#-----------------------------------------------------------------------
+def getNodeFastdMAC(FastdStatusSocket):
+
+    print('... getting fastd-MAC from fastd status ...')
+    FastdMAC = None
+    Retries  = 10
+
+    while FastdMAC is None and Retries > 0:
+        Retries -= 1
+        StatusData = ''
+        time.sleep(2)
+
+        try:
+            FastdLiveStatus = socket.socket( socket.AF_UNIX, socket.SOCK_STREAM )
+            FastdLiveStatus.connect(FastdStatusSocket)
+#            print('... Fastd-Socket connected, Retries =',Retries,'...')
+
+            while True:
+                tmpData = FastdLiveStatus.recv(1024*1024).decode('utf-8')
+                if tmpData == '':
+                    break;
+
+                StatusData += tmpData
+
+            FastdLiveStatus.close()
+#            print('... Fastd-Data ->',StatusData)
+
+            if StatusData != '':
+                FastdStatusJson = json.loads(StatusData)
+
+                if PeerKey in FastdStatusJson['peers']:
+                    if FastdStatusJson['peers'][PeerKey]['connection'] is not None:
+                        if 'mac_addresses' in FastdStatusJson['peers'][PeerKey]['connection']:
+                            for FastdMAC in FastdStatusJson['peers'][PeerKey]['connection']['mac_addresses']:
+                                break
+        except:
+            FastdMAC = None
+            print('++ Error on getting fastd-MAC !!')
+
+    return FastdMAC
+
+
+
+#-----------------------------------------------------------------------
+# function "__InfoFromGluonNodeinfoPage"
+#
+#    can be used on Gluon >= v2016.1 (starting with ffs-v0.6)
+#
+#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#-----------------------------------------------------------------------
+def __InfoFromGluonNodeinfoPage(HttpIPv6):
+
+    print('Connecting to http://['+HttpIPv6+']/cgi-bin/nodeinfo ...')
+
+    try:
+        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/nodeinfo',timeout=10)
+        NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+        NodeHTTP.close()
+    except:
+        print('++ Error on loading /cgi-bin/nodeinfo')
+        return None
+
+
+    NodeInfoDict = {
+        'NodeType' : None,
+        'GluonVer' : None,
+        'NodeID'   : None,
+        'MAC'      : None,
+        'Hostname' : None,
+        'Segment'  : None,
+        'Location' : None,
+        'Contact'  : None
+    }
+
+    if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
+        if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
+            if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
+                NodeInfoDict['NodeID']   = NodeJson['node_id'].strip()
+                NodeInfoDict['MAC']      = NodeJson['network']['mac'].strip()
+                NodeInfoDict['Hostname'] = NodeJson['hostname'].strip()
+
+                if 'software' in NodeJson:
+                    if 'firmware' in NodeJson['software']:
+                        if 'release' in NodeJson['software']['firmware']:
+                            NodeInfoDict['GluonVer'] = NodeJson['software']['firmware']['release']
+
+                            if NodeInfoDict['GluonVer'][:14] >= '1.0+2017-02-14':
+                                NodeInfoDict['NodeType'] = NODETYPE_DNS_SEGASSIGN
+                            elif NodeInfoDict['GluonVer'][:14] >= '0.7+2016.01.02':
+                                NodeInfoDict['NodeType'] = NODETYPE_SEGMENT_LIST
+                            else:
+                                NodeInfoDict['NodeType'] = NODETYPE_LEGACY
+
+                if 'owner' in NodeJson:
+                    if 'contact' in NodeJson['owner']:
+                        NodeInfoDict['Contact'] = NodeJson['owner']['contact']
+
+                print('>>> NodeID   =',NodeInfoDict['NodeID'])
+                print('>>> MAC      =',NodeInfoDict['MAC'])
+                print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
+                print('>>> GluonVer =',NodeInfoDict['GluonVer'])
+                print('>>> Contact  =',NodeInfoDict['Contact'])
+
+                if 'location' in NodeJson:
+                    if ('longitude' in NodeJson['location'] and 'latitude' in NodeJson['location']) or 'zip' in NodeJson['location']:
+                        NodeInfoDict['Location'] = NodeJson['location']
+
+                Segment = None
+
+                for NodeIPv6 in NodeJson['network']['addresses']:
+                    print('>>> IPv6 =',NodeIPv6)
+                    if NodeIPv6[0:12] == 'fd21:b4dc:4b':
+                        if NodeIPv6[12:14] == '1e':
+                            Segment = 0
+                        else:
+                            Segment = int(NodeIPv6[12:14])
+
+                        if NodeInfoDict['Segment'] is None:
+                            NodeInfoDict['Segment'] = Segment
+                        elif NodeInfoDict['Segment'] != Segment:
+                            print('!! Addresses of multiple Segments:',NodeInfoDict['Segment'],'<>',Segment)
+                            NodeInfoDict['Segment'] = None
+                            break
+
+                print('>>> NodeInfo Segment =',NodeInfoDict['Segment'])
+
+    return NodeInfoDict
+
+
+
+#-----------------------------------------------------------------------
+# function "__InfoFromGluonStatusPage"
+#
+#    must be used on Gluon < v2016.1 (up to ffs-v.05)
+#
+#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#-----------------------------------------------------------------------
+def __InfoFromGluonStatusPage(HttpIPv6):
+
+    NodeHTML = None
+    print('Connecting to http://['+HttpIPv6+']/cgi-bin/status ...')
+
+    try:
+        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/status',timeout=10)
+        NodeHTML = NodeHTTP.read().decode('utf-8')
+        NodeHTTP.close()
+    except:
+        print('++ Error on loading /cgi-bin/status')
+        return None
+
+
+    NodeInfoDict = {
+        'NodeType' : None,
+        'GluonVer' : None,
+        'NodeID'   : None,
+        'MAC'      : None,
+        'Hostname' : None,
+        'Segment'  : None,
+        'Location' : None,
+        'Contact'  : None
+    }
+
+    pStart = NodeHTML.find('<body><h1>')
+    if pStart > 0:
+        pStart += 10
+        pStop = NodeHTML.find('</h1>',pStart)
+
+        if pStop > pStart:
+            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop].strip()
+            print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
+
+    pStart = NodeHTML.find('link/ether ')
+    if pStart > 0:
+        pStart += 11
+        print('>>> link/ether =',NodeHTML[pStart:pStart+20])
+        pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
+
+        if pStop >= pStart + 17:
+            NodeInfoDict['NodeType'] = NODETYPE_LEGACY
+            NodeInfoDict['MAC'] = NodeHTML[pStart:pStart+17]
+            NodeInfoDict['NodeID'] =  NodeInfoDict['MAC'].replace(':','')
+            print('>>> MAC =',NodeInfoDict['MAC'])
+
+    pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
+    if pStart > 0:
+        pStart += 18
+        pStop = NodeHTML.find('/64 scope global',pStart)
+
+        if pStop > pStart + 2:
+            if NodeHTML[pStart:pStart+2] == '1e':
+                NodeInfoDict['Segment'] = 0
+                print('>>> StatusInfo Segment =',NodeInfoDict['Segment'])
+            else:
+                NodeInfoDict['Segment'] = None
+                print('!! Old Node in new Mesh Cloud!')
+
+    return NodeInfoDict
+
+
+
+#-----------------------------------------------------------------------
+# function "getNodeInfos"
+#
+#    NodeIF is None => Fallback-Mode
+#
+#-----------------------------------------------------------------------
+def getNodeInfos(NodeMAC,NodeIF):
+
+    NodeInfoDict = None
+    NodeHTML = None
+    Retries = 3
+
+    if NodeIF is not None:
+        HttpIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
+
+        while NodeHTML is None and Retries > 0:
+            time.sleep(2)
+            print('Connecting to http://['+HttpIPv6+'] ...')
+            Retries -= 1
+
+            try:
+                NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/',timeout=15)
+                NodeHTML = NodeHTTP.read().decode('utf-8')
+                NodeHTTP.close()
+            except:
+                NodeHTML = None
+                pass
+
+        if NodeHTML is not None:
+            if NodeHTML.find('/cgi-bin/nodeinfo') > 0:
+                print('... is new Gluon ...')
+                NodeInfoDict = __InfoFromGluonNodeinfoPage(HttpIPv6)
+            elif  NodeHTML.find('/cgi-bin/status') > 0:
+                print('... is old Gluon ...')
+                NodeInfoDict = __InfoFromGluonStatusPage(HttpIPv6)
+
+        if NodeInfoDict is None:
+            print('+++ unknown System!')
+        else:
+            if NodeInfoDict['NodeType'] is not None and NodeInfoDict['NodeID'] is not None:
+                if len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
+                    print('+++ corrupted Status Page!')
+                    NodeInfoDict = None
+                elif NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
+                    print('+++ inconsistent Data on Status Page!')
+                    NodeInfoDict = None
+            else:
+                print('>>> no Detail Data available!')
+                NodeInfoDict = None
+
+    else:  # No status page via fastd -> Fallback to batman
+        NodeInfoDict = {
+            'NodeType' : NODETYPE_SEGMENT_LIST,
+            'GluonVer' : None,
+            'NodeID'   : NodeMAC.replace(':',''),
+            'MAC'      : NodeMAC,
+            'Hostname' : 'ffs-'+NodeMAC.replace(':',''),
+            'Segment'  : None,
+            'Location' : None,
+            'Contact'  : None
+        }
+
+        print('++ Fallback to Batman:',NodeMAC,'=',NodeInfoDict['Hostname'].encode('utf-8'))
+
+    return NodeInfoDict
 
 
 #-----------------------------------------------------------------------
@@ -981,9 +970,9 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
 # function "GetDefaultSegment"
 #
 #-----------------------------------------------------------------------
-def GetDefaultSegment(GluonVersion):
+def GetDefaultSegment(NodeType):
 
-    if GluonVersion[:8] >= '1.0+2017':
+    if NodeType == NODETYPE_DNS_SEGASSIGN:
         DefaultSeg = SEGMENT_WITHOUT_LOCATION
     else:
         DefaultSeg = SEGMENT_FALLBACK
@@ -997,21 +986,22 @@ def GetDefaultSegment(GluonVersion):
 # function "GetSegment4Node"
 #
 #-----------------------------------------------------------------------
-def GetSegment4Node(NodeInfo,GitPath,DatabasePath,GitSegment):
+def GetSegment4Node(NodeInfo,GitPath,DatabasePath):
 
     NodeSegment = None
 
-    if NodeInfo['Location'] is not None:
+    if NodeInfo['NodeType'] == NODETYPE_LEGACY:
+        NodeSegment = 0
+    elif NodeInfo['Location'] is not None:
 #        print('*** Location =',NodeInfo['Location'])
         NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
     else:
         print('... no Location available ...')
 
     if NodeSegment is None:
-        if GitSegment is not None and (NodeInfo['NodeType'] == 'old' or GitSegment != 0):
-            NodeSegment = GitSegment
-        else:
-            NodeSegment = GetDefaultSegment(NodeInfo['GluonVer'])
+        NodeSegment = GetDefaultSegment(NodeInfo['NodeType'])
+    elif NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and NodeSegment > 8:
+        NodeSegment = GetDefaultSegment(NodeInfo['NodeType'])
 
     return NodeSegment
 
@@ -1041,14 +1031,32 @@ def WriteNodeKeyFile(KeyFileName, NodeInfo, GitFixSeg, PeerKey):
 #-----------------------------------------------------------------------
 # function "RegisterNode"
 #
+#    NodeInfo = {
+#        'NodeType' : NODETYPE_LEGACY, NODETYPE_SEGMENT_LIST, NODETYPE_DNS_SEGASSIGN
+#        'GluonVer' : None,
+#        'NodeID'   : None,
+#        'MAC'      : None,
+#        'Hostname' : None,
+#        'Segment'  : None,
+#        'Location' : None,
+#        'Contact'  : None
+#    }
+#
+#
+#    GitInfo = {
+#        'NodeID' : { <NodeID> -> {'Key','Segment','fixed'} },
+#        'Key'    : { <Key>    -> ffNodeID }
+#    }
+#
+#
 #   Actions:
 #     NEW_KEY
-#     NEW_MAC
 #     NEW_NODE
+#     REMOVE_NODE
 #     NEW_SEGMENT
 #
 #-----------------------------------------------------------------------
-def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, GitPath, AccountsDict):
+def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict):
 
     DnsKeyRing = None
     DnsUpdate  = None
@@ -1057,18 +1065,64 @@ def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, Gi
     Action     = None
     ErrorCode  = 0
 
+    #----- Analyse Situation -----
+    NodeID     = NodeInfo['NodeID']
+    NewSegment = NodeInfo['Segment']
 
-    if NodeInfo['Segment'] is None:
-        print('++ Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment,GitNodeID,GitKey[:12]))
-        return 0
+    if NodeID in GitInfo['NodeID']:
+        GitKey     = GitInfo['NodeID'][NodeID]['Key']
+        GitSegment = GitInfo['NodeID'][NodeID]['Segment']
+        GitFixSeg  = GitInfo['NodeID'][NodeID]['fixed']
+
+        if NewSegment == INVALID_SEGMENT:   # legacy node in new segment, or new node in legacy segment
+            NewSegment = GitSegment
+            Action = 'REMOVE_NODE'
+        else:
+            if PeerKey != GitKey:
+                if PeerKey in GitInfo['Key']:
+                    print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
+                    return 0
+
+                Action = 'NEW_KEY'
+
+            if NewSegment is None:
+                if NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and GitSegment > 8:
+                    NewSegment = GetDefaultSegment(NODETYPE_SEGMENT_LIST)
+                else:
+                    NewSegment = GitSegment
+
+            if Action is None:
+                if NewSegment != GitSegment:
+                    Action = 'NEW_SEGMENT'
+                else:
+                    print('++ Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment,NodeID,GitKey[:12]))
+                    return 0
+
+    else:  # NodeID not in Git
+        GitKey     = None
+        GitSegment = None
+        GitFixSeg  = None
+
+        if PeerKey in GitInfo['Key']:
+            print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
+            return 0
+
+        if NewSegment == INVALID_SEGMENT:    # legacy node in new segment, or new node in legacy segment
+            print('++ Node cannot be registered due to invalid Firmware - Segment Combination!')
+            return 0
+
+        Action = 'NEW_NODE'
+
+        if NewSegment is None:
+            NewSegment = GetSegment4Node(NodeInfo,GitRepo,DatabasePath)
 
 
-    NewSegment     = NodeInfo['Segment']
+    #----- Actions depending of Situation -----
     NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment,NodeInfo['NodeID'])
-    NewPeerDnsName = 'ffs-%s-%s' % (NodeInfo['NodeID'],PeerKey[:12])
+    NewPeerDnsName = 'ffs-%s-%s' % (NodeID,PeerKey[:12])
     NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NewSegment)
-    print('\n>>> New Peer Data:', NewPeerDnsName, '=', NewPeerDnsIPv6, '->', NewPeerFile,)
-
+    print('\n>>> Action:',Action)
+    print('>>> New Peer Data:', NewPeerDnsName,'=', NewPeerFile,'->',NewPeerDnsIPv6)
 
     try:
         #----- Synchronizing Git Acccess -----
@@ -1093,58 +1147,56 @@ def RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, Gi
         if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or DnsUpdate is None:
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
 
-        else:
-            if GitNodeID is not None:    # existing Node ...
-                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,GitNodeID)
-                OldPeerDnsName = 'ffs-%s-%s' % (GitNodeID,GitKey[:12])
+        else:  # Git and DNS ready for registering node ...
+
+            if GitKey is not None:    # existing Node
+                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,NodeID)
+                OldPeerDnsName = 'ffs-%s-%s' % (NodeID,GitKey[:12])
                 print('>>> Old Peer Data:', OldPeerDnsName,'=',OldPeerFile)
 
-                if NewPeerFile != OldPeerFile:    # MAC or Segment have changed
-                    if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                    if Action == 'REMOVE_NODE':
                         GitIndex.remove([OldPeerFile])
-                        os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
+                        os.remove(os.path.join(GitPath,OldPeerFile))
+                        if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                        print('*** Removed Node due to Inconsistency: vpn%02d / ffs-%s \"%s\"' % (GitSegment,NodeID,NodeInfo['Hostname']))
+                        NeedCommit = True
+
+                    else:  # Action == 'NEW_KEY' and/or 'NEW_SEGMENT'
+                        if NewSegment != GitSegment:
+                            GitIndex.remove([OldPeerFile])
+                            os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
+                            print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment,NodeInfo['MAC'],NodeInfo['Hostname']))
+
+                        if PeerKey != GitKey:  # Action == 'NEW_KEY'
+                            WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
+                            print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+
                         GitIndex.add([NewPeerFile])
                         NeedCommit = True
 
-                        if NodeInfo['NodeID'] != GitNodeID:
-                            Action = 'NEW_MAC'
-                            print('*** New MAC with existing Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (GitSegment,GitNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                        if NewPeerDnsName != OldPeerDnsName:
+                            if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                            if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                         else:
-                            Action = 'NEW_SEGMENT'
-                            print('!!! New Segment or Key: vpn%02d / %s -> vpn%02d / %s = \"%s\" (%s...)' % (GitSegment,GitNodeID,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
-
-                    else:
-                        print('... Key File was already changed by other process.')
-
-                else:    # only Key has changed
-                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
-                    GitIndex.add([NewPeerFile])
-                    NeedCommit = True
-                    Action = 'NEW_KEY'
-                    print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
-
-                if NewPeerDnsName != OldPeerDnsName:
-                    if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                    if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-
+                            if NewSegment > 0:
+                                if GitSegment > 0:
+                                    DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                                else:
+                                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                            elif GitSegment > 0:  # no DNS for Legacy-Segment
+                                DnsUpdate.delete(OldPeerDnsName,'AAAA')
                 else:
-                    if NewSegment > 0:
-                        if GitSegment > 0:
-                            DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                        else:
-                            DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                    elif GitSegment > 0:  # no DNS for Legacy-Segment
-                        DnsUpdate.delete(NewPeerDnsName,'AAAA')
+                    print('... Key File was already changed by other process.')
 
-            else:    # new Node ...
+            else:  # Action == 'NEW_NODE'
                 if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
                     WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                     GitIndex.add([NewPeerFile])
-                    NeedCommit = True
                     if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                    Action = 'NEW_NODE'
                     print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
+                    NeedCommit = True
+
                 else:
                     print('... Key File was already added by other process.')
 
@@ -1200,6 +1252,36 @@ def setBlacklistFile(BlacklistFile):
     return
 
 
+#-----------------------------------------------------------------------
+# Function "__SendEmail"
+#
+#   Sending an Email
+#
+#-----------------------------------------------------------------------
+def __SendEmail(Subject,MailBody,Account):
+
+    if MailBody != '':
+        try:
+            Email = MIMEText(MailBody)
+
+            Email['Subject'] = Subject
+            Email['From']    = Account['Username']
+            Email['To']      = Account['MailTo']
+            Email['Bcc']     = Account['MailBCC']
+
+            server = smtplib.SMTP(Account['Server'])
+            server.starttls()
+            server.login(Account['Username'],Account['Password'])
+            server.send_message(Email)
+            server.quit()
+            print('Email was sent to',Account['MailTo'])
+
+        except:
+            print('!! ERROR on sending Email to',Account['MailTo'])
+
+    return
+
+
 
 #=======================================================================
 #
@@ -1222,33 +1304,36 @@ RetCode  = 0
 
 print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
 
-#if True:
-if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+if os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+    print('!! ERROR: Node is blacklisted:',PeerKey)
+else:
     setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
 
-    print('... loading Account Data ...')
-    AccountsDict = LoadAccounts(os.path.join(args.DATAPATH,AccountFileName))  # All needed Accounts for Accessing resricted Data
-
-    print('... getting Fastd Status Socket ...')
+    AccountsDict = LoadAccounts(os.path.join(args.DATAPATH,AccountFileName))
+    GitDataDict = GetGitInfo(args.GITREPO)
     FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
-    if os.path.exists(FastdStatusSocket) and AccountsDict is not None:
+    if not os.path.exists(FastdStatusSocket) or AccountsDict is None or GitDataDict is None:
+        print('!! ERROR: Accounts or Git-Data or Fastd Status Socket not available!')
+    else:
+        FastdMAC = getNodeFastdMAC(FastdStatusSocket)
 
-        print('... getting MeshMAC from fastd status ...')
-        MeshMAC = getMeshMAC(FastdStatusSocket)
-
-        if MeshMAC is not None:
-            print('... MeshMAC =',MeshMAC)
+        if FastdMAC is None:
+            print('++ fastd-MAC is not available!')
+        else:
+            print('... fastd-MAC =',FastdMAC)
 
             BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
-            if BatmanVpnMAC is not None and BatmanVpnMAC == MeshMAC:
+            if BatmanVpnMAC is None or BatmanVpnMAC != FastdMAC:
+                print('++ Node VPN MAC via Batman <> via FastD:',BatmanVpnMAC,'<>',FastdMAC)
+            else:
                 print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
 
-                NodeInfo = getNodeInfos(MeshMAC,'fe80',args.VPNIF)      # Data from status page of Node via HTTP
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)            # Data from status page of Node via HTTP
                 PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
-                if NodeInfo['NodeID'] is not None:
+                if NodeInfo is not None:
                     if PeerMAC is not None:
                         if PeerMAC != NodeInfo['MAC']:
                             print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
@@ -1256,109 +1341,35 @@ if not os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
                         else:
                             print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
 
-                elif PeerMAC is not None:    # No status page via fastd -> Fallback to batman
-                    if NodeInfo['NodeType'] != 'old':
-                        NodeInfo = getNodeInfos(PeerMAC,'fd21:711',None)
+                elif PeerMAC is not None:
+                    NodeInfo = getNodeInfos(PeerMAC,None)    # No status page via fastd -> Fallback to batman
 
-                    if NodeInfo['NodeID'] is None:
-                        NodeInfo['NodeID']   = PeerMAC.replace(':','')
-                        NodeInfo['MAC']      = PeerMAC
-                        NodeInfo['Hostname'] = 'ffs-'+PeerMAC.replace(':','')
-                        print('++ Fallback to Batman:',PeerMAC,'=',NodeInfo['Hostname'].encode('utf-8'))
+                if NodeInfo is None:
+                    print('++ Node information not available or inconsistent!')
+                else:
+                    BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # meshing segment from batman gateway list
 
-                    elif PeerMAC != NodeInfo['MAC']:
-                        print('!! PeerMAC mismatch: Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
-                        NodeInfo['NodeID'] = None
-                    else:
-                        print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
-
-                if NodeInfo['NodeID'] is not None:
-                    BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # segment from batman gateway list
-
-                    print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
-
-                    if NodeInfo['NodeType'] == 'old':
-                        if BatSegment is None:
-                            BatSegment = 0
-                            print('>>> Old Gluon must be in Segment 0 = Legacy')
-                        elif BatSegment != 0:
-                            BatSegment = INVALID_SEGMENT
-                            print('!! Old Node cannot be put to new Segment\n')
-                    elif BatSegment == 0:
-                        BatSegment = INVALID_SEGMENT
-                        print('!! New Node cannot be put to Legacy Segment\n')
-
-                    if BatSegment != INVALID_SEGMENT:
-                        GitDataDict = GetGitInfo(args.GITREPO)
-                    else:
-                        GitDataDict = None
-
-
-                    if GitDataDict is not None:
-
-                        if NodeInfo['NodeID'] in GitDataDict['NodeID']:
-                            GitNodeID  = NodeInfo['NodeID']
-                            GitKey     = GitDataDict['NodeID'][GitNodeID]['Key']
-                            GitSegment = GitDataDict['NodeID'][GitNodeID]['Segment']
-                            GitFixSeg  = GitDataDict['NodeID'][GitNodeID]['fixed']
-
-                            print('>>> Segment from Git / Node =',GitSegment,'/',NodeInfo['Segment'])
-
-                        else:    # NodeID is not registered, but maybe Key is known ...
-                            if PeerKey in GitDataDict['Key']:    # Key is already used ...
-                                GitNodeID  = GitDataDict['Key'][PeerKey]
-                                GitKey     = PeerKey
-                                GitSegment = GitDataDict['NodeID'][GitNodeID]['Segment']
-                                GitFixSeg  = GitDataDict['NodeID'][GitNodeID]['fixed']
-
-                            else:    # ... is new Node ...
-                                GitNodeID  = None
-                                GitKey     = None
-                                GitSegment = None
-                                GitFixSeg  = None
-
-
-                        if GitNodeID is not None and NodeInfo['NodeID'] == GitNodeID and PeerKey == GitKey:
-                            if BatSegment is None:
-                                if (NodeInfo['NodeType'] == 'new' and GitSegment == 0) or (NodeInfo['GluonVer'][:8] < '1.0+2017' and GitSegment > 8):
-                                    NodeInfo['Segment'] = GetSegment4Node(NodeInfo, args.GITREPO, args.DATAPATH, None)
-                                else:
-                                    NodeInfo['Segment'] = None    # Node is already registered correctly
-                            elif BatSegment == GitSegment:
-                                NodeInfo['Segment'] = None    # Node is already registered correctly
-                            else:
-                                NodeInfo['Segment'] = BatSegment    # existing Node is meshing in other Cloud
-
-                        elif BatSegment is not None:    # new Node is already meshing
-                            NodeInfo['Segment'] = BatSegment
-
-                        elif NodeInfo['Segment'] is None:
-                            NodeInfo['Segment'] = GetSegment4Node(NodeInfo, args.GITREPO, args.DATAPATH, GitSegment)
-
-                        RetCode = RegisterNode(NodeInfo, PeerKey, GitNodeID, GitKey, GitSegment, GitFixSeg, args.GITREPO, AccountsDict)
-
-
-                    elif BatSegment == INVALID_SEGMENT:
+                    if BatSegment == INVALID_SEGMENT:
                         print('!! ERROR: Shortcut / multiple segments detected !!')
                     else:
-                        print('!! ERROR: No Git-Data available !!')
+                        print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
 
-                else:
-                    print('++ Node status information not available or inconsistent!')
-            else:
-                print('++ Node VPN MAC via Batman <> via FastD:',BatmanVpnMAC,'<>',MeshMAC)
+                        if NodeInfo['NodeType'] == NODETYPE_LEGACY:
+                            if BatSegment is None:
+                                BatSegment = 0
+                                print('>>> Old Gluon must be in Segment 0 = Legacy')
+                            elif BatSegment != 0:
+                                BatSegment = INVALID_SEGMENT
+                                print('!! Old Node cannot be put to new Segment\n')
+                        elif BatSegment == 0:
+                            BatSegment = INVALID_SEGMENT
+                            print('!! New Node cannot be put to Legacy Segment\n')
+
+                        NodeInfo['Segment'] = BatSegment
+
+                        RetCode = RegisterNode(PeerKey, NodeInfo, GitDataDict, args.GITREPO, args.DATAPATH, AccountsDict)
 
             DeactivateBatman(args.BATIF,args.VPNIF)
-
-        else:
-            print('++ MeshMAC is not available!')
-
-    else:
-        print('!! ERROR: Accounts or Fastd Status Socket not available!')
-
-else:
-    print('!! ERROR: Node is blacklisted:',PeerKey)
-
 
 os.kill(FastdPID,signal.SIGUSR2)    # reset fastd connections
 
