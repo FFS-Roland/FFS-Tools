@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -183,6 +183,9 @@ class ffGatewayInfo:
             for KeyFilePath in GwFileList:
                 Segment  = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
                 FileName = os.path.basename(KeyFilePath)
+
+                if Segment == 0:
+                    continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
 
                 if Segment not in self.__SegmentDict:
                     self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
@@ -367,8 +370,11 @@ class ffGatewayInfo:
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
 
+                    if Segment == 0:
+                        continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
+
                     if Segment not in self.__SegmentDict:
-                        print('!! Segment in DNS but not in Git:',Segment)
+                        print('!! Segment in DNS but not in Git: %s' % (GwName))
                         self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
 
                     self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(FreifunkGwDomain,node.rdatasets)
@@ -392,6 +398,10 @@ class ffGatewayInfo:
 
             for GwName in self.__GwAliasDict:
                 del self.__GatewayDict[GwName]
+
+            print()
+            for GwName in sorted(self.__GatewayDict):
+                print(GwName.ljust(7),'=',self.__GatewayDict[GwName]['IPs'])
 
             print()
             for GwIP in sorted(Ip2GwDict):
@@ -419,14 +429,14 @@ class ffGatewayInfo:
                     else:
                         self.__alert('!! Unknown Gateway IP: '+GwIP)
 
-                print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
-
-                if Segment > 0 and Segment < 9 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 1:
-                    self.__alert('!! No Gateways in Segment '+str(Segment).zfill(2)+' !')
+                if Segment > 0 and Segment < 25 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
+                    self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
+                else:
+                    print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
 
             print()
             for GwName in sorted(self.__GatewayDict):
-                print(GwName,'->',sorted(self.__GatewayDict[GwName]['DnsSegments']))
+                print(GwName.ljust(7),'->',sorted(self.__GatewayDict[GwName]['DnsSegments']))
 
         print('\n... done.\n')
         return
@@ -467,6 +477,9 @@ class ffGatewayInfo:
                         Segment = int(GwName[5:])
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
+
+                    if Segment == 0:
+                        continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
 
                     if Segment not in self.__SegmentDict:
                         print('!! Invalid Segment:',Segment)
@@ -566,7 +579,10 @@ class ffGatewayInfo:
         print('\nChecking Batman for Gateways ...\n')
 
         for Segment in sorted(self.__SegmentDict):
-            GwList = self.__GetSegmentGwListFromBatman(Segment)
+            if len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
+                GwList = self.__GetSegmentGwListFromBatman(Segment)
+            else:
+                GwList = []
 
             for GwName in GwList:
                 if GwName not in self.__GatewayDict:
@@ -581,8 +597,8 @@ class ffGatewayInfo:
                     self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
 
             for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
-                if GwName not in self.__SegmentDict[Segment]['GwBatNames']:
-                    print('!! Gateway in DNS but not in Batman:',Segment,GwName)
+                if GwName not in self.__SegmentDict[Segment]['GwBatNames'] and Segment > 0 and Segment < 99:
+                    print('!! Gateway in DNS but not in Batman: Seg.%02d -> %s' % (Segment,GwName))
 
         print()
         for Segment in sorted(self.__SegmentDict):
@@ -590,7 +606,7 @@ class ffGatewayInfo:
 
         print()
         for GwName in sorted(self.__GatewayDict):
-            print(GwName,'->',sorted(self.__GatewayDict[GwName]['BatmanSegments']))
+            print(GwName.ljust(7),'->',sorted(self.__GatewayDict[GwName]['BatmanSegments']))
 
         print('\n... done.\n')
         return
@@ -603,6 +619,8 @@ class ffGatewayInfo:
     #
     #--------------------------------------------------------------------------
     def __CheckGatewayDnsServer(self):
+
+        return
 
         print('\nChecking DNS-Server on Gateways ...')
 
@@ -630,7 +648,7 @@ class ffGatewayInfo:
                                         try:
                                             DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
                                         except:
-                                            time.sleep(1)
+                                            time.sleep(2)
                                             DnsResult = None
                                         else:
                                             break
@@ -664,6 +682,9 @@ class ffGatewayInfo:
             SegDir   = os.path.dirname(KeyFilePath).split("/")[-2]
             Segment  = int(SegDir[3:])
             FileName = os.path.basename(KeyFilePath)
+
+            if Segment == 0:
+                continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
 
             if Segment not in self.__SegmentDict:
                 self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
@@ -731,7 +752,7 @@ class ffGatewayInfo:
             else:
                 print('++ Invalid Key Filename:', KeyFilePath)
 
-        print('... done.\n')
+        print('... done: %d\n' % (len(self.FastdKeyDict)))
         return
 
 
@@ -793,29 +814,39 @@ class ffGatewayInfo:
     def __LoadFastdStatusFile(self,URL,Segment):
 
         ActiveConnections = 0
+        jsonFastdDict = None
+        Retries = 5
 
-        try:
-            FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
-            HttpDate = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
-            StatusAge = int(time.time()) - HttpDate
-            jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
-            FastdJsonHTTP.close()
-        except:
+        while jsonFastdDict is None and Retries > 0:
+            Retries -= 1
+
+            try:
+                FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
+                HttpDate = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+                StatusAge = int(time.time()) - HttpDate
+                jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
+                FastdJsonHTTP.close()
+            except:
+#                print('** need retry ...')
+                jsonFastdDict = None
+                time.sleep(2)
+
+        if jsonFastdDict is None:
             print('++ ERROR fastd status connect!',URL)
             return None
-        else:
-            if StatusAge < 900:
-                if 'peers' in jsonFastdDict:
-                    if 'interface' in jsonFastdDict:
-                        if int(jsonFastdDict['interface'][3:5]) != Segment:
-                            print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
-                            return None
 
-                    ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpDate)
-                else:
-                    print('!! Bad fastd status file!',URL)
+        if StatusAge < 900:
+            if 'peers' in jsonFastdDict:
+                if 'interface' in jsonFastdDict:
+                    if int(jsonFastdDict['interface'][3:5]) != Segment:
+                        print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
+                        return None
+
+                ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpDate)
             else:
-                print('++ fastd status to old!',URL)
+                print('!! Bad fastd status file!',URL)
+        else:
+            print('++ fastd status to old!',URL)
 
         return ActiveConnections
 
@@ -842,32 +873,28 @@ class ffGatewayInfo:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+
+                        #----- MTU 1312 -----
+                        if GwName[:6] == 'gw05n0':
+                            FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
+                        else:
+                            FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)
+
+                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
+                        if ActiveConnections is not None:
+                            print('... %ss%02d = %d' % (GwName,ffSeg,ActiveConnections))
+
+                        #----- MTU 1406 -----
                         FastdJsonURL = 'http://%s/data/vpn%02d.json' % (InternalGwIPv4,ffSeg)
 #                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
 #                        FastdJsonURL = 'http://[%s]/data/vpn%02d.json' % (InternalGwIPv6,ffSeg)
-                    else:
-                        FastdJsonURL = 'http://%s.%s/data/vpn%02d.json' % (GwName,FreifunkGwDomain,ffSeg)
 
-                    ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                    if ActiveConnections is not None:
-                        print('... %ss%02d = %d' % (GwName,ffSeg,ActiveConnections))
-
-                    if ffSeg > 0 and (GwName[:7] == 'gw05n02' or GwName[:7] == 'gw05n03'):  # here we have separate fastd instances for IPv4 and IPv6
-                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-
-                        FastdJsonURL = 'http://%s/data/vpn%02dmtu.json' % (InternalGwIPv4,ffSeg)
-#                        FastdJsonURL = 'http://%s.%s/data/vpn%02dip6.json' % (GwName,FreifunkGwDomain,ffSeg)
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                        if ActiveConnections is not None:
-                            print('... %ss%02d (MTU 1312) = %d' % (GwName,ffSeg,ActiveConnections))
-
-                        FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
-                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                        if ActiveConnections is not None:
-                            print('... %ss%02d (MTU 1340) = %d' % (GwName,ffSeg,ActiveConnections))
+                        if ActiveConnections is not None and ActiveConnections != 0:
+                            print('... %ss%02d (MTU 1406) = %d' % (GwName,ffSeg,ActiveConnections))
 
             else:
-                print('...',GwName,'... ignored.')
+                print('\n...',GwName,'... ignored.')
 
         print('\n... done.')
         print('-------------------------------------------------------')
@@ -1035,6 +1062,7 @@ class ffGatewayInfo:
 
         if len(NodeMoveDict) < 1:
 #        if True:
+#            print(NodeMoveDict)
             print('++ There are no Peers to be moved.')
             return
 

@@ -24,7 +24,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -68,6 +68,7 @@ from class_ffMeshNet import *
 #=============================================================
 
 AccountsFileName  = '.Accounts.json'
+NodeDictFileName  = 'NodeDict.json'
 
 MacTableFile      = 'MacTable.lst'
 MeshCloudListFile = 'MeshClouds.lst'
@@ -111,7 +112,7 @@ def __SendEmail(Subject,MailBody,Account):
             Email['Subject'] = Subject
             Email['From']    = Account['Username']
             Email['To']      = Account['MailTo']
-            Email['Bcc']     = Account['MailBCC']
+#            Email['Bcc']     = Account['MailBCC']
 
             server = smtplib.SMTP(Account['Server'])
             server.starttls()
@@ -154,17 +155,23 @@ isOK = ffsGWs.CheckNodesInSegassignDNS()    # Check DNS entries of Nodes against
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
-ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'])
+ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'],args.GITREPO,args.DATAPATH)
 
 print('Merging fastd-Infos to Nodes ...')
+NewNodeCount = 0
+
 for KeyIndex in ffsGWs.FastdKeyDict.keys():
-    ffsNodes.AddNode(KeyIndex,ffsGWs.FastdKeyDict[KeyIndex])    # Merge Data from Gateways to NodeInfos
+    if ffsNodes.AddNode(KeyIndex,ffsGWs.FastdKeyDict[KeyIndex]):    # Merge Data from Gateways to NodeInfos
+        NewNodeCount += 1
+
+print('... %d Nodes added.\n' % (NewNodeCount))
+
 
 ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
-if not ffsNodes.SetDesiredSegments(args.GITREPO,args.DATAPATH):
+if not ffsNodes.SetDesiredSegments():
     print('!! FATAL ERROR: Regions / Segments not available!')
     exit(1)
 
@@ -184,6 +191,10 @@ MailBody = ''
 
 if NodeMoveDict is None:
     ffsNodes.CheckNodesInNodesDNS(AccountsDict['DNS'])
+
+    if not ffsNodes.AnalyseOnly and not ffsGWs.AnalyseOnly and not ffsNet.AnalyseOnly:
+        ffsNodes.WriteNodeDict()
+
 else:
     print('\nMoving Nodes ...')
 

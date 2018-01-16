@@ -14,7 +14,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -57,7 +57,6 @@ from class_ffGatewayInfo import *
 StatFileName   = 'SegStatistics.json'
 
 MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
-
 
 
 
@@ -341,7 +340,7 @@ class ffMeshNet:
                     else:
                         DesiredSegDict[DestSeg] += Weight
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto':
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or VpnSeg == 99:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegList:
                         FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])  # cannot be moved!
 
@@ -361,7 +360,8 @@ class ffMeshNet:
                     print('>> Uplink(s) found by Batman:',UplinkList)
 
                 elif len(FixedSegList) > 0:
-                    print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                    print('++ Fixed Cloud:',CloudID,'...')
+#                    print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
                 elif self.__MeshCloudDict[CloudID]['GluonType'] > 1:
                     self.__HandleSegmentAssignment(CloudID,DesiredSegDict,ActiveSegList)
 
@@ -382,7 +382,8 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= 2)):
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= 2) and
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn99')):
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
                     TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
@@ -599,7 +600,7 @@ class ffMeshNet:
             NeighborOutFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (%s)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentRegion))
 
             if CurrentRegion is None:
-                CurrentRegion = '??'
+                CurrentRegion = '***'
 
             if CurrentRegion not in RegionDict:
                 RegionDict[CurrentRegion] = { 'Nodes':TotalNodes, 'Clients':TotalClients, 'OldGluon':OldGluon, 'Segment':CurrentSeg }
@@ -682,7 +683,7 @@ class ffMeshNet:
         TotalClients = 0
 
         for Region in sorted(RegionDict):
-            NeighborOutFile.write('%-25s: %4d + %4d = %4d  (Seg.%02d / old = %2d)\n' % (Region, RegionDict[Region]['Nodes'], RegionDict[Region]['Clients'], RegionDict[Region]['Nodes']+RegionDict[Region]['Clients'], RegionDict[Region]['Segment'], RegionDict[Region]['OldGluon']))
+            NeighborOutFile.write('%-32s: %4d + %4d = %4d  (Seg.%02d / old = %2d)\n' % (Region, RegionDict[Region]['Nodes'], RegionDict[Region]['Clients'], RegionDict[Region]['Nodes']+RegionDict[Region]['Clients'], RegionDict[Region]['Segment'], RegionDict[Region]['OldGluon']))
             TotalNodes   += RegionDict[Region]['Nodes']
             TotalClients += RegionDict[Region]['Clients']
 
