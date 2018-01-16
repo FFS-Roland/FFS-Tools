@@ -18,7 +18,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -70,7 +70,6 @@ import re
 import hashlib
 import fcntl
 import argparse
-import overpy
 
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
@@ -80,14 +79,14 @@ from glob import glob
 #----- Needed Data-Files -----
 AccountFileName = '.Accounts.json'
 StatFileName    = 'SegStatistics.json'
-ZipTableName    = 'ZIP2GPS_DE.json'    # Data merged from OpenStreetMap and OpenGeoDB
-
+Zip2GpsName     = 'ZIP2GPS_DE.json'    # Data merged from OpenStreetMap and OpenGeoDB
+ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
-SEGMENT_WITHOUT_LOCATION = 10
-SEGMENT_FALLBACK         = 3
+DEFAULT_SEGMENT          = 3
 INVALID_SEGMENT          = 999
 
+NODETYPE_UNKNOWN         = 0
 NODETYPE_LEGACY          = 1
 NODETYPE_SEGMENT_LIST    = 2
 NODETYPE_DNS_SEGASSIGN   = 3
@@ -95,7 +94,7 @@ NODETYPE_DNS_SEGASSIGN   = 3
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SEGASSIGN_PREFIX = '2001:2:0:711::'
 
-LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{3,}')
+LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{1,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
 IPv6NodeTemplate = re.compile('^'+SEGASSIGN_PREFIX+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
@@ -349,76 +348,6 @@ def __InfoFromGluonNodeinfoPage(HttpIPv6):
 
 
 #-----------------------------------------------------------------------
-# function "__InfoFromGluonStatusPage"
-#
-#    must be used on Gluon < v2016.1 (up to ffs-v.05)
-#
-#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
-#-----------------------------------------------------------------------
-def __InfoFromGluonStatusPage(HttpIPv6):
-
-    NodeHTML = None
-    print('Connecting to http://['+HttpIPv6+']/cgi-bin/status ...')
-
-    try:
-        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/status',timeout=10)
-        NodeHTML = NodeHTTP.read().decode('utf-8')
-        NodeHTTP.close()
-    except:
-        print('++ Error on loading /cgi-bin/status')
-        return None
-
-
-    NodeInfoDict = {
-        'NodeType' : None,
-        'GluonVer' : None,
-        'NodeID'   : None,
-        'MAC'      : None,
-        'Hostname' : None,
-        'Segment'  : None,
-        'Location' : None,
-        'Contact'  : None
-    }
-
-    pStart = NodeHTML.find('<body><h1>')
-    if pStart > 0:
-        pStart += 10
-        pStop = NodeHTML.find('</h1>',pStart)
-
-        if pStop > pStart:
-            NodeInfoDict['Hostname'] = NodeHTML[pStart:pStop].strip()
-            print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
-
-    pStart = NodeHTML.find('link/ether ')
-    if pStart > 0:
-        pStart += 11
-        print('>>> link/ether =',NodeHTML[pStart:pStart+20])
-        pStop = NodeHTML.find(' brd ff:ff:ff:ff:ff:ff',pStart)
-
-        if pStop >= pStart + 17:
-            NodeInfoDict['NodeType'] = NODETYPE_LEGACY
-            NodeInfoDict['MAC'] = NodeHTML[pStart:pStart+17]
-            NodeInfoDict['NodeID'] =  NodeInfoDict['MAC'].replace(':','')
-            print('>>> MAC =',NodeInfoDict['MAC'])
-
-    pStart = NodeHTML.find('inet6 fd21:b4dc:4b')
-    if pStart > 0:
-        pStart += 18
-        pStop = NodeHTML.find('/64 scope global',pStart)
-
-        if pStop > pStart + 2:
-            if NodeHTML[pStart:pStart+2] == '1e':
-                NodeInfoDict['Segment'] = 0
-                print('>>> StatusInfo Segment =',NodeInfoDict['Segment'])
-            else:
-                NodeInfoDict['Segment'] = None
-                print('!! Old Node in new Mesh Cloud!')
-
-    return NodeInfoDict
-
-
-
-#-----------------------------------------------------------------------
 # function "getNodeInfos"
 #
 #    NodeIF is None => Fallback-Mode
@@ -433,30 +362,9 @@ def getNodeInfos(NodeMAC,NodeIF):
     if NodeIF is not None:
         HttpIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
 
-        while NodeHTML is None and Retries > 0:
-            time.sleep(2)
-            print('Connecting to http://['+HttpIPv6+'] ...')
-            Retries -= 1
+        NodeInfoDict = __InfoFromGluonNodeinfoPage(HttpIPv6)
 
-            try:
-                NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/',timeout=15)
-                NodeHTML = NodeHTTP.read().decode('utf-8')
-                NodeHTTP.close()
-            except:
-                NodeHTML = None
-                pass
-
-        if NodeHTML is not None:
-            if NodeHTML.find('/cgi-bin/nodeinfo') > 0:
-                print('... is new Gluon ...')
-                NodeInfoDict = __InfoFromGluonNodeinfoPage(HttpIPv6)
-            elif  NodeHTML.find('/cgi-bin/status') > 0:
-                print('... is old Gluon ...')
-                NodeInfoDict = __InfoFromGluonStatusPage(HttpIPv6)
-
-        if NodeInfoDict is None:
-            print('+++ unknown System!')
-        else:
+        if NodeInfoDict is not None:
             if NodeInfoDict['NodeType'] is not None and NodeInfoDict['NodeID'] is not None:
                 if len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
                     print('+++ corrupted Status Page!')
@@ -470,7 +378,7 @@ def getNodeInfos(NodeMAC,NodeIF):
 
     else:  # No status page via fastd -> Fallback to batman
         NodeInfoDict = {
-            'NodeType' : NODETYPE_SEGMENT_LIST,
+            'NodeType' : NODETYPE_UNKNOWN,
             'GluonVer' : None,
             'NodeID'   : NodeMAC.replace(':',''),
             'MAC'      : NodeMAC,
@@ -483,6 +391,7 @@ def getNodeInfos(NodeMAC,NodeIF):
         print('++ Fallback to Batman:',NodeMAC,'=',NodeInfoDict['Hostname'].encode('utf-8'))
 
     return NodeInfoDict
+
 
 
 #-----------------------------------------------------------------------
@@ -498,10 +407,11 @@ def ActivateBatman(BatmanIF,FastdIF):
     try:
         subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if','add',FastdIF])
         subprocess.run(['/sbin/ip','link','set','dev',BatmanIF,'up'])
+        BatctlResult = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'if'], stdout=subprocess.PIPE)
     except:
         print('++ Cannot bring up',BatmanIF,'!')
     else:
-        print('... Batman Interface',BatmanIF,'is up ...')
+        print('... Batman Interface',BatmanIF,'is up ...',BatctlResult.stdout.decode('utf-8'))
 
         while(Retries > 0):
             Retries -= 1
@@ -548,7 +458,7 @@ def DeactivateBatman(BatmanIF,FastdIF):
 
 
 #-----------------------------------------------------------------------
-# function "GenerateGluonMACsOld(MainMAC)"
+# function "__GenerateGluonMACsOld(MainMAC)"
 #
 #   Get all related MACs based on Primary MAC for Gluon <= 2016.1.x
 #
@@ -568,7 +478,7 @@ def DeactivateBatman(BatmanIF,FastdIF):
 #  m2 = (tonumber(m2, 16)+f) % 0x100
 #  m3 = (tonumber(m3, 16)+i) % 0x100
 #-----------------------------------------------------------------------
-def GenerateGluonMACsOld(MainMAC):
+def __GenerateGluonMACsOld(MainMAC):
 
     MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
 
@@ -592,7 +502,7 @@ def GenerateGluonMACsOld(MainMAC):
 
 
 #-----------------------------------------------------------------------
-# function "GenerateGluonMACsNew(MainMAC)"
+# function "__GenerateGluonMACsNew(MainMAC)"
 #
 #   Get all related MACs based on Primary MAC for Gluon >= 2016.2.x
 #
@@ -624,7 +534,7 @@ def GenerateGluonMACsOld(MainMAC):
 #
 # return string.format('%02x:%s:%s:%s:%s:%02x', m1, m2, m3, m4, m5, m6)
 #-----------------------------------------------------------------------
-def GenerateGluonMACsNew(MainMAC):
+def __GenerateGluonMACsNew(MainMAC):
 
     mHash = hashlib.md5(MainMAC.encode(encoding='UTF-8'))
     vMAC = mHash.hexdigest()
@@ -650,7 +560,7 @@ def GenerateGluonMACsNew(MainMAC):
 #   Get Node's main MAC by Batman Global Translation Table
 #
 #-----------------------------------------------------------------------
-def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
+def GetBatmanNodeMAC(BatmanVpnMAC,BatmanIF):
 
     print('Find Primary MAC in Batman TG:',BatmanIF,'/',BatmanVpnMAC)
     GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[4-9]))(:[0-9a-f]{2}){3}')
@@ -673,18 +583,20 @@ def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
                 BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
                 #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
 
-                if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
-                    if BatctlInfo[2] == '-1' and MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]):
+                if len(BatctlInfo) == 9 and BatctlInfo[2] == '-1' and BatctlInfo[4] == 'via':
+                    if ((MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1])) and
+                        (MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]))):
 
                         if  BatctlInfo[1][0] == BatmanVpnMAC[0] and BatctlInfo[1][9:] == BatmanVpnMAC[9:]:
                             print('... checking old schema:',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = GenerateGluonMACsOld(BatctlInfo[1])
+                            BatmanMacList = __GenerateGluonMACsOld(BatctlInfo[1])
 #                            print('>>> Old MacList:',BatmanMacList)
                         elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:
                             print('... checking new schema:',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = GenerateGluonMACsNew(BatctlInfo[1])
+                            BatmanMacList = __GenerateGluonMACsNew(BatctlInfo[1])
 #                            print('>>> New MacList:',BatmanMacList)
                         else:
+#                            print('... unknown schema:',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = []
 
                         if BatmanVpnMAC in BatmanMacList:
@@ -706,7 +618,7 @@ def GetBatmanNodeMAC(BatmanIF,BatmanVpnMAC):
 #
 #   returns Segment or None (node is not meshing) or INVALID_SEGMENT
 #-----------------------------------------------------------------------
-def getBatmanSegment(BatmanIF,FastdIF):
+def getBatmanSegment(BatmanIF):
 
     print('Find Segment via Batman Gateways ...')
     Retries = 30
@@ -748,28 +660,147 @@ def getBatmanSegment(BatmanIF,FastdIF):
 
 
 #-------------------------------------------------------------
-# function "__SetupZipData"
+# function "__SetupZip2GpsData"
 #
 #     Load ZIP File of OpenGeoDB Project
 #
 #-------------------------------------------------------------
-def __SetupZipData(DatabasePath):
+def __SetupZip2GpsData(DatabasePath):
 
-    print('... Setting up ZIP Data ...')
+    print('... Setting up ZIP-to-GPS Data ...')
     Zip2GpsDict = None
     ZipCount = 0
 
     try:
-        with open(os.path.join(DatabasePath,ZipTableName), mode='r') as Zip2GpsFile:
+        with open(os.path.join(DatabasePath,Zip2GpsName), mode='r') as Zip2GpsFile:
             Zip2GpsDict = json.load(Zip2GpsFile)
     except:
-        print('!! ERROR on setting up ZIP-Data')
+        print('!! ERROR on setting up ZIP-to-GPS Data')
         Zip2GpsDict = None
     else:
         ZipCount = len(Zip2GpsDict)
 
     print('... ZIP-Codes loaded:',ZipCount)
     return Zip2GpsDict
+
+
+
+#-------------------------------------------------------------
+# function "__SetupZipAreaData"
+#
+#     ZipFileDict -> Dictionary of ZIP-Area Files
+#
+#-------------------------------------------------------------
+def __SetupZipAreaData(GitPath):
+
+    print('Setting up ZIP-Area Data ...')
+
+    ZipAreaFiles = glob(os.path.join(GitPath,'vpn*/zip-areas/?????_*.json'))
+    ZipFileDict  = {}
+
+    for FileName in ZipAreaFiles:
+        ZipCode = os.path.basename(FileName)[:5]
+        ZipFileDict[ZipCode] = { 'FileName':FileName, 'Area':os.path.basename(FileName).split(".")[0], 'Segment':int(FileName.split("/")[-3][3:]) }
+
+    if len(ZipFileDict) < 10:
+        print('!! ERROR on registering ZIP-Areas:',len(ZipFileDict),'\n')
+        ZipFileDict = None
+    else:
+        print('... ZIP-Areas registered:',len(ZipFileDict),'\n')
+
+    return ZipFileDict
+
+
+
+#-------------------------------------------------------------
+# function "__SetupZipGridData"
+#
+#     ZipGridDict -> Grid with ZIP-Codes
+#
+#-------------------------------------------------------------
+def __SetupZipGridData(DatabasePath):
+
+    print('Setting up ZIP-Grid Data ...')
+
+    ZipGridDict = None
+    FieldCount  = 0
+
+    try:
+        with open(os.path.join(DatabasePath,ZipGridName), mode='r') as ZipGridFile:
+            ZipGridDict = json.load(ZipGridFile)
+    except:
+        print('!! ERROR on setting up ZIP-Grid Data')
+        ZipGridDict = None
+    else:
+        FieldCount = len(ZipGridDict['Fields'])
+
+        lon_min = float(ZipGridDict['Meta']['lon_min'])
+        lon_max = float(ZipGridDict['Meta']['lon_max'])
+        lat_min = float(ZipGridDict['Meta']['lat_min'])
+        lat_max = float(ZipGridDict['Meta']['lat_max'])
+
+        ZipGridDict['Meta']['lon_scale'] = float(ZipGridDict['Meta']['lon_fields']) / (lon_max - lon_min)
+        ZipGridDict['Meta']['lat_scale'] = float(ZipGridDict['Meta']['lat_fields']) / (lat_max - lat_min)
+
+    print('... ZIP-Fields loaded:',FieldCount,'\n')
+    return ZipGridDict
+
+
+
+#-------------------------------------------------------------
+# function "__GetZipSegmentFromGPS"
+#
+#     Get Segment from GPS using ZIP-Areas
+#
+#-------------------------------------------------------------
+def __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict):
+
+    ZipSegment = None
+
+    if lat is not None and lon is not None:
+        x = int((lon - float(ZipGridDict['Meta']['lon_min'])) * ZipGridDict['Meta']['lon_scale'])
+        y = int((lat - float(ZipGridDict['Meta']['lat_min'])) * ZipGridDict['Meta']['lat_scale'])
+
+        if ((x >= 0 and x < ZipGridDict['Meta']['lon_fields']) and
+            (y >= 0 and y < ZipGridDict['Meta']['lat_fields'])):
+
+            NodeLocation = Point(lon,lat)
+            FieldIndex = str(y*ZipGridDict['Meta']['lon_fields'] + x)
+
+            for ZipCode in ZipGridDict['Fields'][FieldIndex]:
+                ZipFileName = ZipAreaDict[ZipCode]['FileName']
+                ZipAreaJson = None
+
+                with open(ZipFileName,"r") as fp:
+                    ZipAreaJson = json.load(fp)
+
+                if "geometries" in ZipAreaJson:
+                    TrackBase = ZipAreaJson["geometries"][0]["coordinates"]
+                elif "coordinates" in ZipAreaJson:
+                    TrackBase = ZipJson["coordinates"]
+                else:
+                    TrackBase = None
+                    print('Problem parsing %s' % ZipFileName)
+                    continue
+
+                AreaMatch = 0
+
+                for Track in TrackBase:
+                    Shape = []
+
+                    for t in Track[0]:
+                        Shape.append( (t[0],t[1]) )
+
+                    ZipPolygon = Polygon(Shape)
+
+                    if ZipPolygon.intersects(NodeLocation):
+                        AreaMatch += 1
+
+                if AreaMatch == 1:
+                    ZipSegment = ZipAreaDict[ZipCode]['Segment']
+                    break
+
+    return ZipSegment
 
 
 
@@ -785,7 +816,6 @@ def __SetupRegionData(GitPath):
 
     RegionDict = {
         'ValidArea': Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
-        'unknown'  : [],
         'Polygons' : {},
         'Segments' : {}
     }
@@ -795,55 +825,44 @@ def __SetupRegionData(GitPath):
 
     try:
         for FileName in JsonFileList:
-            Region  = os.path.basename(FileName.split('.')[0])
+            Region  = os.path.basename(FileName).split('.')[0]
             Segment = int(os.path.dirname(FileName).split('/')[-2][3:])
 
-            with open(FileName,'r') as JsonFile:
-                GeoJson = json.load(JsonFile)
-
-            if 'type' in GeoJson:
-                if GeoJson['type'] == 'DefaultSegment':
-                    if GeoJson['region'] == 'outside':
-                        RegionDict['Segments']['outside'] = Segment
-                    elif GeoJson['region'] == 'unknown':
-                        RegionDict['unknown'].append(Segment)
-                    else:
-                        print('!! Invalid Default Region in File: %s' % FileName)
-                        RegionDict = None
-                        break
-
-                else: # type == GeometryCollection
-                    if 'geometries' in GeoJson:
-                        TrackBase = GeoJson['geometries'][0]['coordinates']
-                    elif 'coordinates' in GeoJson:
-                        TrackBase = GeoJson['coordinates']
-                    else:
-                        TrackBase = None
-                        print('Problem parsing %s' % FileName)
-                        continue
-
-                    RegionDict['Polygons'][Region] = []
-                    RegionDict['Segments'][Region] = Segment
-                    RegionCount += 1
-
-                    for Track in TrackBase:
-                        Shape = []
-
-                        for t in Track[0]:
-                            Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
-
-                        RegionDict['Polygons'][Region].append(Polygon(Shape))
-
-            else:
+            if Region[0] == '_':
                 print('!! Invalid File: %s' % FileName)
-                RegionDict = None
+                RegionCount = 0
                 break
 
+            else:
+                with open(FileName,'r') as JsonFile:
+                    GeoJson = json.load(JsonFile)
+
+                if 'type' in GeoJson and 'geometries' in GeoJson:
+                    TrackBase = GeoJson['geometries'][0]['coordinates']
+                elif 'coordinates' in GeoJson:
+                    TrackBase = GeoJson['coordinates']
+                else:
+                    TrackBase = None
+                    print('Problem parsing %s' % FileName)
+                    continue
+
+                RegionDict['Polygons'][Region] = []
+                RegionDict['Segments'][Region] = Segment
+                RegionCount += 1
+
+                for Track in TrackBase:
+                    Shape = []
+
+                    for t in Track[0]:
+                        Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
+
+                    RegionDict['Polygons'][Region].append(Polygon(Shape))
+
     except:
+        RegionCount = 0
+
+    if RegionCount == 0:
         RegionDict = None
-    else:
-        if len(RegionDict['Segments']) == 0 or len(RegionDict['unknown']) == 0:
-            RegionDict = None
 
     print('... Region Areas loaded:',RegionCount)
     return RegionDict
@@ -893,10 +912,13 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
     print('Get Segment from Position ...',Location)
 
     RegionDict  = __SetupRegionData(GitPath)
-    Segment = None
+    ZipAreaDict = __SetupZipAreaData(GitPath)
+    ZipGridDict = __SetupZipGridData(DatabasePath)
+
+    GpsSegment = None
     ZipSegment = None
 
-    if RegionDict is None:
+    if RegionDict is None or ZipAreaDict is None or ZipGridDict is None:
         print('!! No Region Data available !!!')
     else:
         if 'longitude' in Location and 'latitude' in Location:
@@ -908,77 +930,57 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
                     lon = Location['latitude']
                     lat = Location['longitude']
 
-                Segment = GetSegmentFromGPS(lon,lat,RegionDict)
+                while lat > 90.0:    # missing decimal separator
+                    lat /= 10.0
+
+                while lon > 70.0:    # missing decimal separator
+                    lon /= 10.0
+
+                GpsSegment = __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
+
+                if GpsSegment is None:
+                    GpsSegment = GetSegmentFromGPS(lon,lat,RegionDict)
+
+            else:
+                print('** Bad GPS Data:',str(lat),'|',str(lon))
 
         if 'zip' in Location:
             ZipCode = str(Location['zip'])[:5]
             print('... Checking ZIP-Code',ZipCode)
 
             if ZipTemplate.match(ZipCode):
-                for Region in RegionDict['Segments'].keys():
-                    if Region[:5] == ZipCode:
-                        ZipSegment = RegionDict['Segments'][Region]
-                        break;
+                if ZipCode in ZipAreaDict:
+                    ZipSegment = ZipAreaDict[ZipCode]['Segment']
 
                 if ZipSegment is None:
-                    Zip2PosDict = __SetupZipData(DatabasePath)
+                    Zip2GpsDict = __SetupZip2GpsData(DatabasePath)
 
-                    if Zip2PosDict is not None:
-                        if ZipCode in Zip2PosDict:
-                            lon = float(Zip2PosDict[ZipCode]['lon'])
-                            lat = float(Zip2PosDict[ZipCode]['lat'])
+                    if Zip2GpsDict is not None:
+                        if ZipCode in Zip2GpsDict:
+                            lon = float(Zip2GpsDict[ZipCode]['lon'])
+                            lat = float(Zip2GpsDict[ZipCode]['lat'])
                             ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
 
-                if ZipSegment is None:  # Fallback to OpenStreetMap online request
-                    lon = 0.0
-                    lat = 0.0
-
-                    try:
-                        api = overpy.Overpass()
-                        query = 'rel[postal_code="%s"];out center;' % (ZipCode)
-                        result = api.query(query)
-
-                        for relation in result.relations:
-                            lon = relation.center_lon
-                            lat = relation.center_lat
-                            ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
-                            break
-                    except:
-                        ZipSegment = None
+                            if ZipSegment is None:
+                                print('>>> Unknown ZIP-Region!')
+                        else:
+                            print('>>> Unknown ZIP-Code!')
 
                 print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)
 
-                if Segment is not None:
-                    if ZipSegment is not None and ZipSegment != Segment:
-                        print('!! Segment Mismatch Geo <> ZIP:',Segment,'<>',ZipSegment)
+                if GpsSegment is not None:
+                    if ZipSegment is not None and ZipSegment != GpsSegment:
+                        print('!! Segment Mismatch GPS <> ZIP:',GpsSegment,'<>',ZipSegment)
                 elif ZipSegment is not None:
-                    Segment = ZipSegment
-                    print('++ Segment set by ZIP-Code:',Segment)
-                else:
-                    print('... unknown ZIP-Code:',ZipCode)
+                    GpsSegment = ZipSegment
+                    print('++ Segment set by ZIP-Code:',ZipSegment)
             else:
                 print('... invalid ZIP-Code Format:',ZipCode)
 
         if ZipSegment is None:
-            print('>>> GeoSegment =',Segment)
+            print('>>> GpsSegment =',GpsSegment)
 
-    return Segment
-
-
-
-#-----------------------------------------------------------------------
-# function "GetDefaultSegment"
-#
-#-----------------------------------------------------------------------
-def GetDefaultSegment(NodeType):
-
-    if NodeType == NODETYPE_DNS_SEGASSIGN:
-        DefaultSeg = SEGMENT_WITHOUT_LOCATION
-    else:
-        DefaultSeg = SEGMENT_FALLBACK
-
-    print('... Default Segment =',DefaultSeg)
-    return DefaultSeg
+    return GpsSegment
 
 
 
@@ -999,9 +1001,11 @@ def GetSegment4Node(NodeInfo,GitPath,DatabasePath):
         print('... no Location available ...')
 
     if NodeSegment is None:
-        NodeSegment = GetDefaultSegment(NodeInfo['NodeType'])
+        NodeSegment = DEFAULT_SEGMENT
+        print('... setting default Segment =',DEFAULT_SEGMENT)
     elif NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and NodeSegment > 8:
-        NodeSegment = GetDefaultSegment(NodeInfo['NodeType'])
+        NodeSegment = DEFAULT_SEGMENT
+        print('... replacing with default Segment =',DEFAULT_SEGMENT)
 
     return NodeSegment
 
@@ -1065,6 +1069,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
     Action     = None
     ErrorCode  = 0
 
+
     #----- Analyse Situation -----
     NodeID     = NodeInfo['NodeID']
     NewSegment = NodeInfo['Segment']
@@ -1073,10 +1078,12 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
         GitKey     = GitInfo['NodeID'][NodeID]['Key']
         GitSegment = GitInfo['NodeID'][NodeID]['Segment']
         GitFixSeg  = GitInfo['NodeID'][NodeID]['fixed']
+        print('*** NodeID in GitInfo:',GitSegment,'/',NodeID)
 
         if NewSegment == INVALID_SEGMENT:   # legacy node in new segment, or new node in legacy segment
             NewSegment = GitSegment
             Action = 'REMOVE_NODE'
+            print('*** Action =',Action)
         else:
             if PeerKey != GitKey:
                 if PeerKey in GitInfo['Key']:
@@ -1084,10 +1091,15 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     return 0
 
                 Action = 'NEW_KEY'
+                print('*** Action =',Action)
 
             if NewSegment is None:
-                if NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and GitSegment > 8:
-                    NewSegment = GetDefaultSegment(NODETYPE_SEGMENT_LIST)
+                if ((NodeInfo['NodeType'] != NODETYPE_LEGACY and GitSegment == 0) or
+                    (NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and GitSegment > 8) or
+                    (GitSegment > 64)):
+
+                    NewSegment = GetSegment4Node(NodeInfo,GitPath,DatabasePath)
+                    print('++ Node was registered in invalid segment: vpn%02d / ffs-%s-%s\n' % (GitSegment,NodeID,GitKey[:12]))
                 else:
                     NewSegment = GitSegment
 
@@ -1099,6 +1111,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     return 0
 
     else:  # NodeID not in Git
+        print('*** NodeID not in GitInfo:',NodeID)
         GitKey     = None
         GitSegment = None
         GitFixSeg  = None
@@ -1113,8 +1126,12 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
         Action = 'NEW_NODE'
 
+        print('*** Action =',Action)
+
         if NewSegment is None:
-            NewSegment = GetSegment4Node(NodeInfo,GitRepo,DatabasePath)
+            NewSegment = GetSegment4Node(NodeInfo,GitPath,DatabasePath)
+
+        print('*** NewSegment =',NewSegment)
 
 
     #----- Actions depending of Situation -----
@@ -1303,11 +1320,12 @@ FastdPID = int(args.FASTDPID)
 RetCode  = 0
 
 print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
+BlacklistFile = os.path.join(args.BLACKLIST,PeerKey)
 
-if os.path.exists(args.BLACKLIST+'/'+args.PEERKEY):
+if os.path.exists(BlacklistFile):
     print('!! ERROR: Node is blacklisted:',PeerKey)
 else:
-    setBlacklistFile(os.path.join(args.BLACKLIST,PeerKey))
+    setBlacklistFile(BlacklistFile)
 
     AccountsDict = LoadAccounts(os.path.join(args.DATAPATH,AccountFileName))
     GitDataDict = GetGitInfo(args.GITREPO)
@@ -1325,18 +1343,19 @@ else:
 
             BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
-            if BatmanVpnMAC is None or BatmanVpnMAC != FastdMAC:
+            if BatmanVpnMAC is not None and BatmanVpnMAC != FastdMAC:
                 print('++ Node VPN MAC via Batman <> via FastD:',BatmanVpnMAC,'<>',FastdMAC)
             else:
-                print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
+                print('... Batman VPN-MAC =',BatmanVpnMAC)
+#                print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
 
-                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)            # Data from status page of Node via HTTP
-                PeerMAC  = GetBatmanNodeMAC(args.BATIF,BatmanVpnMAC)    # using "batctl tg" (Global Translation Table) to get Primary MAC
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)        # Data from status page of Node via HTTP
+                PeerMAC  = GetBatmanNodeMAC(FastdMAC,args.BATIF)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
                 if NodeInfo is not None:
                     if PeerMAC is not None:
                         if PeerMAC != NodeInfo['MAC']:
-                            print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],PeerMAC)
+                            print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],'<>',PeerMAC)
                             NodeInfo = None
                         else:
                             print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
@@ -1347,7 +1366,7 @@ else:
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
                 else:
-                    BatSegment = getBatmanSegment(args.BATIF,args.VPNIF)    # meshing segment from batman gateway list
+                    BatSegment = getBatmanSegment(args.BATIF)    # meshing segment from batman gateway list
 
                     if BatSegment == INVALID_SEGMENT:
                         print('!! ERROR: Shortcut / multiple segments detected !!')
@@ -1355,15 +1374,11 @@ else:
                         print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
 
                         if NodeInfo['NodeType'] == NODETYPE_LEGACY:
-                            if BatSegment is None:
-                                BatSegment = 0
-                                print('>>> Old Gluon must be in Segment 0 = Legacy')
-                            elif BatSegment != 0:
-                                BatSegment = INVALID_SEGMENT
-                                print('!! Old Node cannot be put to new Segment\n')
+                            BatSegment = INVALID_SEGMENT
+                            print('!! Old Legacy Node is not supported !!\n')
                         elif BatSegment == 0:
                             BatSegment = INVALID_SEGMENT
-                            print('!! New Node cannot be put to Legacy Segment\n')
+                            print('!! New Node cannot be put to Legacy Segment !!\n')
 
                         NodeInfo['Segment'] = BatSegment
 

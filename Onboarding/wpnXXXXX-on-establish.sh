@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ###########################################################################################
 #                                                                                         #
@@ -15,7 +15,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -50,9 +50,9 @@ BLACKLIST=/var/freifunk/blacklist
 
 date >> $LOGFILE
 
-echo Starting new ffs-Onboarding Process on $INTERFACE ... >> $LOGFILE
+echo Starting new ffs-Onboarding Process on $INTERFACE from $PEER_ADDRESS ... >> $LOGFILE
 
-/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW1406 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
+/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman bat${INTERFACE:3:5} --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
 
 if [ $? != 0 ]; then
     date >> $LOGFILE

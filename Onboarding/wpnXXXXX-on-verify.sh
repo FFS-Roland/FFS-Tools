@@ -1,11 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 
 ###########################################################################################
 #                                                                                         #
-#  on-establis.sh                                                                         #
+#  on-verify.sh                                                                           #
 #                                                                                         #
-#  This shell script is launched by fastd whenever a new connection is established.       #
-#  It will run python script "ffs-Onboarding.py" to handle unknown peers.                 #
+#  This shell script is launched by fastd whenever a peer requests a connection which     #
+#  must be checked for beeing allowed.                                                    #
+#                                                                                         #
+#  Exit Code 0 = Request accepted                                                         #
+#            1 = Request denied because of blacklisting or other instance still running.  # 
 #                                                                                         #
 #  Available Environment Variables from fastd:                                            #
 #                                                                                         #
@@ -15,7 +18,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -39,29 +42,39 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/${INTERFACE}_$(date +%y%m%d)_established.log
+LOGFILE=/var/freifunk/logs/wpnXXXXX_$(date +%y%m%d)_verify.log
+
+#exit 1    # for blocking during test phase only - will be removed later!
 
 
 #----- Path Definitions -----
-PEERGITREPO=/var/freifunk/peers-ffs
-DATAPATH=/var/freifunk/database
 BLACKLIST=/var/freifunk/blacklist
 
 
 date >> $LOGFILE
+echo $PEER_KEY >> $LOGFILE
+echo $INTERFACE >> $LOGFILE
 
-echo Starting new ffs-Onboarding Process on $INTERFACE ... >> $LOGFILE
-
-/usr/local/bin/ffs-Onboarding.py --fastd $INTERFACE --batman batW1340 --pid $FASTD_PID --peerkey $PEER_KEY --gitrepo $PEERGITREPO --data $DATAPATH --blacklist $BLACKLIST >> $LOGFILE
-
-if [ $? != 0 ]; then
-    date >> $LOGFILE
-    echo ++ ERROR >> $LOGFILE
-    kill -s 12 $FASTD_PID    # SIGUSR2 = drop all connections
-    kill -s 17 $FASTD_PID    # SIGCHLD = unlink zombies
-else
-    date >> $LOGFILE
-    echo OK. >> $LOGFILE
+if [ $(ps -x | grep -v "grep" |  grep -c "ffs-Onboarding.py --fastd $INTERFACE") -gt 0 ]; then
+  echo ++ Another ffs-Onboarding Process is still running >> $LOGFILE
+  echo --------------------- >> $LOGFILE
+  exit 1
 fi
 
-echo ---------------------------------------- >> $LOGFILE
+if [ -f $BLACKLIST/$PEER_KEY ]; then
+  LOCKTIME=$(cat $BLACKLIST/$PEER_KEY)
+  NOW=$(date +%s)
+  DELTA=$((NOW - LOCKTIME))
+  if [ $DELTA -gt 600 ]; then
+    rm $BLACKLIST/$PEER_KEY
+    echo Blocking removed. >> $LOGFILE
+  else
+    echo Node is blacklisted. >> $LOGFILE
+    echo --------------------- >> $LOGFILE
+    exit 1
+  fi
+fi
+
+echo OK >> $LOGFILE
+echo --------------------- >> $LOGFILE
+exit 0
