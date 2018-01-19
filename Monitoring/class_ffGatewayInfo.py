@@ -71,7 +71,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04','gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -370,8 +370,8 @@ class ffGatewayInfo:
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
 
-                    if Segment == 0:
-                        continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
+                    if Segment == 0 or Segment == 99:
+                        continue    # >>> Onboarder
 
                     if Segment not in self.__SegmentDict:
                         print('!! Segment in DNS but not in Git: %s' % (GwName))
@@ -478,8 +478,8 @@ class ffGatewayInfo:
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
 
-                    if Segment == 0:
-                        continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
+                    if Segment == 0 or Segment == 99:
+                        continue    # >>> Onboarder
 
                     if Segment not in self.__SegmentDict:
                         print('!! Invalid Segment:',Segment)
@@ -990,10 +990,14 @@ class ffGatewayInfo:
                         DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                         print('>>> Updating Peer in DNS:',PeerDnsName,'->',PeerDnsIPv6)
 
+                else:
+                    self.__alert('!! ERROR on updating DNS: '+PeerDnsName+' -> '+PeerDnsIPv6)
+
                 isOK = False
 
         if DnsUpdate is not None:
             dns.query.tcp(DnsUpdate,self.__DnsServerIP)
+            print('... Update launched on DNS-Server',self.__DnsServerIP)
 
         return isOK
 
