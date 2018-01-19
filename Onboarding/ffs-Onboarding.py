@@ -966,7 +966,7 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
                         else:
                             print('>>> Unknown ZIP-Code!')
 
-                print('>>> GeoSegment / ZipSegment =',Segment,'/',ZipSegment)
+                print('>>> GpsSegment / ZipSegment =',GpsSegment,'/',ZipSegment)
 
                 if GpsSegment is not None:
                     if ZipSegment is not None and ZipSegment != GpsSegment:
