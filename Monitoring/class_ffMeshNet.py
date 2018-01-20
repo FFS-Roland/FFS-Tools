@@ -562,6 +562,9 @@ class ffMeshNet:
 
                     if CurrentRegion is None or CurrentRegion == '??':
                         CurrentRegion = self.__NodeInfos.ffNodeDict[ffnb]['Region']
+                    elif self.__NodeInfos.ffNodeDict[ffnb]['Region'] != '??' and self.__NodeInfos.ffNodeDict[ffnb]['Region'] != CurrentRegion:
+                        print('++ ERROR Region:',ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Region'],'<>',CurrentRegion)
+                        CurrentError = '!'
 
                 if CurrentError == ' ' and self.__NodeInfos.ffNodeDict[ffnb]['SegMode'] != 'auto':
                     CurrentError = '+'

@@ -1492,7 +1492,7 @@ class ffNodeInfo:
         print('Setting up Region Data ...')
 
         RegionDict = {
-            'ValidArea': Polygon([ (-12.0,35.0),(-12.0,72.0),(30.0,72.0),(30.0,35.0) ]),
+            'ValidArea': Polygon([ (0.0,45.0),(0.0,60.0),(20.0,60.0),(20.0,45.0) ]),
             'Polygons' : {},
             'Segments' : {}
         }
