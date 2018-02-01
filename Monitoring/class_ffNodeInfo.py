@@ -9,14 +9,14 @@
 #                                                                                         #
 #  Needed Data Files:                                                                     #
 #                                                                                         #
-#       raw.json                  -> Node Names and Information                           #
-#       nodesdb.json              -> Region = Segment                                     #
-#       alfred-json-158.json      -> Nodeinfos                                            #
-#       alfred-json-159.json      -> VPN-Uplinks                                          #
-#       alfred-json-160.json      -> Neighbors                                            #
+#       raw.json                   -> Node Names and Information                          #
+#       nodesdb.json               -> Region = Segment                                    #
+#       alfred-json-158.json       -> Nodeinfos                                           #
+#       alfred-json-159.json       -> VPN-Uplinks                                         #
+#       alfred-json-160.json       -> Neighbors                                           #
 #                                                                                         #
-#       regions/<segment>/*.json  -> Polygons of Regions                                  #
-#       regions/ZIP2GPS_DE.json   -> Dict. of ZIP-Codes with related GPS-Positions        #
+#       regions/<segment>/*.json   -> Polygons of Regions                                 #
+#       database/ZipLocations.json -> Dict. of ZIP-Codes with related GPS-Positions       #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -85,9 +85,9 @@ Alfred158Name  = 'alfred-json-158.json'
 Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
 
-NodeDictName   = 'NodeDict.json'    # Node Database
-Zip2GpsName    = 'ZIP2GPS_DE.json'  # Data merged from OpenStreetMap and OpenGeoDB
-ZipGridName    = 'ZipGrid.json'     # Grid of ZIP Codes from Baden-Wuerttemberg
+NodeDictName   = 'NodeDict.json'      # Node Database
+Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
+ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 
 ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9a-f]{2}:0:')
@@ -547,7 +547,7 @@ class ffNodeInfo:
                         if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) < MaxOfflineTime:
                             self.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
-                            if 'segment' in jsonDbDict[DbIndex]:
+                            if 'segment' in jsonDbDict[DbIndex] and jsonDbDict[DbIndex]['segment'] is not None:
                                 self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
 
                             if 'gateway' in jsonDbDict[DbIndex]:
@@ -1649,8 +1649,8 @@ class ffNodeInfo:
                                 ZipSegment = ZipAreaDict[ZipCode]['Segment']
 
                             elif ZipCode in Zip2PosDict:
-                                lat = float(Zip2PosDict[ZipCode]['lat'])
-                                lon = float(Zip2PosDict[ZipCode]['lon'])
+                                lon = Zip2PosDict[ZipCode][0]
+                                lat = Zip2PosDict[ZipCode][1]
                                 ZipRegion = self.__GetRegionFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
                                 if ZipRegion is None:
