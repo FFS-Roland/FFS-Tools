@@ -78,8 +78,6 @@ from glob import glob
 
 #----- Needed Data-Files -----
 AccountFileName = '.Accounts.json'
-StatFileName    = 'SegStatistics.json'
-Zip2GpsName     = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
 ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
