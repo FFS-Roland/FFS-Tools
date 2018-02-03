@@ -1170,7 +1170,7 @@ class ffNodeInfo:
 
             if FastdKeyInfo['VpnMAC'] != '':
                 if self.ffNodeDict[ffNodeMAC]['Status'] == '?':
-                    print('!! Node is alive: ',fastdKeyInfo['SegDir'],'/',FastdKeyInfo['VpnMAC'],'->',ffNodeMAC,'=',FastdKeyInfo['PeerName'].encode('utf-8'))
+                    print('!! Node is alive: ',FastdKeyInfo['SegDir'],'/',FastdKeyInfo['VpnMAC'],'->',ffNodeMAC,'=',FastdKeyInfo['PeerName'].encode('utf-8'))
                 elif self.ffNodeDict[ffNodeMAC]['Status'] != 'V':
                     print('++ Node is online:',FastdKeyInfo['SegDir'],'/',FastdKeyInfo['VpnMAC'],'->',ffNodeMAC,'=',FastdKeyInfo['PeerName'].encode('utf-8'))
 
