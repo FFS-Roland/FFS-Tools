@@ -79,7 +79,7 @@ from glob import glob
 #----- Needed Data-Files -----
 AccountFileName = '.Accounts.json'
 StatFileName    = 'SegStatistics.json'
-Zip2GpsName     = 'ZIP2GPS_DE.json'    # Data merged from OpenStreetMap and OpenGeoDB
+Zip2GpsName     = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
 ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
@@ -660,32 +660,6 @@ def getBatmanSegment(BatmanIF):
 
 
 #-------------------------------------------------------------
-# function "__SetupZip2GpsData"
-#
-#     Load ZIP File of OpenGeoDB Project
-#
-#-------------------------------------------------------------
-def __SetupZip2GpsData(DatabasePath):
-
-    print('... Setting up ZIP-to-GPS Data ...')
-    Zip2GpsDict = None
-    ZipCount = 0
-
-    try:
-        with open(os.path.join(DatabasePath,Zip2GpsName), mode='r') as Zip2GpsFile:
-            Zip2GpsDict = json.load(Zip2GpsFile)
-    except:
-        print('!! ERROR on setting up ZIP-to-GPS Data')
-        Zip2GpsDict = None
-    else:
-        ZipCount = len(Zip2GpsDict)
-
-    print('... ZIP-Codes loaded:',ZipCount)
-    return Zip2GpsDict
-
-
-
-#-------------------------------------------------------------
 # function "__SetupZipAreaData"
 #
 #     ZipFileDict -> Dictionary of ZIP-Area Files
@@ -804,104 +778,6 @@ def __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict):
 
 
 
-#-------------------------------------------------------------
-# function "__SetupRegionData"
-#
-#     Load Region Json Files and setup polygons
-#
-#-------------------------------------------------------------
-def __SetupRegionData(GitPath):
-
-    print('... Setting up Region Data ...')
-
-    RegionDict = {
-        'ValidArea': Polygon([ (0.0,45.0),(0.0,60.0),(20.0,60.0),(20.0,45.0) ]),
-        'Polygons' : {},
-        'Segments' : {}
-    }
-
-    JsonFileList = glob(os.path.join(GitPath,'vpn*/regions/*.json'))
-    RegionCount = 0
-
-    try:
-        for FileName in JsonFileList:
-            Region  = os.path.basename(FileName).split('.')[0]
-            Segment = int(os.path.dirname(FileName).split('/')[-2][3:])
-
-            if Region[0] == '_':
-                print('!! Invalid File: %s' % FileName)
-                RegionCount = 0
-                break
-
-            else:
-                with open(FileName,'r') as JsonFile:
-                    GeoJson = json.load(JsonFile)
-
-                if 'type' in GeoJson and 'geometries' in GeoJson:
-                    TrackBase = GeoJson['geometries'][0]['coordinates']
-                elif 'coordinates' in GeoJson:
-                    TrackBase = GeoJson['coordinates']
-                else:
-                    TrackBase = None
-                    print('Problem parsing %s' % FileName)
-                    continue
-
-                RegionDict['Polygons'][Region] = []
-                RegionDict['Segments'][Region] = Segment
-                RegionCount += 1
-
-                for Track in TrackBase:
-                    Shape = []
-
-                    for t in Track[0]:
-                        Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x / t[1] = Latitude = y
-
-                    RegionDict['Polygons'][Region].append(Polygon(Shape))
-
-    except:
-        RegionCount = 0
-
-    if RegionCount == 0:
-        RegionDict = None
-
-    print('... Region Areas loaded:',RegionCount)
-    return RegionDict
-
-
-
-#-----------------------------------------------------------------------
-# function "GetSegmentFromGPS"
-#
-#   Get Segment from Position (GPS Coordinate)
-#-----------------------------------------------------------------------
-def GetSegmentFromGPS(lon,lat,RegionDict):
-
-    print('... Get Segment from GPS Data ...')
-
-    Segment = None
-
-    if lat is not None and lon is not None:
-        NodeLocation = Point(lon,lat)
-
-        if RegionDict['ValidArea'].intersects(NodeLocation):
-            for Region in RegionDict['Polygons'].keys():
-                MatchCount = 0
-
-                for RegionPart in RegionDict['Polygons'][Region]:
-                    if RegionPart.intersects(NodeLocation):
-                        MatchCount += 1
-
-                if MatchCount == 1:
-                    Segment = RegionDict['Segments'][Region]
-                    break
-
-        else:
-            print('++ Invalid Location (lon|lat):',lon,'|',lat)
-
-    return Segment
-
-
-
 #-----------------------------------------------------------------------
 # function "GetGeoSegment"
 #
@@ -911,14 +787,13 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
 
     print('Get Segment from Position ...',Location)
 
-    RegionDict  = __SetupRegionData(GitPath)
     ZipAreaDict = __SetupZipAreaData(GitPath)
     ZipGridDict = __SetupZipGridData(DatabasePath)
 
     GpsSegment = None
     ZipSegment = None
 
-    if RegionDict is None or ZipAreaDict is None or ZipGridDict is None:
+    if ZipAreaDict is None or ZipGridDict is None:
         print('!! No Region Data available !!!')
     else:
         if 'longitude' in Location and 'latitude' in Location:
@@ -938,9 +813,6 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
 
                 GpsSegment = __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
 
-                if GpsSegment is None:
-                    GpsSegment = GetSegmentFromGPS(lon,lat,RegionDict)
-
             else:
                 print('** Bad GPS Data:',str(lat),'|',str(lon))
 
@@ -951,20 +823,6 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
             if ZipTemplate.match(ZipCode):
                 if ZipCode in ZipAreaDict:
                     ZipSegment = ZipAreaDict[ZipCode]['Segment']
-
-                if ZipSegment is None:
-                    Zip2GpsDict = __SetupZip2GpsData(DatabasePath)
-
-                    if Zip2GpsDict is not None:
-                        if ZipCode in Zip2GpsDict:
-                            lon = float(Zip2GpsDict[ZipCode]['lon'])
-                            lat = float(Zip2GpsDict[ZipCode]['lat'])
-                            ZipSegment = GetSegmentFromGPS(lon,lat,RegionDict)
-
-                            if ZipSegment is None:
-                                print('>>> Unknown ZIP-Region!')
-                        else:
-                            print('>>> Unknown ZIP-Code!')
 
                 print('>>> GpsSegment / ZipSegment =',GpsSegment,'/',ZipSegment)
 
