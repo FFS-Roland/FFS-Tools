@@ -1609,9 +1609,11 @@ class ffNodeInfo:
 
                     GpsRegion  = None
                     GpsSegment = None
+                    GpsZipCode = None
 
                     ZipRegion  = None
                     ZipSegment = None
+                    ZipCode    = None
 
                     if LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Latitude'])) and LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Longitude'])):
 
@@ -1628,11 +1630,11 @@ class ffNodeInfo:
                         while lon > 70.0:    # missing decimal separator
                             lon /= 10.0
 
-                        ZipCode = self.__GetZipCodeFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
+                        GpsZipCode = self.__GetZipCodeFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
 
-                        if ZipCode is not None:
-                            GpsRegion  = ZipAreaDict[ZipCode]['Area']
-                            GpsSegment = ZipAreaDict[ZipCode]['Segment']
+                        if GpsZipCode is not None:
+                            GpsRegion  = ZipAreaDict[GpsZipCode]['Area']
+                            GpsSegment = ZipAreaDict[GpsZipCode]['Segment']
                         else:
                             GpsRegion = self.__GetRegionFromGPS(lon,lat,ffNodeMAC,RegionDict)
 
@@ -1671,6 +1673,10 @@ class ffNodeInfo:
 
                         else:
                             print('!! Invalid ZIP-Code:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ZipCode)
+
+
+                    if self.ffNodeDict[ffNodeMAC]['ZIP'] is None or ZipSegment is None:
+                        self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
 
                     if GpsRegion is not None:
                         self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion

@@ -651,7 +651,8 @@ class ffMeshNet:
                 Region = self.__NodeInfos.ffNodeDict[ffnb]['Region']
 
                 if Region not in RegionDict:
-                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] }
+#                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] }
+                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['Segment'] }
                 else:
                     RegionDict[Region]['Nodes']   += 1
                     RegionDict[Region]['Clients'] += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
