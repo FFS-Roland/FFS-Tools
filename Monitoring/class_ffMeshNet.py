@@ -541,6 +541,7 @@ class ffMeshNet:
             CurrentSeg    = None
             CurrentVPN    = None
             CurrentRegion = None
+            CurrentZIP    = None
             CurrentError  = ''
 
             NeighborOutFile.write('\n------------------------------------------------------------------------------------------------------------------\n')
@@ -565,6 +566,9 @@ class ffMeshNet:
                     elif self.__NodeInfos.ffNodeDict[ffnb]['Region'] != '??' and self.__NodeInfos.ffNodeDict[ffnb]['Region'] != CurrentRegion:
                         print('++ ERROR Region:',ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Region'],'<>',CurrentRegion)
                         CurrentError = '!'
+
+                    if CurrentZIP is None:
+                        CurrentZIP = self.__NodeInfos.ffNodeDict[ffnb]['ZIP']
 
                 if CurrentError == ' ' and self.__NodeInfos.ffNodeDict[ffnb]['SegMode'] != 'auto':
                     CurrentError = '+'
@@ -601,6 +605,11 @@ class ffMeshNet:
                     OldGluon += 1
 
             NeighborOutFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (%s)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentRegion))
+
+            for ffnb in self.__MeshCloudDict[CloudID]['CloudMembers']:
+                self.__NodeInfos.ffNodeDict[ffnb]['Segment'] = CurrentSeg
+                self.__NodeInfos.ffNodeDict[ffnb]['Region']  = CurrentRegion
+                self.__NodeInfos.ffNodeDict[ffnb]['ZIP']     = CurrentZIP
 
             if CurrentRegion is None:
                 CurrentRegion = '***'

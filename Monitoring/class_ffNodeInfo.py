@@ -1675,7 +1675,10 @@ class ffNodeInfo:
                             print('!! Invalid ZIP-Code:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',ZipCode)
 
 
-                    if self.ffNodeDict[ffNodeMAC]['ZIP'] is None or ZipSegment is None:
+                    if ZipCode is None or ZipSegment is None:
+                        self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
+                    elif GpsZipCode is not None and ZipCode != GpsZipCode:
+                        print('>>> ZIP-Code Mismatch GPS <> ZIP:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',GpsZipCode,'<>',ZipCode)
                         self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
 
                     if GpsRegion is not None:
