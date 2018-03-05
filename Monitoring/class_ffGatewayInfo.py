@@ -71,7 +71,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04','gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04','gw04n02','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -419,8 +419,8 @@ class ffGatewayInfo:
                         if GwName not in self.__SegmentDict[Segment]['GwDnsNames']:
                             self.__SegmentDict[Segment]['GwDnsNames'].append(GwName)
 
-                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment <= 16:
-                                self.__alert('!! DNS entry without Key in Git: '+GwName+' -> '+str(Segment))
+#                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment <= 24:
+#                                self.__alert('!! DNS entry without Key in Git: '+GwName+' -> '+str(Segment))
 
                             if Segment not in self.__GatewayDict[GwName]['DnsSegments']:
                                 self.__GatewayDict[GwName]['DnsSegments'].append(Segment)
@@ -875,7 +875,7 @@ class ffGatewayInfo:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 
                         #----- MTU 1312 -----
-                        if GwName[:6] == 'gw05n0':
+                        if GwName[:6] == 'gw05n0' or GwName == 'gw04n02':
                             FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
                         else:
                             FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)

@@ -73,6 +73,8 @@ fi
 
 if [ $? -ne 0 ]; then
   echo "++ERROR!" >> $LOGFILE
+else
+  /usr/local/bin/create_StatisticsData.py --nodefile=$DATADIR/NodeDict.json --gitrepo=$GITREPO --regions=$DATADIR/Region2ZIP.json --statistics=$DATADIR/StatisticsDict.json >> $LOGFILE
 fi
 
 date >> $LOGFILE

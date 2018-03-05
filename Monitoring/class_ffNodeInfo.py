@@ -427,7 +427,8 @@ class ffNodeInfo:
                         'KeyFile': '',
                         'FastdKey': '',
                         'InCloud': None,
-                        'Neighbours': []
+                        'Neighbours': [],
+                        'Owner': jsonNodeDict[ffNodeMAC]['Owner']
                     }
 
                     NodeCount += 1
@@ -508,10 +509,13 @@ class ffNodeInfo:
                     print('++ ERROR nodesdb.json ffNode Format:',DbIndex,'->',ffNodeMAC)
                 else:
                     if ffNodeMAC in self.ffNodeDict:
+                        NodeOwner = self.ffNodeDict[ffNodeMAC]['Owner']
 #                        print('++ Node already stored:',ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Status'],self.ffNodeDict[ffNodeMAC]['last_online'],'->',DbIndex,jsonDbDict[DbIndex]['status'],jsonDbDict[DbIndex]['last_online'])
 
-                        if jsonDbDict[DbIndex]['last_online'] < self.ffNodeDict[ffNodeMAC]['last_online']:
+                        if jsonDbDict[DbIndex]['last_online'] <= self.ffNodeDict[ffNodeMAC]['last_online']:
                             continue    # no newer info available
+                    else:
+                        NodeOwner = None
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'RawKey': None,
@@ -533,7 +537,8 @@ class ffNodeInfo:
                         'KeyFile': '',
                         'FastdKey': '',
                         'InCloud': None,
-                        'Neighbours': []
+                        'Neighbours': [],
+                        'Owner': NodeOwner
                     }
 
                     self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
@@ -695,7 +700,8 @@ class ffNodeInfo:
                             'KeyFile': '',
                             'FastdKey':'',
                             'InCloud': None,
-                            'Neighbours': []
+                            'Neighbours': [],
+                            'Owner': None
                         }
 
                         self.MAC2NodeIDDict[NodeMAC] = NodeMAC
@@ -1011,17 +1017,21 @@ class ffNodeInfo:
                             'KeyFile': '',
                             'FastdKey': '',
                             'InCloud': None,
-                            'Neighbours': []
+                            'Neighbours': [],
+                            'Owner': None
                         }
 
 
                     if LastSeen > self.ffNodeDict[ffNodeMAC]['last_online']:
                         self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
+                        self.ffNodeDict[ffNodeMAC]['Clients'] = 0
 
                         if 'clients' in RawJsonDict[ffNodeKey]['statistics']:
-                            self.ffNodeDict[ffNodeMAC]['Clients'] = int(RawJsonDict[ffNodeKey]['statistics']['clients']['total'])
-                        else:
-                            self.ffNodeDict[ffNodeMAC]['Clients'] = 0
+                            if RawJsonDict[ffNodeKey]['statistics']['clients'] is not None:
+                                if 'total' in RawJsonDict[ffNodeKey]['statistics']['clients']:
+                                    self.ffNodeDict[ffNodeMAC]['Clients'] = int(RawJsonDict[ffNodeKey]['statistics']['clients']['total'])
+                                else:
+                                    print('!!! total statistics missing:',ffNodeKey)
 
                         if self.ffNodeDict[ffNodeMAC]['Name'] != RawJsonDict[ffNodeKey]['nodeinfo']['hostname']:
                             print('++ Hostname mismatch:',ffNodeMAC,'=',self.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),'->',RawJsonDict[ffNodeKey]['nodeinfo']['hostname'].encode('utf-8'))
@@ -1034,6 +1044,10 @@ class ffNodeInfo:
 
                             if 'zip' in RawJsonDict[ffNodeKey]['nodeinfo']['location']:
                                 self.ffNodeDict[ffNodeMAC]['ZIP'] = str(RawJsonDict[ffNodeKey]['nodeinfo']['location']['zip'])[:5]
+
+                        if 'owner' in RawJsonDict[ffNodeKey]['nodeinfo']:
+                            if 'contact' in RawJsonDict[ffNodeKey]['nodeinfo']['owner']:
+                                self.ffNodeDict[ffNodeMAC]['Owner'] = RawJsonDict[ffNodeKey]['nodeinfo']['owner']['contact']
 
                         if 'mesh' in RawJsonDict[ffNodeKey]['nodeinfo']['network']:
                             for InterfaceType in RawJsonDict[ffNodeKey]['nodeinfo']['network']['mesh']['bat0']['interfaces']:
@@ -1145,7 +1159,8 @@ class ffNodeInfo:
                     'KeyFile': KeyIndex,
                     'FastdKey': FastdKeyInfo['PeerKey'],
                     'InCloud': None,
-                    'Neighbours': []
+                    'Neighbours': [],
+                    'Owner': None
                 }
 
                 self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC

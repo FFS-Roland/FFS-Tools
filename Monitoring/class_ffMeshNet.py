@@ -621,6 +621,8 @@ class ffMeshNet:
                 RegionDict[CurrentRegion]['Clients']  += TotalClients
                 RegionDict[CurrentRegion]['OldGluon'] += OldGluon
 
+        print('\nSum: %d Clouds with %d Nodes\n' % (len(self.__MeshCloudDict),TotalMeshingNodes))
+        NeighborOutFile.write('\nSum: %d Clouds with %d Nodes\n' % (len(self.__MeshCloudDict),TotalMeshingNodes))
 
         print('\nWriting out Single Nodes ...')
 
