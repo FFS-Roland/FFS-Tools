@@ -71,7 +71,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04','gw04n02','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -1106,7 +1106,8 @@ class ffGatewayInfo:
                         else:
                             DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
 
-                        print(SourceFile,'->',DestFile)
+#                        print(SourceFile,'->',DestFile)
+                        print('%s = %s: %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC]))
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)) and NodeMoveDict[ffNodeMAC] > 0:
                             MoveCount += 1
@@ -1133,7 +1134,8 @@ class ffGatewayInfo:
                                 else:
                                     DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
 
-                            self.__alert('   '+SourceFile+' -> '+DestFile)
+#                            self.__alert('   '+SourceFile+' -> '+DestFile)
+                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC]))
 
                         elif NodeMoveDict[ffNodeMAC] == 0:
                             self.__alert('!! Will not move to Legacy: '+KeyFileName+' = '+ffNodeMAC)
