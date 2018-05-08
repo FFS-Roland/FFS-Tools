@@ -913,6 +913,9 @@ class ffGatewayInfo:
 
         isOK = True
 
+        DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
+        DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+
         #---------- Check DNS against Git ----------
         print('Checking Peer DNS Entries against Keys in Git ...')
         for DnsName, NodeData in DnsZone.nodes.items():
@@ -939,7 +942,7 @@ class ffGatewayInfo:
                             self.__alert('!! Invalid DNS IPv6 result: '+DnsPeerID+' = '+IPv6)
                             isOK = False
 
-                    if PeerFileName in self.FastdKeyDict and not SegFromDNS is None:
+                    if PeerFileName in self.FastdKeyDict and SegFromDNS is not None:
                         if self.FastdKeyDict[PeerFileName]['PeerKey'][:12] == PeerKeyID:
                             self.FastdKeyDict[PeerFileName]['DnsSeg'] = SegFromDNS
 
@@ -950,6 +953,11 @@ class ffGatewayInfo:
                         else:
                             self.__alert('!! Fastd-Key mismatch DNS <> Git: '+DnsPeerID+' -> '+PeerKeyID+' <> '+self.FastdKeyDict[PeerFileName]['PeerKey'][:12])
                             isOK = False
+
+                            if DnsUpdate is not None:
+                                DnsUpdate.delete(DnsPeerID, 'AAAA')
+                            else:
+                                self.__alert('!! ERROR on updating DNS: '+PeerDnsName+' -> '+PeerDnsIPv6)
 
                     else:
                         print('++ Unknown or old DNS Entry: '+DnsPeerID+' = '+IPv6)
@@ -964,9 +972,6 @@ class ffGatewayInfo:
 
         self.__DnsAccDict['Server']
 
-        DnsKeyRing = None
-        DnsUpdate  = None
-
         for PeerFileName in self.FastdKeyDict:
             if ((PeerTemplate.match(PeerFileName)) and
                 (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
@@ -974,10 +979,6 @@ class ffGatewayInfo:
                 (self.FastdKeyDict[PeerFileName]['DnsSeg'] != self.FastdKeyDict[PeerFileName]['SegDir'])):
 
                 self.__alert('!! DNS Entry missing or wrong: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'])
-
-                if DnsUpdate is None:
-                    DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
-                    DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
 
                 if DnsUpdate is not None:
                     PeerDnsName = PeerFileName+'-'+self.FastdKeyDict[PeerFileName]['PeerKey'][:12]
@@ -996,8 +997,9 @@ class ffGatewayInfo:
                 isOK = False
 
         if DnsUpdate is not None:
-            dns.query.tcp(DnsUpdate,self.__DnsServerIP)
-            print('... Update launched on DNS-Server',self.__DnsServerIP)
+            if len(DnsUpdate.index) > 1:
+                dns.query.tcp(DnsUpdate,self.__DnsServerIP)
+                print('... Update launched on DNS-Server',self.__DnsServerIP)
 
         return isOK
 
