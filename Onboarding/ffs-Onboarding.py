@@ -97,6 +97,9 @@ ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
 IPv6NodeTemplate = re.compile('^'+SEGASSIGN_PREFIX+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 
+BadNameTemplate  = re.compile('.*[|/\\<>]+.*')
+
+
 
 
 #-----------------------------------------------------------------------
@@ -350,6 +353,7 @@ def __InfoFromGluonNodeinfoPage(HttpIPv6):
 #
 #    NodeIF is None => Fallback-Mode
 #
+#    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
 def getNodeInfos(NodeMAC,NodeIF):
 
@@ -1209,7 +1213,10 @@ else:
                 PeerMAC  = GetBatmanNodeMAC(FastdMAC,args.BATIF)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
                 if NodeInfo is not None:
-                    if PeerMAC is not None:
+                    if BadNameTemplate.match(NodeInfo['Hostname']):
+                        print('!!! Invalid Hostname:',NodeInfo['Hostname'])
+                        NodeInfo = None
+                    elif PeerMAC is not None:
                         if PeerMAC != NodeInfo['MAC']:
                             print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],'<>',PeerMAC)
                             NodeInfo = None
