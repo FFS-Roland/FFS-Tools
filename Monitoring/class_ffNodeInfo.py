@@ -46,6 +46,7 @@
 
 import os
 import subprocess
+import socket
 import urllib.request
 import time
 import datetime
@@ -150,6 +151,8 @@ class ffNodeInfo:
         self.__DatabasePath = DatabasePath
 
         # Initializations
+        socket.setdefaulttimeout(5)
+
         self.__LoadNodeDict()           # ffNodeDict[ffNodeMAC] -> saved Infos of ffNodes
         self.__LoadNodesDbJson()        # all combined Alfred-Infos from Alfred-Server
         self.__LoadAlfred158Json()      # Alfred - basic infos of the Nodes
@@ -543,6 +546,9 @@ class ffNodeInfo:
 
                     self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
 
+                    if '<' in jsonDbDict[DbIndex]['hostname'] or '>' in jsonDbDict[DbIndex]['hostname'] or '/' in jsonDbDict[DbIndex]['hostname'] or '\\' in jsonDbDict[DbIndex]['hostname']:
+                        print('!! ERROR nodesdb.json ffNode Hostname:',DbIndex,'->',ffNodeMAC,'=',jsonDbDict[DbIndex]['hostname'])
+
                     if UnixTime - jsonDbDict[DbIndex]['last_online'] > MaxInactiveTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'
                     else:
@@ -709,6 +715,9 @@ class ffNodeInfo:
 
                     elif HttpDate > self.ffNodeDict[NodeMAC]['last_online']:
                         self.ffNodeDict[NodeMAC]['last_online'] = HttpDate
+
+                    if '<' in json158Dict[jsonIndex]['hostname'] or '>' in json158Dict[jsonIndex]['hostname'] or '/' in json158Dict[jsonIndex]['hostname'] or '\\' in json158Dict[jsonIndex]['hostname']:
+                        print('!! ERROR Alfred-158.json ffNode Hostname:',DbIndex,'->',ffNodeMAC,'=',jsonDbDict[DbIndex]['hostname'])
 
                     #---------- updating Node Infos ----------
                     if self.ffNodeDict[NodeMAC]['Name'] != json158Dict[jsonIndex]['hostname']:
@@ -942,7 +951,7 @@ class ffNodeInfo:
 
         if RawJsonDict is None:
             self.__alert('++ Error on loading raw.json !!!\n')
-            self.AnalyseOnly = True
+#            self.AnalyseOnly = True
             return
 
         print('Analysing raw.json ...')
@@ -971,13 +980,22 @@ class ffNodeInfo:
                     continue
 
                 if not GwAllMacTemplate.match(ffNodeMAC):
-                    if ((not 'software' in RawJsonDict[ffNodeKey]['nodeinfo']) or
-                          (not 'firmware' in RawJsonDict[ffNodeKey]['nodeinfo']['software']) or
-                          (not 'release' in RawJsonDict[ffNodeKey]['nodeinfo']['software']['firmware']) or
+                    if (('software' not in RawJsonDict[ffNodeKey]['nodeinfo']) or
+                          ('firmware' not in RawJsonDict[ffNodeKey]['nodeinfo']['software']) or
+                          ('release' not in RawJsonDict[ffNodeKey]['nodeinfo']['software']['firmware']) or
                           (RawJsonDict[ffNodeKey]['nodeinfo']['software']['firmware']['release'] is None) or
-                          (not 'network' in RawJsonDict[ffNodeKey]['nodeinfo'])):
+                          ('hostname' not in RawJsonDict[ffNodeKey]['nodeinfo']) or
+                          ('network' not in RawJsonDict[ffNodeKey]['nodeinfo'])):
                         print('++ Invalid Record:',ffNodeKey,'=',ffNodeMAC)
                         continue
+
+                    if ((RawJsonDict[ffNodeKey]['nodeinfo']['hostname'] is None) or
+                          (RawJsonDict[ffNodeKey]['nodeinfo']['hostname'] == '') or
+                          ('/' in RawJsonDict[ffNodeKey]['nodeinfo']['hostname']) or
+                          ('\\' in RawJsonDict[ffNodeKey]['nodeinfo']['hostname']) or
+                          ('<' in RawJsonDict[ffNodeKey]['nodeinfo']['hostname']) or
+                          ('>' in RawJsonDict[ffNodeKey]['nodeinfo']['hostname'])):
+                        print('!! Invalid Hostname:',ffNodeKey,'=',ffNodeMAC)
 
                     LastSeen = int(calendar.timegm(time.strptime(RawJsonDict[ffNodeKey]['lastseen'], '%Y-%m-%dT%H:%M:%S.%fZ')))
                     if LastSeen > NewestTime:
@@ -1118,6 +1136,10 @@ class ffNodeInfo:
                 print('** Invalid Record:',ffNodeKey)
 
         print('... %d Nodes done, Age = %d sec.\n' % (NodeCount,UnixTime-NewestTime))
+
+        if (NodeCount > 1000) and ((UnixTime-NewestTime) < 60):
+            self.AnalyseOnly = False
+
         return
 
 

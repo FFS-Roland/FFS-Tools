@@ -39,6 +39,7 @@
 
 import os
 import subprocess
+import socket
 import urllib.request
 import time
 import datetime
@@ -71,7 +72,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04','gw04n02','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -126,6 +127,8 @@ class ffGatewayInfo:
         self.__Key2FileNameDict = {}     # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
 
         # Initializations
+        socket.setdefaulttimeout(5)
+
         self.__GetGatewaysFromGit()
         self.__GetGatewaysFromDNS()
         self.__CheckGwLegacyDnsEntries()
@@ -533,7 +536,7 @@ class ffGatewayInfo:
         else:
             for BatLine in BatResult:
                 GwName = None
-                GwMAC = BatLine.strip()[:17]
+                GwMAC = BatLine[3:20]
 
                 if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
                     if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
@@ -746,6 +749,9 @@ class ffGatewayInfo:
                                 'KeyFile': FileName
                             }
 
+                        if PeerName is not None and ('>' in PeerName or '<' in PeerName or '/' in PeerName or '\\' in PeerName):
+                            print('!! Bad Hostname:',SegDir,'/',FileName,'=',PeerName)
+
                     else:
                         self.__alert('!! Invalid Key File: '+KeyFilePath)
 
@@ -821,7 +827,7 @@ class ffGatewayInfo:
             Retries -= 1
 
             try:
-                FastdJsonHTTP = urllib.request.urlopen(URL,timeout=5)
+                FastdJsonHTTP = urllib.request.urlopen(URL,timeout=1)
                 HttpDate = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
                 StatusAge = int(time.time()) - HttpDate
                 jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
@@ -875,10 +881,10 @@ class ffGatewayInfo:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 
                         #----- MTU 1312 -----
-                        if GwName[:6] == 'gw05n0' or GwName == 'gw04n02':
-                            FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
-                        else:
-                            FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)
+#                        if GwName[:6] == 'gw05n0' or GwName == 'gw04n02':
+#                            FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
+#                        else:
+                        FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)
 
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
                         if ActiveConnections is not None:

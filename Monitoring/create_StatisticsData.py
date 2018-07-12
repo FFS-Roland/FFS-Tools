@@ -50,11 +50,13 @@ from glob import glob
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
+SegIgnoreList = ['09','19']         # Single Nodes (Schools)
+
 
 
 #-------------------------------------------------------------
 #     Create Region2SegmentDict
-#------------------------------------------------------------- 
+#-------------------------------------------------------------
 def CreateRegion2SegmentDict(RegionFiles):
     print('Creating Region2SegmentDict ...')
 
@@ -171,7 +173,7 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
                 if Region not in LoadDict['Regions']:
                     LoadDict['Regions'][Region] = 0
 
-                if Segment != '09':    # BSZ Leonberg
+                if Segment not in SegIgnoreList:
                     LoadDict['Regions'][Region] += NodeDict[NodeID]['Clients'] + 1
 
                     if Region in Region2SegmentDict:
@@ -189,7 +191,7 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
                 if ZipCode not in LoadDict['ZipAreas']:
                     LoadDict['ZipAreas'][ZipCode] = 0
 
-                if Segment != '09':    # BSZ Leonberg
+                if Segment not in SegIgnoreList:
                     LoadDict['ZipAreas'][ZipCode] += NodeDict[NodeID]['Clients'] + 1
 
         print('... StatLoadDict loaded: S = %d / R = %d / Z = %d\n' % (len(LoadDict['Segments']),len(LoadDict['Regions']),len(LoadDict['ZipAreas'])))
