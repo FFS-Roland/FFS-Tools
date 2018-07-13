@@ -128,13 +128,13 @@ class ffMeshNet:
 #                        print('+',Cloud,MAC2NodeIDDict[MeshMAC])
                         self.__AddNeighbour2Cloud(CloudID,self.__NodeInfos.MAC2NodeIDDict[MeshMAC])
                     else:
-                        print('!! Unknown Neighbour:',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],'-',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),'->',MeshMAC)
+                        print('!! Unknown Neighbour:',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],'-',ffNeighbourMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name']+'\' ->',MeshMAC)
             elif self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud'] == CloudID:
-                print('!! Cloud inconsistent:',CloudID,'-',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),'->',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                print('!! Cloud inconsistent:',CloudID,'-',ffNeighbourMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name']+'\' ->',self.__MeshCloudDict[CloudID]['CloudMembers'])
             else:
                 # Node is already part of another Mesh Cloud -> merge Clouds
                 oldCloudID = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud']
-    #            print('++ Merging Clouds:',ffNeighbourMAC,'=',ffNodeDict[ffNeighbourMAC]['Name'].encode('UTF-8'),oldCloudID,'->',CloudID)
+    #            print('++ Merging Clouds:',ffNeighbourMAC,'= \''+ffNodeDict[ffNeighbourMAC]['Name']+'\'',oldCloudID,'->',CloudID)
 
                 self.__MeshCloudDict[CloudID]['NumClients']   += self.__MeshCloudDict[oldCloudID]['NumClients']
                 self.__MeshCloudDict[CloudID]['CloudMembers'] += self.__MeshCloudDict[oldCloudID]['CloudMembers']
@@ -178,7 +178,7 @@ class ffMeshNet:
                 self.__AddNeighbour2Cloud(ffNodeMAC,ffNodeMAC)
 
                 if len(self.__MeshCloudDict[ffNodeMAC]['CloudMembers']) < 2:
-                    print('++ Single-Node Cloud:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'-',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
+                    print('++ Single-Node Cloud:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'-',ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] = None
                     del self.__MeshCloudDict[ffNodeMAC]
                 else:
@@ -209,8 +209,8 @@ class ffMeshNet:
                         print('!! No move to Legacy: %s/peers/%s\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']) )
                     else:
                         self.__NodeMoveDict[ffNodeMAC] = TargetSeg
-                        print('>> git mv %s/peers/%s vpn%02d/peers/  = %s\n' % ( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
-                                                                                 TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8') ))
+                        print('>> git mv %s/peers/%s vpn%02d/peers/  = \'%s\'\n' % ( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
+                                                                                 TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'] ))
 
         return
 
@@ -398,11 +398,11 @@ class ffMeshNet:
                                     print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
 
                                 self.__NodeMoveDict[ffNodeMAC] = TargetSeg
-                                print('>> git mv %s/peers/%s vpn%02d/peers/  = %s' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
-                                                                                      TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8') ))
+                                print('>> git mv %s/peers/%s vpn%02d/peers/  = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
+                                                                                      TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'] ))
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == ' ':
-                    print('++ Node seems to be w/o VPN Uplink:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'/',ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'))
+                    print('++ Node seems to be w/o VPN Uplink:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'/',ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
 #                    CheckSegList = [ int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) ]
 #
 #                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is not None:
@@ -438,13 +438,13 @@ class ffMeshNet:
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?':
 
                 if self.__NodeInfos.IsOnline(ffNodeMAC) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is None:
-                    print('!! Segment is None:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
+                    print('!! Segment is None:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
 
                 if self.__NodeInfos.IsOnline(ffNodeMAC) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']:
                     print('!! KeyDir <> Segment:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'<>',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == '':
-                    print('!! Uplink w/o Key:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('UTF-8'))
+                    print('!! Uplink w/o Key:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = ' '
 
                 if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
@@ -475,8 +475,8 @@ class ffMeshNet:
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():
-                            print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].encode('utf-8'),
-                                  '<-',self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].encode('utf-8'))
+                            print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->','\''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'',
+                                  '<-','\''+self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName']+'\'')
 
         print('... done.\n')
         return
@@ -564,7 +564,7 @@ class ffMeshNet:
                     if CurrentRegion is None or CurrentRegion == '??':
                         CurrentRegion = self.__NodeInfos.ffNodeDict[ffnb]['Region']
                     elif self.__NodeInfos.ffNodeDict[ffnb]['Region'] != '??' and self.__NodeInfos.ffNodeDict[ffnb]['Region'] != CurrentRegion:
-                        print('++ ERROR Region:',ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Region'],'<>',CurrentRegion)
+                        print('++ ERROR Region:',ffnb,'= \''+self.__NodeInfos.ffNodeDict[ffnb]['Name']+'\' ->',self.__NodeInfos.ffNodeDict[ffnb]['Region'],'<>',CurrentRegion)
                         CurrentError = '!'
 
                     if CurrentZIP is None:
@@ -576,7 +576,7 @@ class ffMeshNet:
                 if CurrentError == ' ' and self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'] != '':
                     if ((self.__NodeInfos.ffNodeDict[ffnb]['Segment'] is not None and int(self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'][3:]) != self.__NodeInfos.ffNodeDict[ffnb]['Segment']) or
                         (self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] != self.__NodeInfos.ffNodeDict[ffnb]['Segment'])):
-                        print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'=',self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),'->',
+                        print('++ ERROR Region:',self.__NodeInfos.ffNodeDict[ffnb]['Status'],ffnb,'= \''+self.__NodeInfos.ffNodeDict[ffnb]['Name']+'\' ->',
                               self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['Segment'],'->',
                               self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['SegMode'])
                         CurrentError = '>'
@@ -590,10 +590,10 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GluonMarker[self.__NodeInfos.ffNodeDict[ffnb]['GluonType']]
 
-                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = %s (%s = %s)\n' % (CurrentError,self.__NodeInfos.ffNodeDict[ffnb]['Status'],Segment,
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Clients'],ffnb,self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],self.__NodeInfos.ffNodeDict[ffnb]['Region']))
+                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s)\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'], Segment,
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Clients'], ffnb, self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'], self.__NodeInfos.ffNodeDict[ffnb]['Name'],
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'], self.__NodeInfos.ffNodeDict[ffnb]['Region']))
                 if self.__NodeInfos.IsOnline(ffnb):
                     TotalNodes   += 1
                     TotalClients += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
@@ -651,10 +651,10 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GluonMarker[self.__NodeInfos.ffNodeDict[ffnb]['GluonType']]
 
-                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = %s (%s = %s)\n' % (CurrentError,self.__NodeInfos.ffNodeDict[ffnb]['Status'],
-                                                                                                Segment,self.__NodeInfos.ffNodeDict[ffnb]['Clients'],ffnb,
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Name'].encode('UTF-8'),self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],
+                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s)\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'],
+                                                                                                Segment,self.__NodeInfos.ffNodeDict[ffnb]['Clients'], ffnb,
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'], self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Name'], self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['Region']))
                 TotalNodes   += 1
                 TotalClients += self.__NodeInfos.ffNodeDict[ffnb]['Clients']

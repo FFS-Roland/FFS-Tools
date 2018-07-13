@@ -749,9 +749,6 @@ class ffGatewayInfo:
                                 'KeyFile': FileName
                             }
 
-                        if PeerName is not None and ('>' in PeerName or '<' in PeerName or '/' in PeerName or '\\' in PeerName):
-                            print('!! Bad Hostname:',SegDir,'/',FileName,'=',PeerName)
-
                     else:
                         self.__alert('!! Invalid Key File: '+KeyFilePath)
 
