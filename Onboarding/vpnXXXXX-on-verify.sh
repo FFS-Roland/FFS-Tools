@@ -42,7 +42,8 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/wpnXXXXX_$(date +%y%m%d)_verify.log
+LOGDIR=/var/freifunk/logs
+LOGFILE=${LOGDIR}/wpnXXXXX_$(date +%y%m%d)_verify.log
 
 #exit 1    # for blocking during test phase only - will be removed later!
 
@@ -53,7 +54,7 @@ BLACKLIST=/var/freifunk/blacklist
 
 date >> $LOGFILE
 echo $PEER_KEY >> $LOGFILE
-echo $INTERFACE >> $LOGFILE
+echo $INTERFACE / $PEER_ADDRESS >> $LOGFILE
 
 if [ $(ps -x | grep -v "grep" |  grep -c "ffs-Onboarding.py --fastd $INTERFACE") -gt 0 ]; then
   echo ++ Another ffs-Onboarding Process is still running >> $LOGFILE
@@ -77,4 +78,12 @@ fi
 
 echo OK >> $LOGFILE
 echo --------------------- >> $LOGFILE
+
+
+#----- Removing old Logs -----
+for Log in $(ls -r ${LOGDIR}/wpnXXXXX_??????_verify.log | tail -n +4);
+do
+  rm $Log
+done
+
 exit 0

@@ -39,7 +39,8 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGFILE=/var/freifunk/logs/${INTERFACE}_$(date +%y%m%d)_established.log
+LOGDIR=/var/freifunk/logs
+LOGFILE=${LOGDIR}/${INTERFACE}_$(date +%y%m%d)_established.log
 
 
 #----- Path Definitions -----
@@ -65,3 +66,10 @@ else
 fi
 
 echo ---------------------------------------- >> $LOGFILE
+
+
+#----- Removing old Logs -----
+for Log in $(ls -r ${LOGDIR}/${INTERFACE}_??????_established.log | tail -n +4);
+do
+    rm $Log
+done
