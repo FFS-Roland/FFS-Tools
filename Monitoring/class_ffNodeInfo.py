@@ -501,22 +501,25 @@ class ffNodeInfo:
             print('++ Error on loading nodesdb.json !!!\n')
             return
 
-        print('Analysing nodesdb.json ...')
+        print('Analysing nodesdb.json ...',len(jsonDbDict))
 
         for DbIndex in jsonDbDict:
             NodeNets  = jsonDbDict[DbIndex]['network']
             ffNodeMAC = jsonDbDict[DbIndex]['network']['mac'].strip().lower()
 
-            if not GwAllMacTemplate.match(DbIndex) and not GwAllMacTemplate.match(ffNodeMAC):
-                if not MacAdrTemplate.match(DbIndex) or not MacAdrTemplate.match(ffNodeMAC) or DbIndex != ffNodeMAC:
-                    print('++ ERROR nodesdb.json ffNode Format:',DbIndex,'->',ffNodeMAC)
+            if not MacAdrTemplate.match(DbIndex) or not MacAdrTemplate.match(ffNodeMAC):
+                print('++ ERROR nodesdb.json ffNode Format:',DbIndex,'->',ffNodeMAC)
+            else:
+                if GwAllMacTemplate.match(ffNodeMAC):
+                    print('++ GW in nodesdb.json:',DbIndex,'->',ffNodeMAC)
                 else:
                     if ffNodeMAC in self.ffNodeDict:
-                        NodeOwner = self.ffNodeDict[ffNodeMAC]['Owner']
 #                        print('++ Node already stored:',ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Status'],self.ffNodeDict[ffNodeMAC]['last_online'],'->',DbIndex,jsonDbDict[DbIndex]['status'],jsonDbDict[DbIndex]['last_online'])
 
                         if jsonDbDict[DbIndex]['last_online'] <= self.ffNodeDict[ffNodeMAC]['last_online']:
                             continue    # no newer info available
+
+                        NodeOwner = self.ffNodeDict[ffNodeMAC]['Owner']
                     else:
                         NodeOwner = None
 
