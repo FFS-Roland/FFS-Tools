@@ -1136,7 +1136,7 @@ class ffNodeInfo:
     #-------------------------------------------------------------
     # private function "__CheckNodeHostnames"
     #
-    #     Load and analyse alfred-json-160.json
+    #     Checking Hostnames of Nodes
     #
     #-------------------------------------------------------------
     def __CheckNodeHostnames(self):
@@ -1347,8 +1347,7 @@ class ffNodeInfo:
                                 if MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
                                     if BatctlInfo[1] == MeshMAC:
                                         UplinkList.append(ffNodeMAC)
-
-                                    self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
                                     break
 
         if len(UplinkList) < 1:
