@@ -388,8 +388,8 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
                     TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
-                    if TargetSeg is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
-                        TargetSeg = self.__DefaultTarget
+#                    if TargetSeg is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
+#                        TargetSeg = self.__DefaultTarget
 
                     if TargetSeg is not None:
                         if TargetSeg <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] > 2:

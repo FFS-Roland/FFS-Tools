@@ -17,6 +17,7 @@
 #                                                                                         #
 #       regions/<segment>/*.json   -> Polygons of Regions                                 #
 #       database/ZipLocations.json -> Dict. of ZIP-Codes with related GPS-Positions       #
+#       database/ZipGrid.json      -> Dict. of Grids with ZIP-Codes                       #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -87,6 +88,7 @@ Alfred159Name  = 'alfred-json-159.json'
 Alfred160Name  = 'alfred-json-160.json'
 
 NodeDictName   = 'NodeDict.json'      # Node Database
+Region2ZipName = 'Region2ZIP.json'    # Regions with ZIP Codes of Baden-Wuerttemberg
 Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
 ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
@@ -114,6 +116,7 @@ BadNameTemplate   = re.compile('.*[|/\\<>]+.*')
 
 BATMAN_DEBUG_FILES  = '/sys/kernel/debug/batman_adv'
 BATMAN_TRANS_TABLE  = 'transtable_global'
+BATMAN_ORIGI_TABLE  = 'originators'
 
 NODETYPE_UNKNOWN       = 0
 NODETYPE_LEGACY        = 1
@@ -1246,12 +1249,12 @@ class ffNodeInfo:
     #==============================================================================
     # Method "GetBatmanNodeMACs"
     #
-    #   Verify Tunnel-MAC / Main-MAC with batman Global Translation Table
+    #   Verify Tunnel-MAC / Main-MAC with batman Debug Tables TG and O
     #
     #==============================================================================
     def GetBatmanNodeMACs(self,SegmentList):
 
-        print('\nAnalysing Batman TG ...')
+        print('\nAnalysing Batman Tables ...')
         UnixTime = int(time.time())
         TotalNodes = 0
         TotalClients = 0
@@ -1306,6 +1309,22 @@ class ffNodeInfo:
             print('... Nodes / Clients:',NodeCount,'/',ClientCount)
             TotalNodes   += NodeCount
             TotalClients += ClientCount
+
+
+            try:
+                with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_ORIGI_TABLE), mode='r') as OriginTableFile:
+                    BatmanOriginTable = OriginTableFile.read().splitlines()
+            except:
+                print('!! ERROR on Batman Originator Table of',BatmanIF)
+                BatmanOriginTable = None
+            else:
+                for OriginItem in BatmanOriginTable:
+                    BatctlInfo = OriginItem.split()
+
+                    if len(BatctlInfo) > 5 and MacAdrTemplate.match(BatctlInfo[0]) and not GwAllMacTemplate.match(BatctlInfo[0]):
+                        if BatctlInfo[0] not in self.MAC2NodeIDDict:
+                            print('++ Unknown Node in Batman Originator Table:',ffSeg,'/',BatctlInfo[0])
+
 
         print('\nTotalNodes / TotalClients =',TotalNodes,'/',TotalClients)
         print('... done.\n')
@@ -1538,11 +1557,22 @@ class ffNodeInfo:
         RegionDict = {
             'ValidArea': Polygon([ (0.0,45.0),(0.0,60.0),(20.0,60.0),(20.0,45.0) ]),
             'Polygons' : {},
-            'Segments' : {}
+            'Segments' : {},
+            'WithZip'  : []
         }
 
+
+        try:
+            with open(os.path.join(self.__DatabasePath,Region2ZipName), mode='r') as Region2ZipFile:
+                Region2ZipDict = json.load(Region2ZipFile)
+        except:
+            print('!! ERROR on loading Region-to-ZIP Data')
+        else:
+            for Region in Region2ZipDict:
+                RegionDict['WithZip'].append(Region)
+
+
         JsonFileList = glob(os.path.join(self.__GitPath,'vpn*/regions/*.json'))
-#        JsonFileList = glob('/tmp/peers-ffs/vpn*/regions/*.json')
         RegionCount = 0
 
         try:
@@ -1607,15 +1637,16 @@ class ffNodeInfo:
             if RegionDict['ValidArea'].intersects(NodeLocation):
 
                 for Region in RegionDict['Polygons'].keys():
-                    MatchCount = 0
+                    if Region not in RegionDict['WithZip']:
+                        MatchCount = 0
 
-                    for RegionPart in RegionDict['Polygons'][Region]:
-                        if RegionPart.intersects(NodeLocation):
-                            MatchCount += 1
+                        for RegionPart in RegionDict['Polygons'][Region]:
+                            if RegionPart.intersects(NodeLocation):
+                                MatchCount += 1
 
-                    if MatchCount == 1:
-                        GpsRegion = Region
-                        break
+                        if MatchCount == 1:
+                            GpsRegion = Region
+                            break
 
             else:
                 print('!! Invalid Location:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',lon,'|',lat)
@@ -1659,6 +1690,7 @@ class ffNodeInfo:
                     ZipSegment = None
                     ZipCode    = None
 
+
                     if LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Latitude'])) and LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Longitude'])):
 
                         lat = self.ffNodeDict[ffNodeMAC]['Latitude']
@@ -1684,6 +1716,7 @@ class ffNodeInfo:
 
                             if GpsRegion is not None:
                                 GpsSegment = RegionDict['Segments'][GpsRegion]
+
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
                         ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]

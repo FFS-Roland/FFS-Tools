@@ -272,6 +272,10 @@ else:
 
 LoadDict = CreateCurrentLoadDict(NodeFileName,Zip2RegionDict,Region2SegmentDict)
 
+if LoadDict is None:
+    print('++ ERROR: Node and Load Data not available!')
+    exit(1)
+
 
 if args.StatisticsFile is None:
     StatisticsFileName = 'StatisticsDict.json'
@@ -287,10 +291,9 @@ for Segment in LoadDict['Segments']:
     TotalLoad += LoadDict['Segments'][Segment]
 
     if Segment not in StatisticsDict['Segments']:
-        StatisticsDict['Segments'][Segment] = 0
-
-    if LoadDict['Segments'][Segment] > StatisticsDict['Segments'][Segment]:
         StatisticsDict['Segments'][Segment] = LoadDict['Segments'][Segment]
+    elif LoadDict['Segments'][Segment] > StatisticsDict['Segments'][Segment]:
+        StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 3 + LoadDict['Segments'][Segment]) / 4 + 0.5)
 
 print('Total Segment Load =',TotalLoad)
 
@@ -304,10 +307,9 @@ for Region in LoadDict['Regions']:
         TotalLoad += LoadDict['Regions'][Region]
 
         if Region not in StatisticsDict['Regions']:
-            StatisticsDict['Regions'][Region] = 0
-
-        if LoadDict['Regions'][Region] > StatisticsDict['Regions'][Region]:
             StatisticsDict['Regions'][Region] = LoadDict['Regions'][Region]
+        elif LoadDict['Regions'][Region] > StatisticsDict['Regions'][Region]:
+            StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 3 + LoadDict['Regions'][Region]) / 4 + 0.5)
 
 print('Total Region Load  =',TotalLoad)
 
@@ -319,10 +321,9 @@ for ZipCode in LoadDict['ZipAreas']:
     TotalLoad += LoadDict['ZipAreas'][ZipCode]
 
     if ZipCode not in StatisticsDict['ZipAreas']:
-        StatisticsDict['ZipAreas'][ZipCode] = 0
-
-    if LoadDict['ZipAreas'][ZipCode] > StatisticsDict['ZipAreas'][ZipCode]:
         StatisticsDict['ZipAreas'][ZipCode] = LoadDict['ZipAreas'][ZipCode]
+    elif LoadDict['ZipAreas'][ZipCode] > StatisticsDict['ZipAreas'][ZipCode]:
+        StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 3 + LoadDict['ZipAreas'][ZipCode]) / 4 + 0.5)
 
 print('Total ZipArea Load =',TotalLoad)
 

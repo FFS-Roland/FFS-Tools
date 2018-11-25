@@ -72,7 +72,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04','gw04n02','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -85,7 +85,7 @@ GwInstanceTemplate  = re.compile('^gw[0-6][0-9](n[0-9]{2})?$')
 GwSegmentTemplate   = re.compile('^gw[0-6][0-9](n[0-9]{2})?(s[0-9]{2})$')
 
 GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate    = re.compile('^02:00:3[1-9](:[0-9a-f]{2}){3}')
+GwNewMacTemplate    = re.compile('^02:00:3[1-9](:[0-9]{2}){3}')
 GwOldMacTemplate    = re.compile('^02:00:0a:3[1-9]:00:[0-9a-f]{2}')
 
 MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
@@ -128,6 +128,7 @@ class ffGatewayInfo:
 
         # Initializations
         socket.setdefaulttimeout(5)
+        self.__GitPullPeersFFS()
 
         self.__GetGatewaysFromGit()
         self.__GetGatewaysFromDNS()
@@ -136,7 +137,7 @@ class ffGatewayInfo:
 
         self.__CheckGatewayDnsServer()
 
-        self.__LoadKeysFromGit()
+        self.__LoadNodeKeysFromGit()
         self.__LoadFastdStatusInfos()
         return
 
@@ -155,6 +156,42 @@ class ffGatewayInfo:
         return
 
 
+    #=======================================================================
+    # private function "__GitPullPeersFFS
+    #
+    #   Git Pull on Repository "peers-ffs"
+    #
+    #-----------------------------------------------------------------------
+    def __GitPullPeersFFS(self):
+
+        print('Git Pull on Repository \"peers-ffs\" ...')
+
+        GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')
+
+        try:
+            LockFile = open(GitLockName, mode='w+')
+            fcntl.lockf(LockFile,fcntl.LOCK_EX)
+            GitRepo   = git.Repo(self.__GitPath)
+            GitOrigin = GitRepo.remotes.origin
+
+            if not GitRepo.is_dirty():
+                GitOrigin.pull()
+            else:
+                self.AnalyseOnly = True
+                self.__alert('!! Git Repository is dirty - switched to analyse only mode!')
+
+        except:
+            self.__alert('!! Fatal ERROR on accessing Git Repository!')
+        finally:
+            del GitOrigin
+            del GitRepo
+
+            fcntl.lockf(LockFile,fcntl.LOCK_UN)
+            LockFile.close()
+
+        print('... done.\n')
+        return
+
 
     #=======================================================================
     # private function "__GetGatewaysFromGit"
@@ -166,49 +203,26 @@ class ffGatewayInfo:
 
         print('Loading Gateways from Git ...')
 
-        GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')
+        GwFileList = glob(os.path.join(self.__GitPath,'vpn*/bb/gw*'))
 
-        try:
-            LockFile = open(GitLockName, mode='w+')
-            fcntl.lockf(LockFile,fcntl.LOCK_EX)
-            GitRepo   = git.Repo(self.__GitPath)
-            GitOrigin = GitRepo.remotes.origin
+        for KeyFilePath in GwFileList:
+            Segment  = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
+            FileName = os.path.basename(KeyFilePath)
 
-            if not GitRepo.is_dirty():
-                print('... Git pull ...')
-                GitOrigin.pull()
-            else:
-                self.AnalyseOnly = True
-                self.__alert('!! Git Repository is dirty - switched to analyse only mode!')
+            if (Segment == 0) or (Segment > 99):
+                print('!! Illegal Segment:',Segment)
+                continue
 
-            GwFileList = glob(os.path.join(self.__GitPath,'vpn*/bb/gw*'))
+            if Segment not in self.__SegmentDict:
+                self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
 
-            for KeyFilePath in GwFileList:
-                Segment  = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
-                FileName = os.path.basename(KeyFilePath)
-
-                if Segment == 0:
-                    continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
-
-                if Segment not in self.__SegmentDict:
-                    self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
-
-                if GwSegmentTemplate.match(FileName):
-                    if int(FileName.split('s')[1]) == Segment:
-                        self.__SegmentDict[Segment]['GwGitNames'].append(FileName.split('s')[0])
-                    else:
-                        print('++ Invalid File Name in Git:',KeyFilePath)
+            if GwSegmentTemplate.match(FileName):
+                if int(FileName.split('s')[1]) == Segment:
+                    self.__SegmentDict[Segment]['GwGitNames'].append(FileName.split('s')[0])
                 else:
-                    print('!! Bad File in Git:',KeyFilePath)
-
-        except:
-            self.__alert('!! Fatal ERROR on accessing Git for Gateways!')
-        finally:
-            del GitOrigin
-            del GitRepo
-
-            fcntl.lockf(LockFile,fcntl.LOCK_UN)
-            LockFile.close()
+                    print('++ Invalid File Name in Git:',KeyFilePath)
+            else:
+                print('!! Bad File in Git:',KeyFilePath)
 
 #        print()
 #        for Segment in sorted(self.__SegmentDict):
@@ -331,6 +345,37 @@ class ffGatewayInfo:
 
 
 
+    #--------------------------------------------------------------------------
+    # private function "__GetDnsZone"
+    #
+    #    Returns List of IPs
+    #
+    #--------------------------------------------------------------------------
+    def __GetDnsZone(self,DnsDomain):
+
+        DnsZone = None
+
+        try:
+            DnsResolver = dns.resolver.Resolver()
+            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
+            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
+        except:
+            self.__alert('!! ERROR on fetching DNS Zone from Primary: '+DnsDomain)
+            DnsZone = None
+            self.AnalyseOnly = True
+
+        if DnsZone is None:
+            try:
+                DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'a')[0].to_text()
+                DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
+            except:
+                self.__alert('!! ERROR on fetching DNS Zone from Secondary: '+DnsDomain)
+                DnsZone = None
+
+        return DnsZone
+
+
+
     #==========================================================================
     # private function "__GetGatewaysFromDNS"
     #
@@ -341,17 +386,8 @@ class ffGatewayInfo:
 
         print('Checking DNS for Gateways:',FreifunkGwDomain,'...\n')
 
-        Ip2GwDict   = {}
-        DnsZone     = None
-
-        try:
-            DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkGwDomain))
-        except:
-            self.__alert('!! ERROR on fetching DNS Zone: '+FreifunkGwDomain)
-            DnsZone = None
-            self.AnalyseOnly = True
+        Ip2GwDict = {}
+        DnsZone   = self.__GetDnsZone(FreifunkGwDomain)
 
         if DnsZone is None:
             print('++ DNS Zone is empty:',FreifunkGwDomain)
@@ -456,16 +492,7 @@ class ffGatewayInfo:
         print('Checking DNS for Legacy Gateway entries:',FreifunkRootDomain,'...')
 
         Seg2GwIpDict = {}
-        DnsZone      = None
-
-        try:
-            DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkRootDomain))
-        except:
-            self.__alert('!! ERROR on fetching DNS Zone: '+FreifunkRootDomain)
-            DnsZone = None
-            self.AnalyseOnly = True
+        DnsZone      = self.__GetDnsZone(FreifunkRootDomain)
 
         if DnsZone is None:
             print('++ DNS Zone is empty:',FreifunkRootDomain)
@@ -539,10 +566,11 @@ class ffGatewayInfo:
                 GwMAC = BatLine[3:20]
 
                 if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
-                    if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
+#                    if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
+                    if int(GwMAC[9:11]) == Segment:
                         GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
                     else:
-                        self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                        self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
 
                 elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
                     if Segment == 0:
@@ -552,13 +580,10 @@ class ffGatewayInfo:
 
                         print('++ Old Gateway MAC:',BatmanIF,'->',GwMAC,'=',GwName)
                     else:
-                        self.__alert('!! Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                        self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
 
-#                elif MacAdrTemplate.match(GwMAC):
-#                    if GwMAC == '00:0d:b9:47:68:bd':    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#                        GwName = 'gw08n02'
-#                    else:
-#                        self.__alert('!! Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                elif MacAdrTemplate.match(GwMAC):
+                    print('++ Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
                 if GwName is not None:
                     if GwName not in GwList:
@@ -667,17 +692,17 @@ class ffGatewayInfo:
 
 
     #=======================================================================
-    # private function "__LoadKeysFromGit"
+    # private function "__LoadNodeKeysFromGit"
     #
-    #   Load and analyse fastd-Keys from Git
+    #   Load and analyse fastd-Key of Nodes from Git
     #
     #     self.FastdKeyDict[KeyFileName]   = { 'SegDir','PeerMAC','PeerName','PeerKey' }
     #     self.__Key2FileNameDict[PeerKey] = { 'SegDir','KeyFile' }
     #
     #-----------------------------------------------------------------------
-    def __LoadKeysFromGit(self):
+    def __LoadNodeKeysFromGit(self):
 
-        print('Load and analyse fastd-Keys from Git ...')
+        print('Load and analyse fastd-Key of Nodes from Git ...')
 
         KeyFileList = glob(os.path.join(self.__GitPath,'vpn*/peers/*'))
 
@@ -686,8 +711,9 @@ class ffGatewayInfo:
             Segment  = int(SegDir[3:])
             FileName = os.path.basename(KeyFilePath)
 
-            if Segment == 0:
-                continue    # >>>>>>>>>>>>>>>> no Legacy !!!!!!!!!!!!!!!!!
+            if (Segment == 0) or (Segment > 99):
+                print('!! Illegal Segment:',Segment)
+                continue
 
             if Segment not in self.__SegmentDict:
                 self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
