@@ -471,7 +471,7 @@ class ffMeshNet:
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V':
                             self.__SegmentDict[ffSeg]['Uplinks'] += 1
                     else:
-                        print('>> Bad Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',ffSeg)
+                        print('>>> Bad Segment:   ',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,'=',ffSeg)
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():

@@ -80,7 +80,7 @@ DnsSegTemplate      = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2}
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
 GwNameTemplate      = re.compile('^gw[0-6][0-9]{1,2}')
-GwGroupTemplate     = re.compile('^gw[0-6][0-9](s[0-9]{2})?$')
+GwSegGroupTemplate  = re.compile('^gw[0-6][0-9](s[0-9]{2})?$')
 GwInstanceTemplate  = re.compile('^gw[0-6][0-9](n[0-9]{2})?$')
 GwSegmentTemplate   = re.compile('^gw[0-6][0-9](n[0-9]{2})?(s[0-9]{2})$')
 
@@ -252,7 +252,7 @@ class ffGatewayInfo:
             DnsResolver = None
 
         if DnsResolver is not None:
-            for DnsType in ['a','aaaa']:
+            for DnsType in ['A','AAAA']:
                 try:
                     DnsResult = DnsResolver.query(DnsName,DnsType)
                 except:
@@ -264,7 +264,7 @@ class ffGatewayInfo:
                         IpList.append(GatewayIP.to_text())
 
             try:
-                DnsResult = DnsResolver.query(DnsName,'cname')
+                DnsResult = DnsResolver.query(DnsName,'CNAME')
             except:
                 DnsResult = None
 
@@ -357,7 +357,7 @@ class ffGatewayInfo:
 
         try:
             DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
+            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'A')[0].to_text()
             DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
         except:
             self.__alert('!! ERROR on fetching DNS Zone from Primary: '+DnsDomain)
@@ -366,7 +366,7 @@ class ffGatewayInfo:
 
         if DnsZone is None:
             try:
-                DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'a')[0].to_text()
+                DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'A')[0].to_text()
                 DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
             except:
                 self.__alert('!! ERROR on fetching DNS Zone from Secondary: '+DnsDomain)
@@ -384,7 +384,7 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __GetGatewaysFromDNS(self):
 
-        print('Checking DNS for Gateways:',FreifunkGwDomain,'...\n')
+        print('Checking DNS for Gateway Instances:',FreifunkGwDomain,'...')
 
         Ip2GwDict = {}
         DnsZone   = self.__GetDnsZone(FreifunkGwDomain)
@@ -403,7 +403,7 @@ class ffGatewayInfo:
 
                     self.__GetGwInstances(GwName,FreifunkGwDomain,node.rdatasets)
 
-                if GwGroupTemplate.match(GwName):
+                if GwSegGroupTemplate.match(GwName):
                     if len(GwName) == 7:
                         Segment = int(GwName[5:])
                     else:
@@ -447,7 +447,7 @@ class ffGatewayInfo:
                 print(GwIP,'->',Ip2GwDict[GwIP])
 
             #----- setting up Segment to GwInstanceNames -----
-            print()
+            print('\nChecking Segments for Gateways in DNS:',FreifunkGwDomain,'...\n')
             for Segment in sorted(self.__SegmentDict.keys()):
 #                print('>>>',Segment,'->',self.__SegmentDict[Segment]['GwIPs'])
 
@@ -458,9 +458,6 @@ class ffGatewayInfo:
                         if GwName not in self.__SegmentDict[Segment]['GwDnsNames']:
                             self.__SegmentDict[Segment]['GwDnsNames'].append(GwName)
 
-#                            if GwName not in self.__SegmentDict[Segment]['GwGitNames'] and Segment > 0 and Segment <= 24:
-#                                self.__alert('!! DNS entry without Key in Git: '+GwName+' -> '+str(Segment))
-
                             if Segment not in self.__GatewayDict[GwName]['DnsSegments']:
                                 self.__GatewayDict[GwName]['DnsSegments'].append(Segment)
                             else:
@@ -468,10 +465,13 @@ class ffGatewayInfo:
                     else:
                         self.__alert('!! Unknown Gateway IP: '+GwIP)
 
-                if Segment > 0 and Segment < 25 and len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
-                    self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
+                if Segment > 0 and len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
+                    if len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
+                        self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
+                    else:
+                        print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
                 else:
-                    print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
+                    self.__alert('!! Gateway in DNS but not in Git for Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
 
             print()
             for GwName in sorted(self.__GatewayDict):
@@ -502,7 +502,7 @@ class ffGatewayInfo:
             for name, node in DnsZone.nodes.items():
                 GwName = name.to_text()
 
-                if GwGroupTemplate.match(GwName):
+                if GwSegGroupTemplate.match(GwName):
                     if len(GwName) == 7:
                         Segment = int(GwName[5:])
                     else:
@@ -604,7 +604,7 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __GetGatewaysFromBatman(self):
 
-        print('\nChecking Batman for Gateways ...\n')
+        print('\nChecking Batman for Gateways ...')
 
         for Segment in sorted(self.__SegmentDict):
             if len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
@@ -648,7 +648,7 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckGatewayDnsServer(self):
 
-        return
+#        return
 
         print('\nChecking DNS-Server on Gateways ...')
 
@@ -656,35 +656,39 @@ class ffGatewayInfo:
 
         try:
             DnsResolver = dns.resolver.Resolver()
+            DnsResolver.timeout = 2
+            DnsResolver.lifetime = 2
         except:
             DnsResolver = None
 
         if DnsResolver is not None:
             for Segment in sorted(self.__SegmentDict.keys()):
                 if Segment > 0:
+                    print('... Segment',Segment)
+
                     for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
                         if len(GwName) == 7 and GwName not in GwIgnoreList:
                             InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(Segment/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-                            InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
+#                            InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
 #                            for DnsServer in [InternalGwIPv4,InternalGwIPv6]:
                             for DnsServer in [InternalGwIPv4]:
                                 DnsResolver.nameservers = [DnsServer]
 
-                                for DnsType in ['a','aaaa']:
+#                                for DnsType in ['A','AAAA']:
+                                for DnsType in ['A']:
                                     for i in range(3):
                                         try:
                                             DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
                                         except:
-                                            time.sleep(2)
+                                            time.sleep(1)
                                             DnsResult = None
                                         else:
                                             break
 
                                     if DnsResult is None:
-#                                        print('!! Error on DNS-Server:',Segment,'->',GwName,'=',DnsServer,'->',DnsTestTarget,'/',DnsType)
-                                        self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s / %s' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
-#                                        print('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s / %s' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
+                                        self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
+#                                        print('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
 
         print('... done.\n')
         return

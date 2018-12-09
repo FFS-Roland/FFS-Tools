@@ -1316,7 +1316,6 @@ class ffNodeInfo:
                     BatmanOriginTable = OriginTableFile.read().splitlines()
             except:
                 print('!! ERROR on Batman Originator Table of',BatmanIF)
-                BatmanOriginTable = None
             else:
                 for OriginItem in BatmanOriginTable:
                     BatctlInfo = OriginItem.split()
@@ -1571,7 +1570,6 @@ class ffNodeInfo:
             for Region in Region2ZipDict:
                 RegionDict['WithZip'].append(Region)
 
-
         JsonFileList = glob(os.path.join(self.__GitPath,'vpn*/regions/*.json'))
         RegionCount = 0
 
@@ -1615,6 +1613,10 @@ class ffNodeInfo:
 
         if RegionCount == 0:
             RegionDict = None
+        else:
+            for Region in RegionDict['WithZip']:
+                if Region not in RegionDict['Polygons']:
+                    print('!! Missing Region Polygon:',Region)
 
         print('... Region Areas loaded:',RegionCount,'\n')
         return RegionDict
