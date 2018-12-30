@@ -92,6 +92,9 @@ NODETYPE_DNS_SEGASSIGN   = 3
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SEGASSIGN_PREFIX = '2001:2:0:711::'
 
+RESPONDD_PORT    = 1001
+RESPONDD_TIMEOUT = 5.0
+
 LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{1,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
@@ -262,39 +265,92 @@ def getNodeFastdMAC(FastdStatusSocket):
 
 
 #-----------------------------------------------------------------------
-# function "__InfoFromGluonNodeinfoPage"
+# function "__InfoFromRespondd"
 #
 #    can be used on Gluon >= v2016.1 (starting with ffs-v0.6)
 #
-#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#  -> NodeJsonDict
 #-----------------------------------------------------------------------
-def __InfoFromGluonNodeinfoPage(HttpIPv6):
+def __InfoFromRespondd(NodeIPv6):
 
-    print('Connecting to http://['+HttpIPv6+']/cgi-bin/nodeinfo ...')
+    print('Requesting Nodeinfo via respondd from %s ...' % (NodeIPv6))
+
 
     try:
-        NodeHTTP = urllib.request.urlopen('http://['+HttpIPv6+']/cgi-bin/nodeinfo',timeout=10)
-        NodeJson = json.loads(NodeHTTP.read().decode('utf-8'))
+        AddrInfo_tuple = socket.getaddrinfo(NodeIPv6, RESPONDD_PORT, socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_UDP, socket.AI_NUMERICHOST)[0]
+
+        AddrInfoDict = {
+            "family" : AddrInfo_tuple[0],
+            "type"   : AddrInfo_tuple[1],
+            "proto"  : AddrInfo_tuple[2]
+        }
+
+        DestAddrObj = AddrInfo_tuple[4]
+
+        ResponddSock = socket.socket(**AddrInfoDict)
+        ResponddSock.settimeout(RESPONDD_TIMEOUT)
+        ResponddSock.bind(('::', RESPONDD_PORT, 0, DestAddrObj[3]))
+
+        ResponddSock.sendto('nodeinfo'.encode("UTF-8"), DestAddrObj)
+        NodeJsonDict = json.loads(ResponddSock.recv(4096).decode('UTF-8'))
+        ResponddSock.close()
+    except:
+        print('++ Error on respondd\n')
+        NodeJsonDict = None
+
+    return NodeJsonDict
+
+
+
+#-----------------------------------------------------------------------
+# function "__InfoFromHTTP"
+#
+#    can be used on Gluon >= v2016.1 (starting with ffs-v0.6)
+#
+#  -> NodeJsonDict
+#-----------------------------------------------------------------------
+def __InfoFromHTTP(NodeIPv6):
+
+    print('Connecting to http://[%s]/cgi-bin/nodeinfo ...' % (NodeIPv6))
+
+    try:
+        NodeHTTP = urllib.request.urlopen('http://['+NodeIPv6+']/cgi-bin/nodeinfo',timeout=10)
+        NodeJsonDict = json.loads(NodeHTTP.read().decode('utf-8'))
         NodeHTTP.close()
     except:
-        print('++ Error on loading /cgi-bin/nodeinfo')
-        return None
+        print('++ Error on loading /cgi-bin/nodeinfo\n')
+        NodeJsonDict = None
+
+    return NodeJsonDict
 
 
-    NodeInfoDict = {
-        'NodeType' : None,
-        'GluonVer' : None,
-        'NodeID'   : None,
-        'MAC'      : None,
-        'Hostname' : None,
-        'Segment'  : None,
-        'Location' : None,
-        'Contact'  : None
-    }
+
+#-----------------------------------------------------------------------
+# function "__AnalyseNodeJson"
+#
+#  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
+#-----------------------------------------------------------------------
+def __AnalyseNodeJson(NodeJson):
+
+    if NodeJson is None: return None
+
+    NodeInfoDict = None
 
     if 'node_id' in NodeJson and 'network' in NodeJson and 'hostname' in NodeJson:
         if 'mac' in NodeJson['network'] and 'addresses' in NodeJson['network']:
             if NodeJson['node_id'].strip() == NodeJson['network']['mac'].strip().replace(':',''):
+
+                NodeInfoDict = {
+                    'NodeType' : None,
+                    'GluonVer' : None,
+                    'NodeID'   : None,
+                    'MAC'      : None,
+                    'Hostname' : None,
+                    'Segment'  : None,
+                    'Location' : None,
+                    'Contact'  : None
+                }
+
                 NodeInfoDict['NodeID']   = NodeJson['node_id'].strip()
                 NodeInfoDict['MAC']      = NodeJson['network']['mac'].strip()
                 NodeInfoDict['Hostname'] = NodeJson['hostname'].strip()
@@ -344,6 +400,13 @@ def __InfoFromGluonNodeinfoPage(HttpIPv6):
 
                 print('>>> NodeInfo Segment =',NodeInfoDict['Segment'])
 
+                if NodeInfoDict['NodeType'] is None or len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
+                    print('+++ corrupted Node Info!')
+                    NodeInfoDict = None
+                elif NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
+                    print('+++ inconsistent Node Info!')
+                    NodeInfoDict = None
+
     return NodeInfoDict
 
 
@@ -351,34 +414,25 @@ def __InfoFromGluonNodeinfoPage(HttpIPv6):
 #-----------------------------------------------------------------------
 # function "getNodeInfos"
 #
-#    NodeIF is None => Fallback-Mode
+#    if FastdIF is None => Fallback-Mode
 #
 #    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def getNodeInfos(NodeMAC,NodeIF):
+def getNodeInfos(NodeMAC,FastdIF):
 
-    NodeInfoDict = None
-    NodeHTML = None
-    Retries = 3
+    NodeJson = None
 
-    if NodeIF is not None:
-        HttpIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
+    if FastdIF is not None:
+        NodeIPv6LLA = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+FastdIF
 
-        NodeInfoDict = __InfoFromGluonNodeinfoPage(HttpIPv6)
+        NodeJson = __InfoFromRespondd(NodeIPv6LLA)
 
-        if NodeInfoDict is not None:
-            if NodeInfoDict['NodeType'] is not None and NodeInfoDict['NodeID'] is not None:
-                if len(NodeInfoDict['NodeID']) != 12 or NodeInfoDict['MAC'] is None or NodeInfoDict['Hostname'] is None:
-                    print('+++ corrupted Status Page!')
-                    NodeInfoDict = None
-                elif NodeInfoDict['NodeID'] != NodeInfoDict['MAC'].replace(':',''):
-                    print('+++ inconsistent Data on Status Page!')
-                    NodeInfoDict = None
-            else:
-                print('>>> no Detail Data available!')
-                NodeInfoDict = None
+        if NodeJson is None:
+            NodeJson = __InfoFromHTTP(NodeIPv6LLA)
 
-    else:  # No status page via fastd -> Fallback to batman
+        NodeInfoDict = __AnalyseNodeJson(NodeJson)
+
+    else:  # use data from batman as fallback
         NodeInfoDict = {
             'NodeType' : NODETYPE_UNKNOWN,
             'GluonVer' : None,
@@ -399,6 +453,7 @@ def getNodeInfos(NodeMAC,NodeIF):
 #-----------------------------------------------------------------------
 # function "ActivateBatman"
 #
+#    -> MAC of fastd Interface attached to bat0 on Node via "batctl -n"
 #-----------------------------------------------------------------------
 def ActivateBatman(BatmanIF,FastdIF):
 
@@ -589,14 +644,14 @@ def GetBatmanNodeMAC(BatmanVpnMAC,BatmanIF):
                     if ((MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1])) and
                         (MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]))):
 
-                        if  BatctlInfo[1][0] == BatmanVpnMAC[0] and BatctlInfo[1][9:] == BatmanVpnMAC[9:]:
-                            print('... checking old schema:',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = __GenerateGluonMACsOld(BatctlInfo[1])
-#                            print('>>> Old MacList:',BatmanMacList)
-                        elif BatctlInfo[5][:16] == BatmanVpnMAC[:16]:
+                        if BatctlInfo[5][:16] == BatmanVpnMAC[:16]:
                             print('... checking new schema:',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = __GenerateGluonMACsNew(BatctlInfo[1])
 #                            print('>>> New MacList:',BatmanMacList)
+                        elif  BatctlInfo[1][0] == BatmanVpnMAC[0] and BatctlInfo[1][9:] == BatmanVpnMAC[9:]:
+                            print('... checking old schema:',BatctlInfo[1],'->',BatctlInfo[5])
+                            BatmanMacList = __GenerateGluonMACsOld(BatctlInfo[1])
+#                            print('>>> Old MacList:',BatmanMacList)
                         else:
 #                            print('... unknown schema:',BatctlInfo[1],'->',BatctlInfo[5])
                             BatmanMacList = []
@@ -1203,13 +1258,15 @@ else:
 
             BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
-            if BatmanVpnMAC is not None and BatmanVpnMAC != FastdMAC:
+            if BatmanVpnMAC is None:
+                print('++ No Batman connection to Node!')
+            elif BatmanVpnMAC != FastdMAC:
                 print('++ Node VPN MAC via Batman <> via FastD:',BatmanVpnMAC,'<>',FastdMAC)
             else:
                 print('... Batman VPN-MAC =',BatmanVpnMAC)
 #                print('>>> Batman and fastd match on Mesh-MAC:',BatmanVpnMAC)
 
-                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)        # Data from status page of Node via HTTP
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)        # Info of Node via Respondd or HTTP
                 PeerMAC  = GetBatmanNodeMAC(FastdMAC,args.BATIF)    # using "batctl tg" (Global Translation Table) to get Primary MAC
 
                 if NodeInfo is not None:
@@ -1218,18 +1275,18 @@ else:
                         NodeInfo = None
                     elif PeerMAC is not None:
                         if PeerMAC != NodeInfo['MAC']:
-                            print('!! PeerMAC mismatch Status Page <> Batman:',NodeInfo['MAC'],'<>',PeerMAC)
+                            print('!! PeerMAC mismatch Nodeinfo <> Batman:',NodeInfo['MAC'],'<>',PeerMAC)
                             NodeInfo = None
                         else:
-                            print('>>> Batman and Status Page match on Primary MAC:',PeerMAC)
+                            print('>>> Batman and Nodeinfo match on Primary MAC:',PeerMAC)
 
                 elif PeerMAC is not None:
-                    NodeInfo = getNodeInfos(PeerMAC,None)    # No status page via fastd -> Fallback to batman
+                    NodeInfo = getNodeInfos(PeerMAC,None)    # No Info of Node -> Fallback to batman
 
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
                 else:
-                    BatSegment = getBatmanSegment(args.BATIF)    # meshing segment from batman gateway list
+                    BatSegment = getBatmanSegment(args.BATIF)    # meshing segment from "batctl gwl" (batman gateway list)
 
                     if BatSegment == INVALID_SEGMENT:
                         print('!! ERROR: Shortcut / multiple segments detected !!')
