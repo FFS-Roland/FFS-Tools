@@ -300,9 +300,14 @@ def ActivateBatman(BatmanIF,FastdIF):
                         NeighborDetails = NeighborInfo.split()
 
                         if NeighborDetails[0] == FastdIF:
-                            NeighborMAC = NeighborDetails[1]
                             Retries = 0
-                            break
+
+                            if NeighborMAC is None:
+                                NeighborMAC = NeighborDetails[1]
+                            else:
+                                print('++ Multiple Neighbors on',BatmanIF,'!')
+                                NeighborMAC = None
+                                break
 
     return NeighborMAC
 
@@ -604,74 +609,6 @@ def getNodeInfos(NodeMAC,FastdIF):
         NodeInfoDict = None
     else:
         NodeInfoDict = __AnalyseNodeJson(NodeJson,NodeMAC)
-
-    return NodeInfoDict
-
-
-
-#-----------------------------------------------------------------------
-# function "AnalyseBatmanTG"
-#
-#   Get Node's main MAC by Batman Global Translation Table
-#
-#    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
-#-----------------------------------------------------------------------
-def AnalyseBatmanTG(BatmanVpnMAC,BatmanIF):
-
-    print('Find Primary MAC in Batman TG:',BatmanIF,'/',BatmanVpnMAC)
-    GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[4-9]))(:[0-9a-f]{2}){3}')
-    MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
-    NodeInfoDict      = None
-    NodeMainMAC       = None
-    Retries           = 15
-
-    BatctlCmd = ('/usr/sbin/batctl -m %s tg' % (BatmanIF)).split()
-
-    while Retries > 0 and NodeMainMAC is None:
-        Retries -= 1
-
-        try:
-            BatctlTG = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
-            BatctlResult = BatctlTG.stdout.decode('utf-8')
-#            print('>>>',BatctlResult)
-
-            for BatctlLine in BatctlResult.split('\n'):
-                BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
-                #----- BatctlInfo[1] = Client-MAC  /  BatctlInfo[5] = Node-Tunnel-MAC -----
-
-                if len(BatctlInfo) == 9 and BatctlInfo[2] == '0' and BatctlInfo[4] == 'via':
-                    if ((MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1])) and
-                        (MacAdrTemplate.match(BatctlInfo[5]) and not GwAllMacTemplate.match(BatctlInfo[5]))):
-
-                        if BatctlInfo[5][:16] == BatmanVpnMAC[:16] and (BatctlInfo[1][0] != BatmanVpnMAC[0] or BatctlInfo[1][9:] != BatmanVpnMAC[9:]):
-                            print('... checking',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = __GenerateGluonMACsNew(BatctlInfo[1])
-#                            print('>>> New MacList:',BatmanMacList)
-                        else:
-#                            print('... unknown schema:',BatctlInfo[1],'->',BatctlInfo[5])
-                            BatmanMacList = []
-
-                        if BatmanVpnMAC in BatmanMacList:
-                            NodeMainMAC = BatctlInfo[1]
-                            print('>>> Primary MAC of Node =',NodeMainMAC)
-                            break
-
-        except:
-            print('++ ERROR accessing batman:',BatctlCmd)
-            NodeMainMAC = None
-            time.sleep(2)
-
-    if NodeMainMAC is not None:
-        NodeInfoDict = {
-            'NodeType' : NODETYPE_UNKNOWN,
-            'GluonVer' : None,
-            'NodeID'   : NodeMainMAC.replace(':',''),
-            'MAC'      : NodeMainMAC,
-            'Hostname' : 'ffs-'+NodeMainMAC.replace(':',''),
-            'Segment'  : None,
-            'Location' : None,
-            'Contact'  : None
-        }
 
     return NodeInfoDict
 
@@ -1266,16 +1203,12 @@ else:
             BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
             if BatmanVpnMAC is None:
-                print('++ No Batman connection to Node!')
+                print('++ No valid Batman connection to Node!')
             elif BatmanVpnMAC != FastdMAC:
                 print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):',BatmanVpnMAC,'<>',FastdMAC)
             else:
                 print('... Batman and fastd match on mesh-vpn MAC:',BatmanVpnMAC)
                 NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)    # Info of Node via Respondd or HTTP
-
-                if NodeInfo is None and (BatmanVpnMAC[16] == '7' or BatmanVpnMAC[16] == 'f'):
-                    print('... starting fallback mode ...')
-                    NodeInfo = AnalyseBatmanTG(BatmanVpnMAC,args.BATIF)    # Fallback: get Primary MAC using "batctl tg" (Global Translation Table)
 
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
