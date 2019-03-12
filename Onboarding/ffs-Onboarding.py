@@ -334,51 +334,7 @@ def DeactivateBatman(BatmanIF,FastdIF):
 
 
 #-----------------------------------------------------------------------
-# function "__GenerateGluonMACsOld(MainMAC)"
-#
-#   Get all related MACs based on Primary MAC for Gluon <= 2016.1.x
-#
-# reference = Gluon Source:
-#
-#   /package/gluon-core/files/usr/lib/lua/gluon/util.lua
-#
-# function generate_mac(f, i)
-# -- (1, 0): WAN (for mesh-on-WAN)
-# -- (1, 1): LAN (for mesh-on-LAN)
-# -- (2, n): client interface for the n'th radio
-# -- (3, n): adhoc interface for n'th radio
-# -- (4, 0): mesh VPN
-# -- (5, n): mesh interface for n'th radio (802.11s)
-#
-#  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
-#  m2 = (tonumber(m2, 16)+f) % 0x100
-#  m3 = (tonumber(m3, 16)+i) % 0x100
-#-----------------------------------------------------------------------
-def __GenerateGluonMACsOld(MainMAC):
-
-    MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
-
-    m1Main = int(MainMAC[0:2],16)
-    m2Main = int(MainMAC[3:5],16)
-    m3Main = int(MainMAC[6:8],16)
-
-    m1New = hex(m1Main | 0x02)[2:].zfill(2)
-
-    GluonMacList = []
-
-    for f in MacRanges:
-        for i in range(MacRanges[f]+1):
-            m2New = hex((m2Main + f) % 0x100)[2:].zfill(2)
-            m3New = hex((m3Main + i) % 0x100)[2:].zfill(2)
-
-            GluonMacList.append(m1New + ':' + m2New + ':' + m3New + ':' + MainMAC[9:])
-
-    return GluonMacList
-
-
-
-#-----------------------------------------------------------------------
-# function "__GenerateGluonMACsNew(MainMAC)"
+# function "__GenerateGluonMACs(MainMAC)"
 #
 #   Get all related MACs based on Primary MAC for Gluon >= 2016.2
 #
@@ -410,7 +366,7 @@ def __GenerateGluonMACsOld(MainMAC):
 #
 # return string.format('%02x:%s:%s:%s:%s:%02x', m1, m2, m3, m4, m5, m6)
 #-----------------------------------------------------------------------
-def __GenerateGluonMACsNew(MainMAC):
+def __GenerateGluonMACs(MainMAC):
 
     mHash = hashlib.md5(MainMAC.encode(encoding='UTF-8'))
     vMAC = mHash.hexdigest()
@@ -532,16 +488,10 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                             else:
                                 NodeInfoDict['NodeType'] = NODETYPE_LEGACY
 
-                        if 'base' in NodeJson['software']['firmware']:
-                            if NodeJson['software']['firmware']['base'][:13] < 'gluon-v2016.2':
-                                BatmanMacList = __GenerateGluonMACsOld(NodeInfoDict['MAC'])
-                            else:
-                                BatmanMacList = __GenerateGluonMACsNew(NodeInfoDict['MAC'])
-                        else:
-                            BatmanMacList = []
+                        BatmanMacList = __GenerateGluonMACs(NodeInfoDict['MAC'])
 
                         if NodeVpnMAC not in BatmanMacList:
-                            print('+++ invalid Batman MAC schema!')
+                            print('+++ Old Gluon Version or invalid Batman MAC schema!')
                             NodeInfoDict['NodeType'] = None
 
                 if 'owner' in NodeJson:
@@ -1224,10 +1174,14 @@ else:
 
                         if NodeInfo['NodeType'] == NODETYPE_LEGACY:
                             BatSegment = INVALID_SEGMENT
-                            print('!! Old Legacy Node is not supported !!\n')
+                            print('!! Legacy Node is not supported !!\n')
                         elif BatSegment == 0:
                             BatSegment = INVALID_SEGMENT
                             print('!! New Node cannot be put to Legacy Segment !!\n')
+                        elif NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST:
+                            BatSegment = INVALID_SEGMENT
+                            print('!! Deprecated Firmware !!\n')
+
 
                         NodeInfo['Segment'] = BatSegment
 
