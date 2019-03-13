@@ -88,6 +88,7 @@ NODETYPE_UNKNOWN         = 0
 NODETYPE_LEGACY          = 1
 NODETYPE_SEGMENT_LIST    = 2
 NODETYPE_DNS_SEGASSIGN   = 3
+NODETYPE_MTU_1340        = 4
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SEGASSIGN_PREFIX = '2001:2:0:711::'
@@ -481,7 +482,9 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                         if 'release' in NodeJson['software']['firmware']:
                             NodeInfoDict['GluonVer'] = NodeJson['software']['firmware']['release']
 
-                            if NodeInfoDict['GluonVer'][:14] >= '1.0+2017-02-14':
+                            if NodeInfoDict['GluonVer'][:14] >= '1.3+2017-09-13':
+                                NodeInfoDict['NodeType'] = NODETYPE_MTU_1340
+                            elif NodeInfoDict['GluonVer'][:14] >= '1.0+2017-02-14':
                                 NodeInfoDict['NodeType'] = NODETYPE_DNS_SEGASSIGN
                             elif NodeInfoDict['GluonVer'][:14] >= '0.7+2016.01.02':
                                 NodeInfoDict['NodeType'] = NODETYPE_SEGMENT_LIST
@@ -845,7 +848,7 @@ def WriteNodeKeyFile(KeyFileName, NodeInfo, GitFixSeg, PeerKey):
 # function "RegisterNode"
 #
 #    NodeInfo = {
-#        'NodeType' : NODETYPE_LEGACY, NODETYPE_SEGMENT_LIST, NODETYPE_DNS_SEGASSIGN
+#        'NodeType' : NODETYPE_LEGACY, NODETYPE_SEGMENT_LIST, NODETYPE_DNS_SEGASSIGN, NODETYPE_MTU_1340
 #        'GluonVer' : None,
 #        'NodeID'   : None,
 #        'MAC'      : None,
@@ -1178,7 +1181,7 @@ else:
                         elif BatSegment == 0:
                             BatSegment = INVALID_SEGMENT
                             print('!! New Node cannot be put to Legacy Segment !!\n')
-                        elif NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST:
+                        elif NodeInfo['NodeType'] != NODETYPE_MTU_1340:
                             BatSegment = INVALID_SEGMENT
                             print('!! Deprecated Firmware !!\n')
 
