@@ -122,14 +122,8 @@ NODETYPE_UNKNOWN       = 0
 NODETYPE_LEGACY        = 1
 NODETYPE_SEGMENT_LIST  = 2
 NODETYPE_DNS_SEGASSIGN = 3
+NODETYPE_MTU_1340      = 4
 
-
-GoodOldGluonList  = [
-    '0.6-g.271e864',
-    '0.6-g.88bdc98',
-    '0.6-g.df018ed',
-    '0.7-g.97879e8'
-]
 
 
 
@@ -348,23 +342,16 @@ class ffNodeInfo:
     def __SetSegmentAwareness(self,NodeMAC,NodeSoftwareDict):
 
         if 'firmware' in NodeSoftwareDict:
-            self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_LEGACY
-
             if 'release' in NodeSoftwareDict['firmware']:
                 if NodeSoftwareDict['firmware']['release'] is not None:
-                    if NodeSoftwareDict['firmware']['release'][:14] >= '1.0+2017-02-14':
+                    if NodeSoftwareDict['firmware']['release'][:14] >= '1.3+2017-09-13':
+                        self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_MTU_1340
+                    elif NodeSoftwareDict['firmware']['release'][:14] >= '1.0+2017-02-14':
                         self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
                     elif NodeSoftwareDict['firmware']['release'][:14] >= '0.7+2016.01.02':
                         self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
-                    elif NodeSoftwareDict['firmware']['release'][:13] in GoodOldGluonList:
-                        self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
-
-            if 'base' in NodeSoftwareDict['firmware']:
-                if NodeSoftwareDict['firmware']['base'] is not None:
-                    if NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.2.3':
-                        self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
-                    elif NodeSoftwareDict['firmware']['base'] >= 'gluon-v2016.1.3' and 'status-page' in NodeSoftwareDict:
-                        self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
+                    else:
+                        self.ffNodeDict[NodeMAC]['GluonType'] = NODETYPE_LEGACY
 
         return
 
@@ -410,7 +397,7 @@ class ffNodeInfo:
 
         if jsonNodeDict is not None:
             for ffNodeMAC in jsonNodeDict:
-                if ((jsonNodeDict[ffNodeMAC]['GluonType'] == NODETYPE_DNS_SEGASSIGN) or
+                if ((jsonNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN) or
                     (len(jsonNodeDict[ffNodeMAC]['MeshMACs']) > 0)):
 
                     self.ffNodeDict[ffNodeMAC] = {

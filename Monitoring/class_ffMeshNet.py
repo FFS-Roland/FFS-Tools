@@ -58,6 +58,12 @@ StatFileName   = 'SegStatistics.json'
 
 MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
 
+NODETYPE_UNKNOWN       = 0
+NODETYPE_LEGACY        = 1
+NODETYPE_SEGMENT_LIST  = 2
+NODETYPE_DNS_SEGASSIGN = 3
+NODETYPE_MTU_1340      = 4
+
 
 
 class ffMeshNet:
@@ -120,7 +126,7 @@ class ffMeshNet:
 
                 if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < self.__MeshCloudDict[CloudID]['GluonType'] and self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Status'] == 'V':
                     self.__MeshCloudDict[CloudID]['GluonType'] = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType']
-#                    if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < 3:
+#                    if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
 #                        print('>>> GluonType:',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'])
 
                 for MeshMAC in self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Neighbours']:
@@ -239,7 +245,7 @@ class ffMeshNet:
 
         else:   #----- No fixed Nodes -----
             for Segment in DesiredSegDict:
-                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] > 2:
+                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
                     if DesiredSegDict[Segment] > SegWeight:
                         SegWeight = DesiredSegDict[Segment]
                         TargetSeg = Segment
@@ -273,7 +279,7 @@ class ffMeshNet:
                 TargetSeg = self.__DefaultTarget
         else:
             for Segment in DesiredSegDict.keys():
-                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] > 2:
+                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
                     if DesiredSegDict[Segment] > SegWeight:
                         SegWeight = DesiredSegDict[Segment]
                         TargetSeg = Segment
@@ -362,7 +368,7 @@ class ffMeshNet:
                 elif len(FixedSegList) > 0:
                     print('++ Fixed Cloud:',CloudID,'...')
 #                    print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                elif self.__MeshCloudDict[CloudID]['GluonType'] > 1:
+                elif self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_SEGMENT_LIST:
                     self.__HandleSegmentAssignment(CloudID,DesiredSegDict,ActiveSegList)
 
         print('... done.\n')
@@ -382,7 +388,7 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= 2) and
+                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_SEGMENT_LIST) and
                 (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn99')):
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
@@ -392,7 +398,7 @@ class ffMeshNet:
 #                        TargetSeg = self.__DefaultTarget
 
                     if TargetSeg is not None:
-                        if TargetSeg <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] > 2:
+                        if TargetSeg <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
                             if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                                 if ffNodeMAC in self.__NodeMoveDict:
                                     print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
@@ -529,7 +535,7 @@ class ffMeshNet:
         NeighborOutFile.write('FFS-Mesh-Clouds on %s\n' % datetime.datetime.now())
 
         RegionDict = {}
-        GluonMarker = [ '?', '%', '$', ' ' ]
+        GluonMarker = [ '?', '%', '$', '$', ' ' ]
         TotalMeshingNodes = 0
 
         for CloudID in sorted(self.__MeshCloudDict):
@@ -601,7 +607,7 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffnb]['Status'] == 'V':
                     TotalUplinks += 1
 
-                if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < 3:
+                if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < NODETYPE_MTU_1340:
                     OldGluon += 1
 
             NeighborOutFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (%s)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentRegion))
@@ -668,7 +674,7 @@ class ffMeshNet:
                     RegionDict[Region]['Nodes']   += 1
                     RegionDict[Region]['Clients'] += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
 
-                if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < 3:
+                if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < NODETYPE_MTU_1340:
                     RegionDict[Region]['OldGluon'] += 1
 
         print('\nWrite out Statistics ...')

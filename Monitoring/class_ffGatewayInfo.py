@@ -66,6 +66,8 @@ from glob import glob
 # Global Constants
 #-------------------------------------------------------------
 
+MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
+
 FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 FreifunkRootDomain  = 'freifunk-stuttgart.de'
 
@@ -656,8 +658,8 @@ class ffGatewayInfo:
 
         try:
             DnsResolver = dns.resolver.Resolver()
-            DnsResolver.timeout = 2
-            DnsResolver.lifetime = 2
+            DnsResolver.timeout = 3
+            DnsResolver.lifetime = 3
         except:
             DnsResolver = None
 
@@ -700,7 +702,7 @@ class ffGatewayInfo:
     #
     #   Load and analyse fastd-Key of Nodes from Git
     #
-    #     self.FastdKeyDict[KeyFileName]   = { 'SegDir','PeerMAC','PeerName','PeerKey' }
+    #     self.FastdKeyDict[KeyFileName]   = { 'SegDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','LastConn','DnsSeg' }
     #     self.__Key2FileNameDict[PeerKey] = { 'SegDir','KeyFile' }
     #
     #-----------------------------------------------------------------------
@@ -868,7 +870,7 @@ class ffGatewayInfo:
             print('++ ERROR fastd status connect!',URL)
             return None
 
-        if StatusAge < 900:
+        if StatusAge < MaxStatusAge:
             if 'peers' in jsonFastdDict:
                 if 'interface' in jsonFastdDict:
                     if int(jsonFastdDict['interface'][3:5]) != Segment:
@@ -906,12 +908,11 @@ class ffGatewayInfo:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+#                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
-                        #----- MTU 1312 -----
-#                        if GwName[:6] == 'gw05n0' or GwName == 'gw04n02':
-#                            FastdJsonURL = 'http://%s/data/vpn%02dmtv.json' % (InternalGwIPv4,ffSeg)
-#                        else:
+                        #----- MTU 1340 -----
                         FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)
+#                        FastdJsonURL = 'http://[%s]/data/vpy%02d.json' % (InternalGwIPv6,ffSeg)
 
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
                         if ActiveConnections is not None:
@@ -919,7 +920,6 @@ class ffGatewayInfo:
 
                         #----- MTU 1406 -----
                         FastdJsonURL = 'http://%s/data/vpn%02d.json' % (InternalGwIPv4,ffSeg)
-#                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
 #                        FastdJsonURL = 'http://[%s]/data/vpn%02d.json' % (InternalGwIPv6,ffSeg)
 
                         ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
