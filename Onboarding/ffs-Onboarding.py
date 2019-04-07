@@ -388,6 +388,50 @@ def __GenerateGluonMACs(MainMAC):
 
 
 #-----------------------------------------------------------------------
+# function "__GenerateOldGluonMACs(MainMAC)"
+#
+#   Get all related MACs based on Primary MAC for Gluon <= 2016.1.x
+#
+# reference = Gluon Source:
+#
+#   /package/gluon-core/files/usr/lib/lua/gluon/util.lua
+#
+# function generate_mac(f, i)
+# -- (1, 0): WAN (for mesh-on-WAN)
+# -- (1, 1): LAN (for mesh-on-LAN)
+# -- (2, n): client interface for the n'th radio
+# -- (3, n): adhoc interface for n'th radio
+# -- (4, 0): mesh VPN
+# -- (5, n): mesh interface for n'th radio (802.11s)
+#
+#  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
+#  m2 = (tonumber(m2, 16)+f) % 0x100
+#  m3 = (tonumber(m3, 16)+i) % 0x100
+#-----------------------------------------------------------------------
+def __GenerateOldGluonMACs(MainMAC):
+
+    MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
+
+    m1Main = int(MainMAC[0:2],16)
+    m2Main = int(MainMAC[3:5],16)
+    m3Main = int(MainMAC[6:8],16)
+
+    m1New = hex(m1Main | 0x02)[2:].zfill(2)
+
+    GluonMacList = []
+
+    for f in MacRanges:
+        for i in range(MacRanges[f]+1):
+            m2New = hex((m2Main + f) % 0x100)[2:].zfill(2)
+            m3New = hex((m3Main + i) % 0x100)[2:].zfill(2)
+
+            GluonMacList.append(m1New + ':' + m2New + ':' + m3New + ':' + MainMAC[9:])
+
+    return GluonMacList
+
+
+
+#-----------------------------------------------------------------------
 # function "__InfoFromRespondd"
 #
 #  -> NodeJsonDict
@@ -423,35 +467,6 @@ def __InfoFromRespondd(NodeIPv6):
 
 
 #-----------------------------------------------------------------------
-# function "__InfoFromHTTP"
-#
-#    working for Gluon < 2018.x only !!
-#
-#  -> NodeJsonDict
-#-----------------------------------------------------------------------
-def __InfoFromHTTP(NodeIPv6):
-
-    print('Connecting to http://[%s]/cgi-bin/nodeinfo ...' % (NodeIPv6))
-    Retries = 3
-    NodeJsonDict = None
-
-    while NodeJsonDict is None and Retries > 0:
-        Retries -= 1
-
-        try:
-            NodeHTTP = urllib.request.urlopen('http://['+NodeIPv6+']/cgi-bin/nodeinfo',timeout=10)
-            NodeJsonDict = json.loads(NodeHTTP.read().decode('utf-8'))
-            NodeHTTP.close()
-        except:
-#            print('++ Error on loading /cgi-bin/nodeinfo!')
-            NodeJsonDict = None
-            time.sleep(2)
-
-    return NodeJsonDict
-
-
-
-#-----------------------------------------------------------------------
 # function "__AnalyseNodeJson"
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
@@ -461,6 +476,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
     NodeInfoDict = {
         'NodeType' : None,
         'GluonVer' : None,
+        'Updater'  : None,
         'NodeID'   : None,
         'MAC'      : None,
         'Hostname' : None,
@@ -494,8 +510,21 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                         BatmanMacList = __GenerateGluonMACs(NodeInfoDict['MAC'])
 
                         if NodeVpnMAC not in BatmanMacList:
-                            print('+++ Old Gluon Version or invalid Batman MAC schema!')
-                            NodeInfoDict['NodeType'] = None
+                            if NodeInfoDict['NodeType'] == NODETYPE_SEGMENT_LIST:
+                                BatmanMacList = __GenerateOldGluonMACs(NodeInfoDict['MAC'])
+
+                                if NodeVpnMAC not in BatmanMacList:
+                                    print('!!! Invalid Batman MAC schema!')
+                                    NodeInfoDict['NodeType'] = None
+                                else:
+                                    print('+++ Old Gluon Version.')
+                            else:
+                                print('!!! Invalid Batman MAC schema!')
+                                NodeInfoDict['NodeType'] = None
+
+                    if 'autoupdater' in NodeJson['software']:
+                        if 'enabled' in NodeJson['software']['autoupdater']:
+                            NodeInfoDict['Updater'] = NodeJson['software']['autoupdater']['enabled']
 
                 if 'owner' in NodeJson:
                     if 'contact' in NodeJson['owner']:
@@ -505,6 +534,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                 print('>>> MAC      =',NodeInfoDict['MAC'])
                 print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
                 print('>>> GluonVer =',NodeInfoDict['GluonVer'])
+                print('>>> Updater  =',NodeInfoDict['Updater'])
                 print('>>> Contact  =',NodeInfoDict['Contact'])
 
                 if 'location' in NodeJson:
@@ -554,11 +584,7 @@ def getNodeInfos(NodeMAC,FastdIF):
     NodeJson = __InfoFromRespondd(NodeIPv6LLA)
 
     if NodeJson is None:
-        print('++ No info via respondd!')
-        NodeJson = __InfoFromHTTP(NodeIPv6LLA)
-
-    if NodeJson is None:
-        print('++ No info via HTTP!')
+        print('++ No info via Respondd!')
         NodeInfoDict = None
     else:
         NodeInfoDict = __AnalyseNodeJson(NodeJson,NodeMAC)
@@ -1161,7 +1187,7 @@ else:
                 print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):',BatmanVpnMAC,'<>',FastdMAC)
             else:
                 print('... Batman and fastd match on mesh-vpn MAC:',BatmanVpnMAC)
-                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)    # Info of Node via Respondd or HTTP
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)    # Info of Node via Respondd
 
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
@@ -1182,9 +1208,10 @@ else:
                             BatSegment = INVALID_SEGMENT
                             print('!! New Node cannot be put to Legacy Segment !!\n')
                         elif NodeInfo['NodeType'] != NODETYPE_MTU_1340:
-                            BatSegment = INVALID_SEGMENT
                             print('!! Deprecated Firmware !!\n')
 
+                            if not NodeInfo['Updater']:
+                                BatSegment = INVALID_SEGMENT	# Don't register deprecated Nodes w/o active Autoupdater
 
                         NodeInfo['Segment'] = BatSegment
 
