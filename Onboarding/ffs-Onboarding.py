@@ -962,6 +962,13 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
             print('++ Node cannot be registered due to invalid Firmware - Segment Combination!')
             return 0
 
+        if NodeInfo['NodeType'] != NODETYPE_MTU_1340:
+            print('!! Deprecated Firmware !!\n')
+
+            if not NodeInfo['Updater']:
+                print('++ Node will not be registered due to disabled Autoupdater!')
+                return 0
+
         Action = 'NEW_NODE'
 
         print('*** Action =',Action)
@@ -1202,16 +1209,11 @@ else:
                         print('>>> Node is meshing in segment (IPv6 / Batman):',NodeInfo['Segment'],'/',BatSegment)
 
                         if NodeInfo['NodeType'] == NODETYPE_LEGACY:
-                            BatSegment = INVALID_SEGMENT
+                            BatSegment = INVALID_SEGMENT    # Remove Legacy Node
                             print('!! Legacy Node is not supported !!\n')
                         elif BatSegment == 0:
-                            BatSegment = INVALID_SEGMENT
+                            BatSegment = INVALID_SEGMENT    # Remove old / invalid Registration
                             print('!! New Node cannot be put to Legacy Segment !!\n')
-                        elif NodeInfo['NodeType'] != NODETYPE_MTU_1340:
-                            print('!! Deprecated Firmware !!\n')
-
-                            if not NodeInfo['Updater']:
-                                BatSegment = INVALID_SEGMENT	# Don't register deprecated Nodes w/o active Autoupdater
 
                         NodeInfo['Segment'] = BatSegment
 
