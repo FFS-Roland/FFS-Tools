@@ -198,12 +198,12 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
-    # private function "__MoveNodesInCloud"
+    # private function "__MarkNodesInCloudForMove"
     #
-    #   Move Nodes to other Segement
+    #   Move Nodes of Meshcloud to other Segement
     #
     #-----------------------------------------------------------------------
-    def __MoveNodesInCloud(self,CloudID,TargetSeg):
+    def __MarkNodesInCloudForMove(self,CloudID,TargetSeg):
 
         for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
@@ -223,74 +223,59 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
-    # private function "__HandleShortcut"
+    # private function "__GetCloudSegment"
     #
-    #   Handle Segment Shortcut
+    #   Get common Segment of Nodes in Mesh Cloud
     #
     #-----------------------------------------------------------------------
-    def __HandleShortcut(self,CloudID,DesiredSegDict,FixedSegList):
+    def __GetCloudSegment(self,DesiredSegDict,FixedSegDict):
 
-        SegWeight = 0
-        TargetSeg = None  # Target where all nodes of this cloud must be moved to
+        SegWeightDict = {}
+        MaxWeight = 0
+        TargetSeg = None    # Target where all nodes of this cloud must be
+        MultiFixSegment = False
 
-        if len(FixedSegList) > 0:
-            if len(FixedSegList) > 1:
-                self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
-                print('->',FixedSegList,self.__MeshCloudDict[CloudID])
-                self.AnalyseOnly = True
+        if len(FixedSegDict) > 0:
+            for Segment in FixedSegDict:
+                for ffNodeMAC in FixedSegDict[Segment]:
+                    if self.__NodeInfos.IsOnline(ffNodeMAC) and not MultiFixSegment:
+                        if TargetSeg is None:
+                            TargetSeg = Segment
+                        elif Segment != TargetSeg:
+                            MultiFixSegment = True
 
-            else:   #----- exactly one Segment with fixed Nodes
-                for Segment in FixedSegList:
-                    TargetSeg = Segment
+                            if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == 'V':
+                                self.__alert('!! SHORTCUT with fixed Nodes in multiple Segments !!')
+                                TargetSeg = None
 
-        else:   #----- No fixed Nodes -----
+        if MultiFixSegment:
+            self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
+
+            for Segment in FixedSegDict:
+                print('   Seg.',Segment,'-> ',FixedSegDict[Segment])
+
+        elif TargetSeg is None:   #----- No fixed Nodes -----
             for Segment in DesiredSegDict:
-                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
-                    if DesiredSegDict[Segment] > SegWeight:
-                        SegWeight = DesiredSegDict[Segment]
-                        TargetSeg = Segment
+                SegWeightDict[Segment] = 0
+
+                for ffNodeMAC in DesiredSegDict[Segment]:
+                    if Segment <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:6] == 'manual':
+                            SegWeightDict[Segment] += 10
+                        elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
+                            SegWeightDict[Segment] += 4
+                        else:
+                            SegWeightDict[Segment] += 1
+
+            for Segment in SegWeightDict:
+                if SegWeightDict[Segment] > MaxWeight:
+                    MaxWeight = SegWeightDict[Segment]
+                    TargetSeg = Segment
 
             if TargetSeg is None:
                 TargetSeg = self.__DefaultTarget
 
-        if TargetSeg is not None:
-            self.__MoveNodesInCloud(CloudID,TargetSeg)
-            self.__alert('!! Shortcut detected !!!')
-            print(self.__MeshCloudDict[CloudID]['CloudMembers'])
-            print()
-
-        return
-
-
-
-    #-----------------------------------------------------------------------
-    # private function "__HandleSegmentAssignment"
-    #
-    #   Segment Assignment of Nodes in Mesh Cloud w/o shortcuts or fixes
-    #
-    #-----------------------------------------------------------------------
-    def __HandleSegmentAssignment(self,CloudID,DesiredSegDict,ActiveSegList):
-
-        SegWeight = 0
-        TargetSeg = None
-
-        if len(DesiredSegDict) == 0:
-            if 0 in ActiveSegList:  # Cloud in Legacy Segment
-                TargetSeg = self.__DefaultTarget
-        else:
-            for Segment in DesiredSegDict.keys():
-                if Segment <= 8 or self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
-                    if DesiredSegDict[Segment] > SegWeight:
-                        SegWeight = DesiredSegDict[Segment]
-                        TargetSeg = Segment
-
-                else:
-                    print('>>> No Segament Assignment:',CloudID,'=',Segment,'->',self.__MeshCloudDict[CloudID]['GluonType'])
-
-        if TargetSeg is not None:
-            self.__MoveNodesInCloud(CloudID,TargetSeg)
-
-        return
+        return TargetSeg
 
 
 
@@ -306,12 +291,12 @@ class ffMeshNet:
 
         for CloudID in self.__MeshCloudDict:
             DesiredSegDict = {}    # desired segments with number of nodes
+            FixedSegDict   = {}    # segments with fixed nodes
+            UplinkSegList  = []    # segments of uplink-nodes
             ActiveSegList  = []    # really used segments
-            UplinkSegList  = []    # List of segments from nodes with uplink
-            FixedSegList   = []    # List of segments from nodes with fixed segment assignment
             isOnline       = False
 
-            #---------- Analysing used segments with their nodes and clients ----------
+            #---------- Analysing used segments with their nodes ----------
             for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
                 VpnSeg = None
 
@@ -327,49 +312,54 @@ class ffMeshNet:
                         if VpnSeg not in UplinkSegList:
                             UplinkSegList.append(VpnSeg)
 
-                DestSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:6] == 'manual' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
 
-                if DestSeg is None:
-                    if VpnSeg is not None:
-                        DestSeg = VpnSeg
-                        Weight = 2
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
+                        DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] = [ffNodeMAC]
                     else:
-                        Weight = 1
-                elif VpnSeg is not None and VpnSeg == DestSeg:
-                    Weight = 4
-                else:
-                    Weight = 2
+                        DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']].append(ffNodeMAC)
 
-                if DestSeg is not None and DestSeg != 0:
-                    if DestSeg not in DesiredSegDict:
-                        DesiredSegDict[DestSeg] =  Weight
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix' or VpnSeg == 99:  # Node cannot be moved!
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegDict:
+                        FixedSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] = [ffNodeMAC]
                     else:
-                        DesiredSegDict[DestSeg] += Weight
-
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] != 'auto' or VpnSeg == 99:
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegList:
-                        FixedSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])  # cannot be moved!
+                        FixedSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']].append(ffNodeMAC)
 
             #---------- Actions depending of situation in cloud ----------
-            if len(UplinkSegList) > 1:
-                self.__HandleShortcut(CloudID,DesiredSegDict,FixedSegList)  # Shortcut !!
+            CloudSegment = self.__GetCloudSegment(DesiredSegDict,FixedSegDict)
+
+            if len(UplinkSegList) > 1 or CloudSegment is None:
+                self.__alert('!! Shortcut detected !!!')
+
+                if CloudSegment is None:
+                    self.__alert('!! Shortcut cannot be corrected !!')
+                    self.AnalyseOnly = True
+                else:
+                    self.__MarkNodesInCloudForMove(CloudID,CloudSegment)
+                    self.__alert('** Shortcut will be corrected ...')
+                    print(self.__MeshCloudDict[CloudID]['CloudMembers'])
+                    print()
+
+            elif len(UplinkSegList) == 0 and isOnline:
+                print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                CheckSegList = ActiveSegList
+
+                for DestSeg in DesiredSegDict:
+                    if DestSeg not in CheckSegList:
+                        CheckSegList.append(DestSeg)
+
+                UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],CheckSegList)
+                print('>> Uplink(s) found by Batman:',UplinkList)
+
             else:
-                if len(UplinkSegList) == 0 and isOnline:
-                    print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                    CheckSegList = ActiveSegList
+                if len(FixedSegDict) > 0:
+                    print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
+                elif len(DesiredSegDict) == 0:
+                    CloudSegment = UplinkSegList[0]    # keep current segment
 
-                    for DestSeg in DesiredSegDict:
-                        if DestSeg not in CheckSegList:
-                            CheckSegList.append(DestSeg)
-
-                    UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],CheckSegList)
-                    print('>> Uplink(s) found by Batman:',UplinkList)
-
-                elif len(FixedSegList) > 0:
-                    print('++ Fixed Cloud:',CloudID,'...')
-#                    print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                elif self.__MeshCloudDict[CloudID]['GluonType'] >= NODETYPE_SEGMENT_LIST:
-                    self.__HandleSegmentAssignment(CloudID,DesiredSegDict,ActiveSegList)
+                self.__MarkNodesInCloudForMove(CloudID,CloudSegment)    # ensure all Nodes be in the correct segment
 
         print('... done.\n')
         return
