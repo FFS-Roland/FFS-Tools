@@ -178,7 +178,8 @@ class ffMeshNet:
                 self.__MeshCloudDict[ffNodeMAC] = {
                     'NumClients': 0,
                     'GluonType': 99,
-                    'CloudMembers': []
+                    'CloudMembers': [],
+                    'CloudSegment': None
                 }
 
                 self.__AddNeighbour2Cloud(ffNodeMAC,ffNodeMAC)
@@ -361,6 +362,8 @@ class ffMeshNet:
 
                 self.__MarkNodesInCloudForMove(CloudID,CloudSegment)    # ensure all Nodes be in the correct segment
 
+            self.__MeshCloudDict[CloudID]['CloudSegment'] = CloudSegment
+
         print('... done.\n')
         return
 
@@ -534,7 +537,7 @@ class ffMeshNet:
             TotalClients  = 0
             TotalUplinks  = 0
             OldGluon      = 0
-            CurrentSeg    = None
+            CurrentSeg    = self.__MeshCloudDict[CloudID]['CloudSegment']
             CurrentVPN    = None
             CurrentRegion = None
             CurrentZIP    = None
@@ -600,7 +603,7 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffnb]['GluonType'] < NODETYPE_MTU_1340:
                     OldGluon += 1
 
-            NeighborOutFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (%s)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentRegion))
+            NeighborOutFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (Seg. %02d)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentSeg))
 
             for ffnb in self.__MeshCloudDict[CloudID]['CloudMembers']:
                 self.__NodeInfos.ffNodeDict[ffnb]['Segment'] = CurrentSeg
