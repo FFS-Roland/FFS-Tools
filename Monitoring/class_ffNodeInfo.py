@@ -405,6 +405,7 @@ class ffNodeInfo:
                         'Name': jsonNodeDict[ffNodeMAC]['Name'],
                         'Status': jsonNodeDict[ffNodeMAC]['Status'],
                         'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
+                        'Uptime': 0.0,
                         'Clients': 0,
                         'Latitude': jsonNodeDict[ffNodeMAC]['Latitude'],
                         'Longitude': jsonNodeDict[ffNodeMAC]['Longitude'],
@@ -518,6 +519,7 @@ class ffNodeInfo:
                         'Name': jsonDbDict[DbIndex]['hostname'],
                         'Status': '#',
                         'last_online': jsonDbDict[DbIndex]['last_online'],
+                        'Uptime': 0.0,
                         'Clients': 0,
                         'Latitude': None,
                         'Longitude': None,
@@ -681,6 +683,7 @@ class ffNodeInfo:
                             'Name': json158Dict[jsonIndex]['hostname'],
                             'Status': ' ',
                             'last_online': HttpDate,
+                            'Uptime': 0.0,
                             'Clients': 0,
                             'Latitude': None,
                             'Longitude': None,
@@ -808,6 +811,9 @@ class ffNodeInfo:
                 else:
                     if self.ffNodeDict[NodeMAC]['Status'] not in OnlineStates:
                         self.ffNodeDict[NodeMAC]['Status'] = ' '
+
+                    if 'uptime' in json159Dict[jsonIndex]:
+                        self.ffNodeDict[NodeMAC]['Uptime'] = json159Dict[jsonIndex]['uptime']
 
                     if 'mesh_vpn' in json159Dict[jsonIndex]:
                         if 'groups' in json159Dict[jsonIndex]['mesh_vpn']:
@@ -999,6 +1005,7 @@ class ffNodeInfo:
                             'Name': RawJsonDict[ffNodeKey]['nodeinfo']['hostname'],
                             'Status': '#',
                             'last_online': 0,
+                            'Uptime': 0.0,
                             'Clients': 0,
                             'Latitude': None,
                             'Longitude': None,
@@ -1105,6 +1112,10 @@ class ffNodeInfo:
                                                 if 'established' in GWpeers[Uplink]:
                                                     self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
 
+                        if 'statistics' in RawJsonDict[ffNodeKey]:
+                            if 'uptime' in RawJsonDict[ffNodeKey]['statistics']:
+                                self.ffNodeDict[ffNodeMAC]['Uptime'] = RawJsonDict[ffNodeKey]['statistics']['uptime']
+
                     elif UnixTime - LastSeen > MaxInactiveTime:
 #                        print('>>> Old RAW:',ffNodeKey,'=',ffNodeMAC,'= \''+RawJsonDict[ffNodeKey]['nodeinfo']['hostname']+'\''))
                         self.ffNodeDict[ffNodeMAC]['Status'] = '?'   # -> inactive
@@ -1164,6 +1175,7 @@ class ffNodeInfo:
                     'Name': FastdKeyInfo['PeerName'],
                     'Status': '?',
                     'last_online': 0,
+                    'Uptime': 0.0,
                     'Clients': 0,
                     'Latitude': None,
                     'Longitude': None,

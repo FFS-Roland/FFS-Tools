@@ -85,8 +85,6 @@ class ffMeshNet:
         self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks' }
         self.__NodeMoveDict   = {}      # Git Moves of Nodes from one Segment to another
 
-        self.__DefaultTarget  = 3       # Target Segment to use if no better Data available
-
         # Initializations
         self.__CheckConsistency()
 
@@ -231,6 +229,7 @@ class ffMeshNet:
     #-----------------------------------------------------------------------
     def __GetCloudSegment(self,DesiredSegDict,FixedSegDict):
 
+        SegUptime = {}
         SegWeightDict = {}
         MaxWeight = 0
         TargetSeg = None    # Target where all nodes of this cloud must be
@@ -249,18 +248,24 @@ class ffMeshNet:
                                 self.__alert('!! SHORTCUT with fixed Nodes in multiple Segments !!')
                                 TargetSeg = None
 
-        if MultiFixSegment:
-            self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
+            if MultiFixSegment:
+                self.__alert('!! ALARM - Multiple Segments with fixed Nodes!')
 
             for Segment in FixedSegDict:
                 print('   Seg.',Segment,'-> ',FixedSegDict[Segment])
 
-        elif TargetSeg is None:   #----- No fixed Nodes -----
+        elif TargetSeg is None:
+            TargetSeg = 0    # Default = keep current segment
+
             for Segment in DesiredSegDict:
+                SegUptime[Segment] = 0.0
                 SegWeightDict[Segment] = 0
 
                 for ffNodeMAC in DesiredSegDict[Segment]:
                     if Segment <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
+                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime'] > SegUptime[Segment]:
+                            SegUptime[Segment] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
+
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:6] == 'manual':
                             SegWeightDict[Segment] += 10
                         elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn':
@@ -269,12 +274,9 @@ class ffMeshNet:
                             SegWeightDict[Segment] += 1
 
             for Segment in SegWeightDict:
-                if SegWeightDict[Segment] > MaxWeight:
+                if SegWeightDict[Segment] > MaxWeight or (SegWeightDict[Segment] == MaxWeight and SegUptime[Segment] > SegUptime[TargetSeg]):
                     MaxWeight = SegWeightDict[Segment]
                     TargetSeg = Segment
-
-            if TargetSeg is None:
-                TargetSeg = self.__DefaultTarget
 
         return TargetSeg
 
@@ -357,7 +359,7 @@ class ffMeshNet:
             else:
                 if len(FixedSegDict) > 0:
                     print('++ Fixed Cloud:',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                elif len(DesiredSegDict) == 0:
+                elif CloudSegment == 0:
                     CloudSegment = UplinkSegList[0]    # keep current segment
 
                 self.__MarkNodesInCloudForMove(CloudID,CloudSegment)    # ensure all Nodes be in the correct segment
@@ -386,9 +388,6 @@ class ffMeshNet:
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
                     TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
-
-#                    if TargetSeg is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == 'vpn00':
-#                        TargetSeg = self.__DefaultTarget
 
                     if TargetSeg is not None:
                         if TargetSeg <= 8 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
@@ -589,10 +588,11 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GluonMarker[self.__NodeInfos.ffNodeDict[ffnb]['GluonType']]
 
-                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s)\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'], Segment,
+                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'], Segment,
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['Clients'], ffnb, self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'],
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'], self.__NodeInfos.ffNodeDict[ffnb]['Name'],
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'], self.__NodeInfos.ffNodeDict[ffnb]['Region']))
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'], self.__NodeInfos.ffNodeDict[ffnb]['Region'],
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Uptime']))
                 if self.__NodeInfos.IsOnline(ffnb):
                     TotalNodes   += 1
                     TotalClients += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
@@ -650,11 +650,11 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GluonMarker[self.__NodeInfos.ffNodeDict[ffnb]['GluonType']]
 
-                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s)\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'],
+                NeighborOutFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeInfos.ffNodeDict[ffnb]['Status'],
                                                                                                 Segment,self.__NodeInfos.ffNodeDict[ffnb]['Clients'], ffnb,
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['KeyDir'], self.__NodeInfos.ffNodeDict[ffnb]['KeyFile'],
                                                                                                 self.__NodeInfos.ffNodeDict[ffnb]['Name'], self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'],
-                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Region']))
+                                                                                                self.__NodeInfos.ffNodeDict[ffnb]['Region'], self.__NodeInfos.ffNodeDict[ffnb]['Uptime']))
                 TotalNodes   += 1
                 TotalClients += self.__NodeInfos.ffNodeDict[ffnb]['Clients']
 
