@@ -1679,7 +1679,10 @@ class ffNodeInfo:
             for ffNodeMAC in self.ffNodeDict.keys():
                 if self.ffNodeDict[ffNodeMAC]['Status'] == '?': continue
 
-                if self.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_SEGMENT_LIST:  # Segment aware Gluon
+                if self.ffNodeDict[ffNodeMAC]['SegMode'][:5] == 'mobil':    # No specific Segment for mobile Nodes
+                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
+
+                elif self.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_SEGMENT_LIST:    # Segment aware Gluon
                     lat = None
                     lon = None
 
