@@ -10,6 +10,7 @@
 #                                                                                         #
 #      --pid       = fastd-PID                                                            #
 #      --fastd     = fastd-Interface (e.g. vpnWW)                                         #
+#      --mtu       = fastd-MTU (e.g. 1340)                                                #
 #      --batman    = batman-Interface (e.g. batWW)                                        #
 #      --peerkey   = fastd-Key from Peer                                                  #
 #      --gitrepo   = Git Repository with KeyFiles                                         #
@@ -471,7 +472,7 @@ def __InfoFromRespondd(NodeIPv6):
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
+def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
 
     NodeInfoDict = {
         'NodeType' : None,
@@ -501,7 +502,10 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                             if NodeInfoDict['GluonVer'][:14] >= '1.3+2017-09-13':
                                 NodeInfoDict['NodeType'] = NODETYPE_MTU_1340
                             elif NodeInfoDict['GluonVer'][:14] >= '1.0+2017-02-14':
-                                NodeInfoDict['NodeType'] = NODETYPE_DNS_SEGASSIGN
+                                if FastdMTU == 1340:
+                                    NodeInfoDict['NodeType'] = NODETYPE_MTU_1340
+                                else:
+                                    NodeInfoDict['NodeType'] = NODETYPE_DNS_SEGASSIGN
                             elif NodeInfoDict['GluonVer'][:14] >= '0.7+2016.01.02':
                                 NodeInfoDict['NodeType'] = NODETYPE_SEGMENT_LIST
                             else:
@@ -510,6 +514,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
                         BatmanMacList = __GenerateGluonMACs(NodeInfoDict['MAC'])
 
                         if NodeVpnMAC not in BatmanMacList:
+                            print(BatmanMacList)
                             if NodeInfoDict['NodeType'] == NODETYPE_SEGMENT_LIST:
                                 BatmanMacList = __GenerateOldGluonMACs(NodeInfoDict['MAC'])
 
@@ -577,7 +582,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC):
 #
 #    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def getNodeInfos(NodeMAC,FastdIF):
+def getNodeInfos(NodeMAC,FastdIF,FastdMTU):
 
     NodeIPv6LLA = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+FastdIF
 
@@ -587,7 +592,7 @@ def getNodeInfos(NodeMAC,FastdIF):
         print('++ No info via Respondd!')
         NodeInfoDict = None
     else:
-        NodeInfoDict = __AnalyseNodeJson(NodeJson,NodeMAC)
+        NodeInfoDict = __AnalyseNodeJson(NodeJson,NodeMAC,FastdMTU)
 
     return NodeInfoDict
 
@@ -1152,7 +1157,8 @@ def __SendEmail(Subject,MailBody,Account):
 #=======================================================================
 parser = argparse.ArgumentParser(description='Add or Modify Freifunk Node Registration')
 parser.add_argument('--pid', dest='FASTDPID', action='store', required=True, help='Fastd PID')
-parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help='Fastd Interface = Segment')
+parser.add_argument('--mtu', dest='FASTDMTU', action='store', required=True, help='Fastd MTU')
+parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help='Fastd Interface')
 parser.add_argument('--batman', dest='BATIF', action='store', required=True, help='Batman Interface')
 parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, help='Fastd PeerKey')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
@@ -1162,9 +1168,10 @@ parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=Tr
 args = parser.parse_args()
 PeerKey  = args.PEERKEY
 FastdPID = int(args.FASTDPID)
+FastdMTU = int(args.FASTDMTU)
 RetCode  = 0
 
-print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'...')
+print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'/ MTU =',FastdMTU,'...')
 BlacklistFile = os.path.join(args.BLACKLIST,PeerKey)
 
 if os.path.exists(BlacklistFile):
@@ -1194,7 +1201,7 @@ else:
                 print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):',BatmanVpnMAC,'<>',FastdMAC)
             else:
                 print('... Batman and fastd match on mesh-vpn MAC:',BatmanVpnMAC)
-                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF)    # Info of Node via Respondd
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF,FastdMTU)    # Info of Node via Respondd
 
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
