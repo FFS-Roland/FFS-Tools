@@ -171,7 +171,7 @@ def WriteFastdGitFile(MyKeysDict,Segment,GitPath,MonitorID):
         OutFile.write('key \"%s\";\n' % (MyKeysDict['Public']))
         OutFile.close()
     except:
-        print('++ ERROR on Fastd Peer File: %s' % (FileName))
+        print('++ ERROR on Fastd Peer File: %s' % (FilePath))
 
     return
 
