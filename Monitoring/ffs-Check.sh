@@ -37,11 +37,11 @@
 
 #exit 0
 
-GITREPO=/var/freifunk/peers-ffs
-DATADIR=/var/freifunk/database
+GITREPO=/var/lib/ffs/git/peers-ffs
+DATADIR=/var/lib/ffs/database
 ALFRED=http://netinfo.freifunk-stuttgart.de/json/
 
-LOGDIR=/var/freifunk/logs
+LOGDIR=/var/log/ffs
 LOGFILE=$LOGDIR/$(date +%s).log
 OLDLOGS=$LOGDIR/1*.log
 
