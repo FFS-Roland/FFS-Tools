@@ -97,6 +97,9 @@ SEGASSIGN_PREFIX = '2001:2:0:711::'
 RESPONDD_PORT    = 1001
 RESPONDD_TIMEOUT = 5.0
 
+MacAdrTemplate   = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+GwMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
+
 LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{1,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
@@ -433,11 +436,55 @@ def __GenerateOldGluonMACs(MainMAC):
 
 
 #-----------------------------------------------------------------------
+# function "__getNodeMACviaBatman"
+#
+#    -> NodeMAC
+#-----------------------------------------------------------------------
+def __getNodeMACviaBatman(BatmanIF):
+
+    print('Find Node MAC via Batman TG ...')
+    NodeMAC = None
+
+    try:
+        BatctlTG = subprocess.run(['/usr/sbin/batctl','-m',BatmanIF,'tg'], stdout=subprocess.PIPE)
+        BatmanTransTable = BatctlTG.stdout.decode('utf-8')
+    except:
+        print('!! ERROR on Batman Translation Table of',BatmanIF)
+        BatmanTransTable = []
+
+    for TransItem in BatmanTransTable:
+        BatctlInfo = TransItem.replace('(',' ').replace(')',' ').split()
+
+        if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwMacTemplate.match(BatctlInfo[1]) and BatctlInfo[2] == '-1':
+            BatNodeMAC = BatctlInfo[1]
+            BatMeshMAC = BatctlInfo[5]
+
+            if BatMeshMAC[:1] == BatNodeMAC[:1] and BatMeshMAC[9:] == BatNodeMAC[9:]:  # old Gluon MAC schema
+                BatmanMacList = __GenerateOldGluonMACs(BatNodeMAC)
+            else:  # new Gluon MAC schema
+                BatmanMacList = __GenerateGluonMACs(BatNodeMAC)
+
+            if BatMeshMAC in BatmanMacList:  # Data is from Node
+                if NodeMAC is None:
+                    print('++ Found Node in Batman Translation Table:',BatNodeMAC)
+                    NodeMAC = BatNodeMAC
+                else:
+                    print('!! Multiple Nodes in Batman Translation Table !!')
+                    NodeMAC = None
+                    break
+
+    return NodeMAC
+
+
+
+#-----------------------------------------------------------------------
 # function "__InfoFromRespondd"
 #
 #  -> NodeJsonDict
 #-----------------------------------------------------------------------
-def __InfoFromRespondd(NodeIPv6):
+def __InfoFromRespondd(NodeMAC,NodeIF):
+
+    NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
 
     print('Requesting Nodeinfo via respondd from %s ...' % (NodeIPv6))
     Retries = 3
@@ -542,6 +589,10 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
                 print('>>> Updater  =',NodeInfoDict['Updater'])
                 print('>>> Contact  =',NodeInfoDict['Contact'])
 
+                if 'hardware' in NodeJson:
+                    if 'model' in NodeJson['hardware']:
+                        print('>>> Hardware =',NodeJson['hardware']['model'])
+
                 if 'location' in NodeJson:
                     if ('longitude' in NodeJson['location'] and 'latitude' in NodeJson['location']) or 'zip' in NodeJson['location']:
                         NodeInfoDict['Location'] = NodeJson['location']
@@ -582,17 +633,22 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
 #
 #    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def getNodeInfos(NodeMAC,FastdIF,FastdMTU):
+def getNodeInfos(FastdMAC,FastdIF,FastdMTU,BatmanIF):
 
-    NodeIPv6LLA = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+FastdIF
+    NodeJson = __InfoFromRespondd(FastdMAC,FastdIF)
 
-    NodeJson = __InfoFromRespondd(NodeIPv6LLA)
+    if NodeJson is None:
+        print('++ No info via Respondd from VPN-Interface - trying via Batman TG ...')
+        NodeMAC = __getNodeMACviaBatman(BatmanIF)
+
+        if NodeMAC is not None:
+            NodeJson = __InfoFromRespondd(NodeMAC,BatmanIF)
 
     if NodeJson is None:
         print('++ No info via Respondd!')
         NodeInfoDict = None
     else:
-        NodeInfoDict = __AnalyseNodeJson(NodeJson,NodeMAC,FastdMTU)
+        NodeInfoDict = __AnalyseNodeJson(NodeJson,FastdMAC,FastdMTU)
 
     return NodeInfoDict
 
@@ -1201,7 +1257,7 @@ else:
                 print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):',BatmanVpnMAC,'<>',FastdMAC)
             else:
                 print('... Batman and fastd match on mesh-vpn MAC:',BatmanVpnMAC)
-                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF,FastdMTU)    # Info of Node via Respondd
+                NodeInfo = getNodeInfos(FastdMAC,args.VPNIF,FastdMTU,args.BATIF)    # Info of Node via Respondd
 
                 if NodeInfo is None:
                     print('++ Node information not available or inconsistent!')
