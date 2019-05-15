@@ -50,7 +50,7 @@ from glob import glob
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
-SegIgnoreList = ['09','19']         # Single Nodes (Schools)
+SegIgnoreList = ['09','19','21']         # Single Nodes (Schools)
 
 
 
@@ -135,6 +135,10 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
 
         for NodeID in NodeDict:
             if NodeDict[NodeID]['Status'] in OnlineStates:
+
+                if NodeDict[NodeID]['Segment'] is None:
+                    print('++ Node w/o Segment:',NodeDict[NodeID])
+                    continue
 
                 ZipCode = str(NodeDict[NodeID]['ZIP'])
                 Segment = '%02d' % (NodeDict[NodeID]['Segment'])

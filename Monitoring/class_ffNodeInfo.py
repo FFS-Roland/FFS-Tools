@@ -93,7 +93,7 @@ Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenS
 ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 
-ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9a-f]{2}:0:')
+ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9]{2}:0:')
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
 GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
@@ -399,6 +399,10 @@ class ffNodeInfo:
             for ffNodeMAC in jsonNodeDict:
                 if ((jsonNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN) or
                     (len(jsonNodeDict[ffNodeMAC]['MeshMACs']) > 0)):
+
+                    if jsonNodeDict[ffNodeMAC]['Segment'] is None and jsonNodeDict[ffNodeMAC]['IPv6'] is not None:
+                        if ffsIPv6Template.match(jsonNodeDict[ffNodeMAC]['IPv6']):
+                            jsonNodeDict[ffNodeMAC]['Segment'] = int(jsonNodeDict[ffNodeMAC]['IPv6'][12:14])
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'RawKey': None,
@@ -722,11 +726,7 @@ class ffNodeInfo:
                         for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
                             if ffsIPv6Template.match(NodeAddress):
                                 self.ffNodeDict[NodeMAC]['IPv6'] = NodeAddress
-
-                                if NodeAddress[12:14] == '1e':
-                                    self.ffNodeDict[NodeMAC]['Segment'] = 0
-                                else:
-                                    self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
+                                self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                     if 'mesh' in json158Dict[jsonIndex]['network']:
                         if 'bat0' in json158Dict[jsonIndex]['network']['mesh']:
@@ -1089,11 +1089,7 @@ class ffNodeInfo:
                             for NodeAddress in RawJsonDict[ffNodeKey]['nodeinfo']['network']['addresses']:
                                 if ffsIPv6Template.match(NodeAddress):
                                     self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
-
-                                    if NodeAddress[12:14] == '1e':
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = 0
-                                    else:
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                         if 'gateway' in RawJsonDict[ffNodeKey]['statistics']:
                             if RawJsonDict[ffNodeKey]['statistics']['gateway'][:9] == '02:00:0a:':
