@@ -1,6 +1,6 @@
-#---------------------------------------------------------------
-# Network Configuration for FFS-Welcome Port 10299 with MTU 1340
-#---------------------------------------------------------------
+#------------------------------------------------------------------
+# Network Configuration for FFS-Onboarding Port 10299 with MTU 1340
+#------------------------------------------------------------------
 
 # batman-adv --------
 allow-hotplug	bat10299
@@ -8,11 +8,11 @@ iface bat10299	inet6 static
     hwaddress	02:00:39:ff:07:99
     pre-up	/sbin/modprobe batman_adv
     post-up	/sbin/ip link set dev $IFACE up || true
-    post-up     /usr/sbin/batctl -m $IFACE mm 0 || true
+    post-up	/usr/sbin/batctl -m $IFACE mm 0 || true
 
 # fastd VPN ---------
-allow-hotplug	vpn10299
-iface vpn10299	inet6 manual
+allow-hotplug	onb10299
+iface onb10299	inet6 manual
     hwaddress	02:00:38:ff:07:99
     pre-up	/sbin/modprobe batman_adv
     pre-down	/usr/sbin/batctl -m bat10299 if del $IFACE

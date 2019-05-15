@@ -2,7 +2,7 @@
 
 ###########################################################################################
 #                                                                                         #
-#  on-establis.sh                                                                         #
+#  fastd-on-establis.sh                                                                   #
 #                                                                                         #
 #  This shell script is launched by fastd whenever a new connection is established.       #
 #  It will run python script "ffs-Onboarding.py" to handle unknown peers.                 #
@@ -39,14 +39,14 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGDIR=/var/freifunk/logs
+LOGDIR=/var/log/ffs/onboarder
 LOGFILE=${LOGDIR}/${INTERFACE}_$(date +%y%m%d)_established.log
 
 
 #----- Path Definitions -----
-PEERGITREPO=/var/freifunk/peers-ffs
-DATAPATH=/var/freifunk/database
-BLACKLIST=/var/freifunk/blacklist
+PEERGITREPO=/var/lib/ffs/git/peers-ffs
+DATAPATH=/var/lib/ffs/database
+BLACKLIST=/var/lib/ffs/blacklist
 
 
 date >> $LOGFILE

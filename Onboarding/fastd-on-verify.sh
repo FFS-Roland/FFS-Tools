@@ -2,13 +2,13 @@
 
 ###########################################################################################
 #                                                                                         #
-#  on-verify.sh                                                                           #
+#  fastd-on-verify.sh                                                                     #
 #                                                                                         #
 #  This shell script is launched by fastd whenever a peer requests a connection which     #
 #  must be checked for beeing allowed.                                                    #
 #                                                                                         #
 #  Exit Code 0 = Request accepted                                                         #
-#            1 = Request denied because of blacklisting or other instance still running.  # 
+#            1 = Request denied because of blacklisting or other instance still running.  #
 #                                                                                         #
 #  Available Environment Variables from fastd:                                            #
 #                                                                                         #
@@ -42,14 +42,15 @@
 #                                                                                         #
 ###########################################################################################
 
-LOGDIR=/var/freifunk/logs
-LOGFILE=${LOGDIR}/wpnXXXXX_$(date +%y%m%d)_verify.log
-
 #exit 1    # for blocking during test phase only - will be removed later!
 
 
 #----- Path Definitions -----
-BLACKLIST=/var/freifunk/blacklist
+LOGDIR=/var/log/ffs/onboarder
+LOGFILE=${LOGDIR}/$(date +%y%m%d)_verify.log
+
+BLACKLIST=/var/lib/ffs/blacklist
+
 
 
 date >> $LOGFILE
@@ -81,7 +82,7 @@ echo --------------------- >> $LOGFILE
 
 
 #----- Removing old Logs -----
-for Log in $(ls -r ${LOGDIR}/wpnXXXXX_??????_verify.log | tail -n +4);
+for Log in $(ls -r ${LOGDIR}/??????_verify.log | tail -n +4);
 do
   rm $Log
 done

@@ -1,6 +1,6 @@
-#---------------------------------------------------------------
-# Network Configuration for FFS-Welcome Port 10037 with MTU 1406
-#---------------------------------------------------------------
+#------------------------------------------------------------------
+# Network Configuration for FFS-Onboarding Port 10037 with MTU 1406
+#------------------------------------------------------------------
 
 # batman-adv --------
 allow-hotplug	bat10037
@@ -8,11 +8,11 @@ iface bat10037	inet6 static
     hwaddress	02:00:39:ff:07:37
     pre-up	/sbin/modprobe batman_adv
     post-up	/sbin/ip link set dev $IFACE up || true
-    post-up     /usr/sbin/batctl -m $IFACE mm 0 || true
+    post-up	/usr/sbin/batctl -m $IFACE mm 0 || true
 
 # fastd VPN ---------
-allow-hotplug	vpn10037
-iface vpn10037	inet6 manual
+allow-hotplug	onb10037
+iface onb10037	inet6 manual
     hwaddress	02:00:38:ff:07:37
     pre-up	/sbin/modprobe batman_adv
     pre-down	/usr/sbin/batctl -m bat10037 if del $IFACE
