@@ -50,7 +50,7 @@ from glob import glob
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
-SegIgnoreList = ['09','19','21']         # Single Nodes (Schools)
+SegIgnoreList = ['19','21']         # Single Nodes (Schools)
 
 
 
