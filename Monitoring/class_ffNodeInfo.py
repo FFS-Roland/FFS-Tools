@@ -114,10 +114,6 @@ KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
 FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
 BadNameTemplate   = re.compile('.*[|/\\<>]+.*')
 
-BATMAN_DEBUG_FILES  = '/sys/kernel/debug/batman_adv'
-BATMAN_TRANS_TABLE  = 'transtable_global'
-BATMAN_ORIGI_TABLE  = 'originators'
-
 NODETYPE_UNKNOWN       = 0
 NODETYPE_LEGACY        = 1
 NODETYPE_SEGMENT_LIST  = 2
@@ -1256,21 +1252,22 @@ class ffNodeInfo:
 
         for ffSeg in SegmentList:
             print('... Segment',ffSeg,'...')
-            BatmanIF  = 'bat%02d' % (ffSeg)
             NodeCount = 0
             ClientCount = 0
 
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()
+
             try:
-                with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_TRANS_TABLE), mode='r') as TransTableFile:
-                    BatmanTransTable = TransTableFile.read().splitlines()
+                BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                BatctlResult = BatctlTg.stdout.decode('utf-8')
             except:
-                print('!! ERROR on Batman Translation Table of',BatmanIF)
+                print('++ ERROR accessing batman:',BatctlCmd)
                 BatmanTransTable = None
             else:
-                for TransItem in BatmanTransTable:
-                    BatctlInfo = TransItem.replace('(',' ').replace(')',' ').split()
+                for BatctlLine in BatctlResult.split('\n'):
+                    BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
 
-                    if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+                    if len(BatctlInfo) == 8 and MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
                         ffNodeMAC = BatctlInfo[1]
                         ffMeshMAC = BatctlInfo[5]
 
@@ -1305,20 +1302,27 @@ class ffNodeInfo:
             TotalNodes   += NodeCount
             TotalClients += ClientCount
 
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d o' % (ffSeg)).split()
 
             try:
-                with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_ORIGI_TABLE), mode='r') as OriginTableFile:
-                    BatmanOriginTable = OriginTableFile.read().splitlines()
+                BatctlO = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                BatctlResult = BatctlO.stdout.decode('utf-8')
             except:
-                print('!! ERROR on Batman Originator Table of',BatmanIF)
+                print('++ ERROR accessing batman:',BatctlCmd)
+                BatmanOriginTable = None
             else:
-                for OriginItem in BatmanOriginTable:
+                for OriginItem in BatctlResult.split('\n'):
                     BatctlInfo = OriginItem.split()
 
-                    if len(BatctlInfo) > 5 and MacAdrTemplate.match(BatctlInfo[0]) and not GwAllMacTemplate.match(BatctlInfo[0]):
-                        if BatctlInfo[0] not in self.MAC2NodeIDDict:
-                            print('++ Unknown Node in Batman Originator Table:',ffSeg,'/',BatctlInfo[0])
+                    if len(BatctlInfo) > 5:
+                        if BatctlInfo[0] == '*':
+                            ffNodeMAC = BatctlInfo[1]
+                        else:
+                            ffNodeMAC = BatctlInfo[0]
 
+                        if MacAdrTemplate.match(ffNodeMAC) and not GwAllMacTemplate.match(ffNodeMAC):
+                            if ffNodeMAC not in self.MAC2NodeIDDict:
+                                print('++ Unknown Node in Batman Originator Table:',ffSeg,'/',BatctlInfo[1])
 
         print('\nTotalNodes / TotalClients =',TotalNodes,'/',TotalClients)
         print('... done.\n')
