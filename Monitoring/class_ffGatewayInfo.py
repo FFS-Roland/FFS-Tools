@@ -101,8 +101,6 @@ KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
 FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
 
 
-BATMAN_DEBUG_FILES  = '/sys/kernel/debug/batman_adv'
-BATMAN_GATEWAYS     = 'gateways'
 
 
 
@@ -552,47 +550,47 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __GetSegmentGwListFromBatman(self,Segment):
 
-        BatmanIF  = 'bat%02d' % (Segment)
         BatResult = None
         GwList    = []
 
+        BatctlCmd = ('/usr/sbin/batctl -m bat%02d gwl' % (Segment)).split()
+
         try:
-            with open(os.path.join(BATMAN_DEBUG_FILES,BatmanIF,BATMAN_GATEWAYS), mode='r') as GatewayList:
-                BatResult = GatewayList.read().splitlines()
+            BatctlGwl = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+            BatResult = BatctlGwl.stdout.decode('utf-8')
         except:
-            print('!! ERROR on Batman GatewayList of',BatmanIF)
+            print('++ ERROR accessing batman:',BatctlCmd)
             BatResult = None
         else:
-            for BatLine in BatResult:
-                GwName = None
-                GwMAC = BatLine[3:20]
+            for BatLine in BatResult.split('\n'):
+                BatctlInfo = BatLine.split()
 
-                if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
-#                    if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
-                    if int(GwMAC[9:11]) == Segment:
-                        GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
-                    else:
-                        self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                if len(BatctlInfo) > 3:
+                    GwMAC  = BatctlInfo[0]
+                    GwName = None
 
-                elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
-                    if Segment == 0:
+                    if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
+#                        if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
+                        if int(GwMAC[9:11]) == Segment:
+                            GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
+                        else:
+                            self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+
+                    elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
                         GwName = 'gw'+GwMAC[15:17]
                         if GwName in self.__GwAliasDict:
                             GwName = self.__GwAliasDict[GwName]
+                        self.__alert('!! Old Gateway MAC: '+BatmanIF+' -> '+GwMAC+' = '+GwName)
 
-                        print('++ Old Gateway MAC:',BatmanIF,'->',GwMAC,'=',GwName)
-                    else:
-                        self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                    elif MacAdrTemplate.match(GwMAC):
+                        print('++ Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
-                elif MacAdrTemplate.match(GwMAC):
-                    print('++ Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
-
-                if GwName is not None:
-                    if GwName not in GwList:
-                        GwList.append(GwName)
-                    else:
-#                        self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
-                        print('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                    if GwName is not None:
+                        if GwName not in GwList:
+                            GwList.append(GwName)
+                        else:
+#                            self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                            print('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
 
         return GwList
 
