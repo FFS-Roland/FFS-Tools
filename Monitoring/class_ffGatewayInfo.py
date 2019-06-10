@@ -574,23 +574,22 @@ class ffGatewayInfo:
                         if int(GwMAC[9:11]) == Segment:
                             GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
                         else:
-                            self.__alert('!! GW-Shortcut detected: '+BatmanIF+' -> '+GwMAC)
+                            self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment,GwMAC))
 
                     elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
                         GwName = 'gw'+GwMAC[15:17]
                         if GwName in self.__GwAliasDict:
                             GwName = self.__GwAliasDict[GwName]
-                        self.__alert('!! Old Gateway MAC: '+BatmanIF+' -> '+GwMAC+' = '+GwName)
+                        self.__alert('!! Old Gateway MAC: bat%02d -> %s = %s' % (Segment,GwMAC,GwName))
 
                     elif MacAdrTemplate.match(GwMAC):
-                        print('++ Invalid Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                        print('++ Invalid Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
 
                     if GwName is not None:
                         if GwName not in GwList:
                             GwList.append(GwName)
                         else:
-#                            self.__alert('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
-                            print('!! Duplicate Gateway MAC: '+BatmanIF+' -> '+GwMAC)
+                            print('!! Duplicate Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
 
         return GwList
 
