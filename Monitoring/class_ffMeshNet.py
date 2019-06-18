@@ -324,7 +324,7 @@ class ffMeshNet:
                     else:
                         DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']].append(ffNodeMAC)
 
-                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix' or VpnSeg == 99:  # Node cannot be moved!
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':  # Node cannot be moved!
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in FixedSegDict:
                         FixedSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']] = [ffNodeMAC]
                     else:
@@ -384,7 +384,7 @@ class ffMeshNet:
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] is None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != '?') and
                 (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][:3] == 'vpn' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_SEGMENT_LIST) and
-                (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != 'vpn99')):
+                (int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) <= 64)):
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'auto' or self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
                     TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
@@ -401,18 +401,6 @@ class ffMeshNet:
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == ' ':
                     print('++ Node seems to be w/o VPN Uplink:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],'/',ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
-#                    CheckSegList = [ int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) ]
-#
-#                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is not None:
-#                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in CheckSegList:
-#                            CheckSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'])
-#
-#                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
-#                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in CheckSegList:
-#                            CheckSegList.append(self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'])
-#
-#                    UplinkList = self.__NodeInfos.GetUplinkList([ffNodeMAC],CheckSegList)
-#                    print('>> Uplink(s) found by Batman:',UplinkList)
 
             elif ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == '?' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] == 999) and
                   (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '' and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '')):
@@ -475,6 +463,7 @@ class ffMeshNet:
                         if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():
                             print('++ Hostname Mismatch:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],'->','\''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'',
                                   '<-','\''+self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName']+'\'')
+                            self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']
 
         print('... done.\n')
         return

@@ -209,7 +209,7 @@ class ffGatewayInfo:
             Segment  = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
             FileName = os.path.basename(KeyFilePath)
 
-            if (Segment == 0) or (Segment > 99):
+            if (Segment == 0) or (Segment > 64):
                 print('!! Illegal Segment:',Segment)
                 continue
 
@@ -223,11 +223,6 @@ class ffGatewayInfo:
                     print('++ Invalid File Name in Git:',KeyFilePath)
             else:
                 print('!! Bad File in Git:',KeyFilePath)
-
-#        print()
-#        for Segment in sorted(self.__SegmentDict):
-#            print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwGitNames'])))
-#        exit(1)
 
         print('... done.\n')
         return
@@ -409,8 +404,8 @@ class ffGatewayInfo:
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
 
-                    if Segment == 0 or Segment == 99:
-                        continue    # >>> Onboarder
+                    if Segment == 0 or Segment > 64:
+                        continue    # >>> Onboarder or Quarantine
 
                     if Segment not in self.__SegmentDict:
                         print('!! Segment in DNS but not in Git: %s' % (GwName))
@@ -508,8 +503,8 @@ class ffGatewayInfo:
                     else:
                         Segment = 0    # legacy names -> will be used for onboarding
 
-                    if Segment == 0 or Segment == 99:
-                        continue    # >>> Onboarder
+                    if Segment == 0 or Segment > 64:
+                        continue    # >>> Onboarder or Quarantine
 
                     if Segment not in self.__SegmentDict:
                         print('!! Invalid Segment:',Segment)
@@ -624,7 +619,7 @@ class ffGatewayInfo:
                     self.__SegmentDict[Segment]['GwBatNames'].append(GwName)
 
             for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
-                if GwName not in self.__SegmentDict[Segment]['GwBatNames'] and Segment > 0 and Segment < 99:
+                if GwName not in self.__SegmentDict[Segment]['GwBatNames'] and Segment > 0 and Segment <= 64:
                     print('!! Gateway in DNS but not in Batman: Seg.%02d -> %s' % (Segment,GwName))
 
         print()
@@ -714,7 +709,7 @@ class ffGatewayInfo:
             Segment  = int(SegDir[3:])
             FileName = os.path.basename(KeyFilePath)
 
-            if (Segment == 0) or (Segment > 99):
+            if (Segment == 0) or (Segment > 64):
                 print('!! Illegal Segment:',Segment)
                 continue
 
@@ -753,13 +748,17 @@ class ffGatewayInfo:
                                 self.__alert('!! Invalid Key in Key File: '+KeyFilePath+' -> '+PeerKey)
                                 PeerKey = None
 
-                        elif not LowerCharLine.startswith('#comment: ') and LowerCharLine != '':
+                        elif not LowerCharLine.startswith('#') and LowerCharLine != '':
                             self.__alert('!! Invalid Entry in Key File: '+KeyFilePath+' -> '+DataLine)
 
-                    if PeerMAC is not None and PeerKey is not None:
+                    if PeerMAC is None or PeerKey is None:
+                        self.__alert('!! Invalid Key File: '+KeyFilePath)
+                    else:
                         if FileName in self.FastdKeyDict or PeerKey in self.__Key2FileNameDict:
-                            self.__alert('!! Duplicate Key File: '+FileName+' -> '+SegDir+' / '+self.FastdKeyDict[FileName]['SegDir'])
-                            self.__alert('                       '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+KeyFilePath)
+                            self.__alert('!! Duplicate Key File: %s -> %s / %s' % (FileName,SegDir,self.FastdKeyDict[FileName]['SegDir']))
+#                            self.__alert('!! Duplicate Key File: '+FileName+' -> '+SegDir+' / '+self.FastdKeyDict[FileName]['SegDir'])
+#                            self.__alert('                       '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+KeyFilePath)
+                            self.__alert('                       %s = %s/peers/%s -> %s' % (PeerKey,self.__Key2FileNameDict[PeerKey]['SegDir'],self.__Key2FileNameDict[PeerKey]['KeyFile'],KeyFilePath))
                             self.AnalyseOnly = True
                         else:
                             self.FastdKeyDict[FileName] = {
@@ -777,9 +776,6 @@ class ffGatewayInfo:
                                 'SegDir': SegDir,
                                 'KeyFile': FileName
                             }
-
-                    else:
-                        self.__alert('!! Invalid Key File: '+KeyFilePath)
 
             else:
                 print('++ Invalid Key Filename:', KeyFilePath)
