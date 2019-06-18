@@ -1176,7 +1176,11 @@ class ffGatewayInfo:
 
                 if MoveCount > 0:
                     print('... doing Git commit ...')
-                    GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
+                    commit_message = "Automatic move by ffs-Monitor\n"
+                    commit_message += "\n"
+                    for mac,segment in NodeMoveDict.items():
+                        commit_message += "Moved {} to Segment {}".format(mac,segment)
+                    GitIndex.commit(commit_message)
                     GitOrigin.config_writer.set('url',GitAccount['URL'])
                     print('... doing Git pull ...')
                     GitOrigin.pull()
