@@ -152,7 +152,7 @@ class ffNodeInfo:
         self.__LoadAlfred158Json()      # Alfred - basic infos of the Nodes
         self.__LoadAlfred159Json()      # Alfred - VPN-Uplinks of the Nodes
         self.__LoadAlfred160Json()      # Alfred - Neighbours of the Nodes
-        self.__LoadRawJson()            # add or update Info with Data from announced / respondd
+        self.__LoadRawJson()            # add or update Info with Data from respondd
         self.__CheckNodeHostnames()     # Check for invalid letters in hostnames
         return
 
@@ -1152,78 +1152,78 @@ class ffNodeInfo:
 
 
     #=========================================================================
-    # Method "AddNode"
+    # Method "AddFastdNodes"
     #
-    #   Adds a Node { 'SegDir','SegMode','VpnMAC','PeerMAC','PeerName','PeerKey' }
+    #   Add Nodes from fastd-Infos { 'SegDir','SegMode','VpnMAC','PeerMAC','PeerName','PeerKey' }
     #
     #=========================================================================
-    def AddNode(self,KeyIndex,FastdKeyInfo):
+    def AddFastdNodes(self,FastdKeyDict):
 
-        newNode = False
-        ffNodeMAC = FastdKeyInfo['PeerMAC']
+        newNodes = 0
 
-        if not MacAdrTemplate.match(ffNodeMAC):
-            print('!! Bad PeerMAC:',ffNodeMAC)
+        for KeyFileName in FastdKeyDict.keys():
+            FastdKeyInfo = FastdKeyDict[KeyFileName]
+            ffNodeMAC = FastdKeyInfo['PeerMAC']
 
-        else:
-            if ffNodeMAC not in self.ffNodeDict:
+            if not MacAdrTemplate.match(ffNodeMAC):
+                print('!! Bad PeerMAC:',ffNodeMAC)
+            else:
+                if ffNodeMAC not in self.ffNodeDict:
 
-                self.ffNodeDict[ffNodeMAC] = {
-                    'RawKey': None,
-                    'Name': FastdKeyInfo['PeerName'],
-                    'Status': '?',
-                    'last_online': 0,
-                    'Uptime': 0.0,
-                    'Clients': 0,
-                    'Latitude': None,
-                    'Longitude': None,
-                    'ZIP': None,
-                    'Region': '??',
-                    'DestSeg': None,
-                    'GluonType': NODETYPE_UNKNOWN,
-                    'MeshMACs':[],
-                    'IPv6': None,
-                    'Segment': int(FastdKeyInfo['SegDir'][3:]),
-                    'SegMode': FastdKeyInfo['SegMode'],
-                    'KeyDir': FastdKeyInfo['SegDir'],
-                    'KeyFile': KeyIndex,
-                    'FastdKey': FastdKeyInfo['PeerKey'],
-                    'InCloud': None,
-                    'Neighbours': [],
-                    'Owner': None
-                }
+                    self.ffNodeDict[ffNodeMAC] = {
+                        'RawKey': None,
+                        'Name': FastdKeyInfo['PeerName'],
+                        'Status': '?',
+                        'last_online': 0,
+                        'Uptime': 0.0,
+                        'Clients': 0,
+                        'Latitude': None,
+                        'Longitude': None,
+                        'ZIP': None,
+                        'Region': '??',
+                        'DestSeg': None,
+                        'GluonType': NODETYPE_UNKNOWN,
+                        'MeshMACs':[],
+                        'IPv6': None,
+                        'Segment': int(FastdKeyInfo['SegDir'][3:]),
+                        'SegMode': None,
+                        'KeyDir': None,
+                        'KeyFile': None,
+                        'FastdKey': None,
+                        'InCloud': None,
+                        'Neighbours': [],
+                        'Owner': None
+                    }
 
-#                self.MAC2NodeIDDict[ffNodeMAC] = ffNodeMAC
-                self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
-                newNode = True
+                    self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
+                    newNodes += 1
 
-                if FastdKeyInfo['VpnMAC'] != '':   # Node is connected to Gateway
-                    print('!! New VPN-Node:   %s / %s = \'%s\'' % (FastdKeyInfo['SegDir'],ffNodeMAC,FastdKeyInfo['PeerName']))
+                    if FastdKeyInfo['VpnMAC'] != '':   # Node is connected to Gateway
+                        print('!! New VPN-Node:   %s / %s = \'%s\'' % (FastdKeyInfo['SegDir'],ffNodeMAC,FastdKeyInfo['PeerName']))
 
-                    if FastdKeyInfo['SegDir'] > 'vpn08':
-                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
-                    else:
-                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
+                        if FastdKeyInfo['SegDir'] > 'vpn08':
+                            self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
+                        else:
+                            self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
 
-            else:   # updating existing node
                 self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
                 self.ffNodeDict[ffNodeMAC]['KeyDir']   = FastdKeyInfo['SegDir']
-                self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyIndex
+                self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
                 self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
 
-            if FastdKeyInfo['VpnMAC'] != '':
-                if self.ffNodeDict[ffNodeMAC]['Status'] == '?':
-                    print('!! Node is alive:  %s / %s -> %s = \'%s\'' % (FastdKeyInfo['SegDir'],FastdKeyInfo['VpnMAC'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-                elif self.ffNodeDict[ffNodeMAC]['Status'] != 'V':
-                    print('!! Node is online: %s / %s -> %s = \'%s\'' % (FastdKeyInfo['SegDir'],FastdKeyInfo['VpnMAC'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                if FastdKeyInfo['VpnMAC'] != '':
+                    if self.ffNodeDict[ffNodeMAC]['Status'] == '?':
+                        print('!! Node is alive:  %s / %s -> %s = \'%s\'' % (FastdKeyInfo['SegDir'],FastdKeyInfo['VpnMAC'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                    elif self.ffNodeDict[ffNodeMAC]['Status'] != 'V':
+                        print('!! Node is online: %s / %s -> %s = \'%s\'' % (FastdKeyInfo['SegDir'],FastdKeyInfo['VpnMAC'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['SegDir'][3:])
-                self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
+                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['SegDir'][3:])
+                    self.ffNodeDict[ffNodeMAC]['Status'] = 'V'
 
-                if FastdKeyInfo['LastConn'] > self.ffNodeDict[ffNodeMAC]['last_online']:
-                    self.ffNodeDict[ffNodeMAC]['last_online'] = FastdKeyInfo['LastConn']
+                    if FastdKeyInfo['LastConn'] > self.ffNodeDict[ffNodeMAC]['last_online']:
+                        self.ffNodeDict[ffNodeMAC]['last_online'] = FastdKeyInfo['LastConn']
 
-        return newNode
+        return newNodes
 
 
 
@@ -1688,12 +1688,13 @@ class ffNodeInfo:
             isOK = False
         else:
             for ffNodeMAC in self.ffNodeDict.keys():
-                if self.ffNodeDict[ffNodeMAC]['Status'] == '?': continue
-
-                if self.ffNodeDict[ffNodeMAC]['SegMode'][:5] == 'mobil':    # No specific Segment for mobile Nodes
+                if self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':        # fixed Segment independent of Location
+                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
+                elif self.ffNodeDict[ffNodeMAC]['SegMode'][:5] == 'mobil':    # No specific Segment for mobile Nodes
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
-
-                elif self.ffNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_SEGMENT_LIST:    # Segment aware Gluon
+                elif self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_SEGMENT_LIST:    # Segment aware Gluon
+                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
+                else:
                     lat = None
                     lon = None
 
@@ -1777,16 +1778,8 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
                         self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
 
-                        if GpsSegment > 8 and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
+                        if GpsSegment > 8 and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN and self.ffNodeDict[ffNodeMAC]['Status'] != '?':
                             print('!! Invalid Segment for Gluon-Version:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment)
-
-                    if self.ffNodeDict[ffNodeMAC]['SegMode'][:4] == 'fix ':
-                        GpsSegment = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
-                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
-#                        print('+++ Segment is fix:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment)
-
-                else:  # old Gluon without Segment Support
-                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
 
         print('... done.\n')
         return isOK

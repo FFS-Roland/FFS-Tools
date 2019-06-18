@@ -151,19 +151,12 @@ if AccountsDict is None:
 print('====================================================================================\n\nSetting up Gateway Data ...\n')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
-isOK = ffsGWs.CheckNodesInSegassignDNS()    # Check DNS entries of Nodes against keys from Git
-
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'],args.GITREPO,args.DATAPATH)
 
 print('Merging fastd-Infos to Nodes ...')
-NewNodeCount = 0
-
-for KeyIndex in ffsGWs.FastdKeyDict.keys():
-    if ffsNodes.AddNode(KeyIndex,ffsGWs.FastdKeyDict[KeyIndex]):    # Merge Data from Gateways to NodeInfos
-        NewNodeCount += 1
-
+NewNodeCount = ffsNodes.AddFastdNodes(ffsGWs.FastdKeyDict)    # Merge Node-Data from Git and Gateways to NodeInfos
 print('... %d Nodes added.\n' % (NewNodeCount))
 
 
@@ -178,9 +171,7 @@ if not ffsNodes.SetDesiredSegments():
 
 print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
 
-ffsNet = ffMeshNet(ffsNodes,ffsGWs)
-
-ffsNet.CheckSegments()    # Find Mesh-Clouds with analysing for shortcuts
+ffsNet = ffMeshNet(ffsNodes,ffsGWs)    # Find Mesh-Clouds with analysing for shortcuts
 
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 

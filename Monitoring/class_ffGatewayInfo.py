@@ -139,6 +139,7 @@ class ffGatewayInfo:
 
         self.__LoadNodeKeysFromGit()
         self.__LoadFastdStatusInfos()
+        self.__CheckNodesInSegassignDNS()
         return
 
 
@@ -1031,13 +1032,13 @@ class ffGatewayInfo:
 
 
 
-    #=========================================================================
-    # Method "CheckNodesInSegassignDNS"
+    #--------------------------------------------------------------------------
+    # private function "__CheckNodesInSegassignDNS"
     #
     #   Returns True if everything is OK
     #
-    #=========================================================================
-    def CheckNodesInSegassignDNS(self):
+    #--------------------------------------------------------------------------
+    def __CheckNodesInSegassignDNS(self):
 
         DnsZone     = None
         isOK        = True
@@ -1120,6 +1121,7 @@ class ffGatewayInfo:
                 self.__alert('!! The Git Repository and/or DNS are not clean - cannot move Nodes!')
             else:
                 self.__alert('++ The following Nodes will be moved automatically:')
+                GitCommitMessage = "Automatic move by FFS-Monitor:\n\n"
                 MoveCount = 0
 
                 for ffNodeMAC in NodeMoveDict:
@@ -1135,10 +1137,12 @@ class ffGatewayInfo:
                             DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
 
 #                        print(SourceFile,'->',DestFile)
-                        print('%s = %s: %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC]))
+                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC])
+                        print(MoveTextLine)
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)) and NodeMoveDict[ffNodeMAC] > 0:
                             MoveCount += 1
+                            GitCommitMessage += MoveTextLine+'\n'
                             GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
                             print('... Git remove of old location done.')
 
@@ -1176,7 +1180,8 @@ class ffGatewayInfo:
 
                 if MoveCount > 0:
                     print('... doing Git commit ...')
-                    GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
+#                    GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
+                    GitIndex.commit(GitCommitMessage)
                     GitOrigin.config_writer.set('url',GitAccount['URL'])
                     print('... doing Git pull ...')
                     GitOrigin.pull()

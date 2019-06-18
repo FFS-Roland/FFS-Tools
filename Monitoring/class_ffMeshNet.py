@@ -87,7 +87,9 @@ class ffMeshNet:
 
         # Initializations
         self.__CheckConsistency()
-
+        self.__CreateMeshCloudList()
+        self.__CheckMeshClouds()
+        self.__CheckSingleNodes()
         return
 
 
@@ -466,22 +468,6 @@ class ffMeshNet:
                             self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']
 
         print('... done.\n')
-        return
-
-
-
-    #==============================================================================
-    # Method "CheckSegments"
-    #
-    #   Analysing Mesh Clouds for Segment Shortcuts
-    #
-    #==============================================================================
-    def CheckSegments(self):
-
-        self.__CreateMeshCloudList()
-        self.__CheckMeshClouds()
-        self.__CheckSingleNodes()
-
         return
 
 
