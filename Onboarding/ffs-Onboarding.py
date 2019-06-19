@@ -1125,7 +1125,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
 
             if NeedCommit:
-                GitIndex.commit('Onboarding (%s) of Peer \"%s\" in Segment %02d' % (Action,NodeInfo['Hostname'],NewSegment))
+                GitIndex.commit('Onboarding (%s) of %s = \"%s\" in Segment %02d' % (Action,NodeInfo['MAC'],NodeInfo['Hostname'],NewSegment))
                 GitOrigin.config_writer.set('url',AccountsDict['Git']['URL'])
                 print('... doing Git pull ...')
                 GitOrigin.pull()
