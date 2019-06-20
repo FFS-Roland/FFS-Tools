@@ -1067,12 +1067,12 @@ class ffGatewayInfo:
 
 
     #=========================================================================
-    # Method "Segments"
+    # Method "GetSegmentList"
     #
     #   Returns List of Segments
     #
     #=========================================================================
-    def Segments(self):
+    def GetSegmentList(self):
 
         SegmentList = []
 

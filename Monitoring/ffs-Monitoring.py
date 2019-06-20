@@ -160,7 +160,7 @@ NewNodeCount = ffsNodes.AddFastdNodes(ffsGWs.FastdKeyDict)    # Merge Node-Data 
 print('... %d Nodes added.\n' % (NewNodeCount))
 
 
-ffsNodes.GetBatmanNodeMACs(ffsGWs.Segments())
+ffsNodes.GetBatmanNodeMACs(ffsGWs.GetSegmentList())
 
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 

@@ -561,9 +561,6 @@ class ffNodeInfo:
                         if jsonDbDict[DbIndex]['last_online'] > NewestTime:
                             NewestTime = jsonDbDict[DbIndex]['last_online']
 
-                        if 'segment' in jsonDbDict[DbIndex] and jsonDbDict[DbIndex]['segment'] is not None:
-                            self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
-
                         if 'gateway' in jsonDbDict[DbIndex]:
                             if GwNewMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
                                 GwSeg = int(jsonDbDict[DbIndex]['gateway'][9:11])
@@ -572,6 +569,9 @@ class ffNodeInfo:
                                     self.ffNodeDict[ffNodeMAC]['Segment'] = GwSeg
                                 elif self.ffNodeDict[ffNodeMAC]['Segment'] != GwSeg:
                                     print('!! Segment mismatch:',self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment'],'<>',GwSeg,'=',self.ffNodeDict[ffNodeMAC]['Name'])
+
+                        if 'segment' in jsonDbDict[DbIndex] and jsonDbDict[DbIndex]['segment'] is not None:
+                            self.ffNodeDict[ffNodeMAC]['Segment'] = int(jsonDbDict[DbIndex]['segment'])
 
                         if 'neighbours' in jsonDbDict[DbIndex]:
                             for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
@@ -733,7 +733,6 @@ class ffNodeInfo:
                         for NodeAddress in json158Dict[jsonIndex]['network']['addresses']:
                             if ffsIPv6Template.match(NodeAddress):
                                 self.ffNodeDict[NodeMAC]['IPv6'] = NodeAddress
-                                self.ffNodeDict[NodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                     if 'mesh' in json158Dict[jsonIndex]['network']:
                         if 'bat0' in json158Dict[jsonIndex]['network']['mesh']:
@@ -824,6 +823,11 @@ class ffNodeInfo:
 
                     if 'uptime' in json159Dict[jsonIndex]:
                         self.ffNodeDict[NodeMAC]['Uptime'] = json159Dict[jsonIndex]['uptime']
+
+                    if 'gateway' in json159Dict[jsonIndex]:
+                        if GwNewMacTemplate.match(json159Dict[jsonIndex]['gateway']):
+                            if self.ffNodeDict[NodeMAC]['Segment'] is None:
+                                self.ffNodeDict[NodeMAC]['Segment'] = int(json159Dict[jsonIndex]['gateway'][9:11])
 
                     if 'mesh_vpn' in json159Dict[jsonIndex]:
                         if 'groups' in json159Dict[jsonIndex]['mesh_vpn']:
@@ -1093,7 +1097,6 @@ class ffNodeInfo:
                                 for NodeAddress in RawJsonDict[ffNodeKey]['nodeinfo']['network']['addresses']:
                                     if ffsIPv6Template.match(NodeAddress):
                                         self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeAddress[12:14])
 
                             if 'gateway' in RawJsonDict[ffNodeKey]['statistics']:
                                 if GwNewMacTemplate.match(RawJsonDict[ffNodeKey]['statistics']['gateway']):
@@ -1201,7 +1204,7 @@ class ffNodeInfo:
                     self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
                     newNodes += 1
 
-                    if FastdKeyInfo['VpnMAC'] != '':   # Node is connected to Gateway
+                    if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node is connected to Gateway
                         print('!! New VPN-Node:   %s / %s = \'%s\'' % (FastdKeyInfo['SegDir'],ffNodeMAC,FastdKeyInfo['PeerName']))
 
                         if FastdKeyInfo['SegDir'] > 'vpn08':
@@ -1214,7 +1217,7 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
                 self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
 
-                if FastdKeyInfo['VpnMAC'] != '':
+                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):
                     if self.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_UNKNOWN:
                         print('!! Node is alive:  %s / %s -> %s = \'%s\'' % (FastdKeyInfo['SegDir'],FastdKeyInfo['VpnMAC'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                     elif self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
@@ -1225,6 +1228,9 @@ class ffNodeInfo:
 
                     if FastdKeyInfo['LastConn'] > self.ffNodeDict[ffNodeMAC]['last_online']:
                         self.ffNodeDict[ffNodeMAC]['last_online'] = FastdKeyInfo['LastConn']
+
+                elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:
+                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['SegDir'][3:])
 
         return newNodes
 
@@ -1681,7 +1687,7 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
                 elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'man':      # manually defined Segment
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
-                elif self.ffNodeDict[ffNodeMAC]['SegMode'][:5] == 'mobil':    # No specific Segment for mobile Nodes
+                elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'mob':      # No specific Segment for mobile Nodes
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
                 elif self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_SEGMENT_LIST:    # Segment aware Gluon
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
