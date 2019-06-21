@@ -185,7 +185,8 @@ if NodeMoveDict is None:
 
     if not ffsNodes.AnalyseOnly and not ffsGWs.AnalyseOnly and not ffsNet.AnalyseOnly:
         ffsNodes.WriteNodeDict()
-
+    else:
+        print('\n!!! Analyse only: Nodes = %s, GWs = %s, Net = %s\n' % (ffsNodes.AnalyseOnly,ffsGWs.AnalyseOnly,ffsNet.AnalyseOnly))
 else:
     print('\nMoving Nodes ...')
 
