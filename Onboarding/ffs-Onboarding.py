@@ -162,6 +162,7 @@ def GetGitInfo(GitPath):
 
             for KeyFilePath in KeyFileList:
                 ffNodeSeg = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
+                ffNodeID  = os.path.basename(KeyFilePath)[4:]
 
                 with open(KeyFilePath,'r') as KeyFile:
                     KeyData  = KeyFile.read()
@@ -171,16 +172,24 @@ def GetGitInfo(GitPath):
                     for DataLine in KeyData.split('\n'):
                         if DataLine.lower().startswith('key '):
                             NodeCount += 1
-                            ffNodeID  = os.path.basename(KeyFilePath)[4:]
                             ffNodeKey = DataLine.split(' ')[1][1:-2]
 
-                            GitDataDict['NodeID'][ffNodeID] = { 'Key':ffNodeKey, 'Segment':ffNodeSeg, 'fixed':None }
+                            GitDataDict['NodeID'][ffNodeID] = {
+                                'Hostname' : None,
+                                'Key'      : ffNodeKey,
+                                'Segment'  : ffNodeSeg,
+                                'fixed'    : None
+                            }
+
                             GitDataDict['Key'][ffNodeKey] = ffNodeID
                         elif DataLine.lower().startswith('#segment: '):
                             fixedSeg = DataLine[10:].lower()
+                        elif DataLine.lower().startswith('#hostname: '):
+                            NodeName = DataLine[11:]
 
-                    if ffNodeID is not None and fixedSeg is not None:
-                        GitDataDict['NodeID'][ffNodeID]['fixed'] = fixedSeg
+                    if ffNodeID in GitDataDict['NodeID']:
+                        GitDataDict['NodeID'][ffNodeID]['Hostname'] = NodeName
+                        GitDataDict['NodeID'][ffNodeID]['fixed']    = fixedSeg
 
     except:
         print('!!! ERROR accessing Git Reository!')
@@ -974,9 +983,11 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
     NewSegment = NodeInfo['Segment']
 
     if NodeID in GitInfo['NodeID']:
-        GitKey     = GitInfo['NodeID'][NodeID]['Key']
-        GitSegment = GitInfo['NodeID'][NodeID]['Segment']
-        GitFixSeg  = GitInfo['NodeID'][NodeID]['fixed']
+        GitKey      = GitInfo['NodeID'][NodeID]['Key']
+        GitSegment  = GitInfo['NodeID'][NodeID]['Segment']
+        GitFixSeg   = GitInfo['NodeID'][NodeID]['fixed']
+        GitNodeName = GitInfo['NodeID'][NodeID]['Hostname']
+
         print('*** NodeID in GitInfo:',GitSegment,'/',NodeID)
 
         if NewSegment == INVALID_SEGMENT:   # legacy node in new segment, or new node in legacy segment
@@ -1011,9 +1022,10 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
     else:  # NodeID not in Git
         print('*** NodeID not in GitInfo:',NodeID)
-        GitKey     = None
-        GitSegment = None
-        GitFixSeg  = None
+        GitKey      = None
+        GitSegment  = None
+        GitFixSeg   = None
+        GitNodeName = None
 
         if PeerKey in GitInfo['Key']:
             print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
@@ -1072,7 +1084,18 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
         else:  # Git and DNS ready for registering node ...
 
-            if GitKey is not None:    # existing Node
+            if GitKey is None:  # Action == 'NEW_NODE'
+                if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
+                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, None, PeerKey)
+                    GitIndex.add([NewPeerFile])
+                    if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                    print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
+                    NeedCommit = True
+
+                else:
+                    print('... Key File was already added by other process.')
+
+            else:    # existing Node
                 OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,NodeID)
                 OldPeerDnsName = 'ffs-%s-%s' % (NodeID,GitKey[:12])
                 print('>>> Old Peer Data:', OldPeerDnsName,'=',OldPeerFile)
@@ -1092,6 +1115,9 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                             print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment,NodeInfo['MAC'],NodeInfo['Hostname']))
 
                         if PeerKey != GitKey:  # Action == 'NEW_KEY'
+                            if NodeInfo['Hostname'] != GitNodeName:
+                                GitFixSeg = None
+
                             WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                             print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
 
@@ -1111,18 +1137,6 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                                 DnsUpdate.delete(OldPeerDnsName,'AAAA')
                 else:
                     print('... Key File was already changed by other process.')
-
-            else:  # Action == 'NEW_NODE'
-                if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
-                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
-                    GitIndex.add([NewPeerFile])
-                    if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                    print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
-                    NeedCommit = True
-
-                else:
-                    print('... Key File was already added by other process.')
-
 
             if NeedCommit:
                 GitIndex.commit('Onboarding (%s) of %s = \"%s\" in Segment %02d' % (Action,NodeInfo['MAC'],NodeInfo['Hostname'],NewSegment))
