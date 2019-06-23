@@ -135,10 +135,10 @@ def LoadAccounts(AccountFile):
 
 
 #-----------------------------------------------------------------------
-# function "GetGitInfo"
+# function "LoadGitInfo"
 #
 #-----------------------------------------------------------------------
-def GetGitInfo(GitPath):
+def LoadGitInfo(GitPath):
 
     print('... Loading Git Info ...')
     GitDataDict = None
@@ -166,7 +166,7 @@ def GetGitInfo(GitPath):
 
                 with open(KeyFilePath,'r') as KeyFile:
                     KeyData  = KeyFile.read()
-                    ffNodeID = None
+                    NodeName = None
                     fixedSeg = None
 
                     for DataLine in KeyData.split('\n'):
@@ -1250,7 +1250,7 @@ else:
     setBlacklistFile(BlacklistFile)
 
     AccountsDict = LoadAccounts(os.path.join(args.DATAPATH,AccountFileName))
-    GitDataDict = GetGitInfo(args.GITREPO)
+    GitDataDict = LoadGitInfo(args.GITREPO)
     FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
     if not os.path.exists(FastdStatusSocket) or AccountsDict is None or GitDataDict is None:
