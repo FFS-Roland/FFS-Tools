@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -695,8 +695,8 @@ class ffGatewayInfo:
     #
     #   Load and analyse fastd-Key of Nodes from Git
     #
-    #     self.FastdKeyDict[KeyFileName]   = { 'SegDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','LastConn','DnsSeg' }
-    #     self.__Key2FileNameDict[PeerKey] = { 'SegDir','KeyFile' }
+    #     self.FastdKeyDict[KeyFileName]   = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','DnsSeg' }
+    #     self.__Key2FileNameDict[PeerKey] = { 'KeyDir','KeyFile' }
     #
     #-----------------------------------------------------------------------
     def __LoadNodeKeysFromGit(self):
@@ -756,25 +756,23 @@ class ffGatewayInfo:
                         self.__alert('!! Invalid Key File: '+KeyFilePath)
                     else:
                         if FileName in self.FastdKeyDict or PeerKey in self.__Key2FileNameDict:
-                            self.__alert('!! Duplicate Key File: %s -> %s / %s' % (FileName,SegDir,self.FastdKeyDict[FileName]['SegDir']))
-#                            self.__alert('!! Duplicate Key File: '+FileName+' -> '+SegDir+' / '+self.FastdKeyDict[FileName]['SegDir'])
-#                            self.__alert('                       '+PeerKey+' = '+self.__Key2FileNameDict[PeerKey]['SegDir']+'/peers/'+self.__Key2FileNameDict[PeerKey]['KeyFile']+' -> '+KeyFilePath)
-                            self.__alert('                       %s = %s/peers/%s -> %s' % (PeerKey,self.__Key2FileNameDict[PeerKey]['SegDir'],self.__Key2FileNameDict[PeerKey]['KeyFile'],KeyFilePath))
+                            self.__alert('!! Duplicate Key File: %s -> %s / %s' % (FileName,SegDir,self.FastdKeyDict[FileName]['KeyDir']))
+                            self.__alert('                       %s = %s/peers/%s -> %s' % (PeerKey,self.__Key2FileNameDict[PeerKey]['KeyDir'],self.__Key2FileNameDict[PeerKey]['KeyFile'],KeyFilePath))
                             self.AnalyseOnly = True
                         else:
                             self.FastdKeyDict[FileName] = {
-                                'SegDir': SegDir,
-                                'SegMode': SegMode,
-                                'PeerMAC': PeerMAC,
-                                'PeerName': PeerName,
-                                'PeerKey': PeerKey,
-                                'VpnMAC': '',
-                                'LastConn': 0,
-                                'DnsSeg': None
+                                'KeyDir'   : SegDir,
+                                'SegMode'  : SegMode,
+                                'PeerMAC'  : PeerMAC,
+                                'PeerName' : PeerName,
+                                'PeerKey'  : PeerKey,
+                                'VpnMAC'   : '',
+                                'Timestamp': 0,
+                                'DnsSeg'   : None
                             }
 
                             self.__Key2FileNameDict[PeerKey] = {
-                                'SegDir': SegDir,
+                                'KeyDir' : SegDir,
                                 'KeyFile': FileName
                             }
 
@@ -794,7 +792,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __AnalyseFastdStatus(self,FastdPeersDict,Segment,LastConnected):
+    def __AnalyseFastdStatus(self,FastdPeersDict,Segment,HttpTime):
 
         ActiveKeyCount = 0
 
@@ -817,7 +815,7 @@ class ffGatewayInfo:
                                 if PeerVpnMAC != '' and not GwAllMacTemplate.match(PeerVpnMAC):
                                     ActiveKeyCount += 1
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['VpnMAC'] = PeerVpnMAC
-                                    self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['LastConn'] = LastConnected
+                                    self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['Timestamp'] = HttpTime
 
                     else:
                         print('!! PeerKey not in FastdKeyDict:',FastdPeersDict[PeerKey]['name'],'=',PeerKey)
@@ -851,8 +849,8 @@ class ffGatewayInfo:
 
             try:
                 FastdJsonHTTP = urllib.request.urlopen(URL,timeout=1)
-                HttpDate = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
-                StatusAge = int(time.time()) - HttpDate
+                HttpTime = int(calendar.timegm(time.strptime(FastdJsonHTTP.info()['Last-Modified'][5:],'%d %b %Y %X %Z')))
+                StatusAge = int(time.time()) - HttpTime
                 jsonFastdDict = json.loads(FastdJsonHTTP.read().decode('utf-8'))
                 FastdJsonHTTP.close()
             except:
@@ -871,7 +869,7 @@ class ffGatewayInfo:
                         print('!! Bad Interface in fastd status file:',URL,'=',jsonFastdDict['interface'],'->',Segment)
                         return None
 
-                ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpDate)
+                ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpTime)
             else:
                 print('!! Bad fastd status file!',URL)
         else:
@@ -973,8 +971,8 @@ class ffGatewayInfo:
                         if self.FastdKeyDict[PeerFileName]['PeerKey'][:12] == PeerKeyID:
                             self.FastdKeyDict[PeerFileName]['DnsSeg'] = SegFromDNS
 
-                            if SegFromDNS != self.FastdKeyDict[PeerFileName]['SegDir']:
-                                self.__alert('!! Segment mismatch DNS <> Git: '+DnsPeerID+' -> '+SegFromDNS+' <> '+self.FastdKeyDict[PeerFileName]['SegDir'])
+                            if SegFromDNS != self.FastdKeyDict[PeerFileName]['KeyDir']:
+                                self.__alert('!! Segment mismatch DNS <> Git: '+DnsPeerID+' -> '+SegFromDNS+' <> '+self.FastdKeyDict[PeerFileName]['KeyDir'])
                                 self.AnalyseOnly = True
                                 isOK = False
                         else:
@@ -1002,14 +1000,14 @@ class ffGatewayInfo:
         for PeerFileName in self.FastdKeyDict:
             if ((PeerTemplate.match(PeerFileName)) and
                 (self.FastdKeyDict[PeerFileName]['PeerKey'] != '') and
-                (self.FastdKeyDict[PeerFileName]['SegDir'] != 'vpn00') and
-                (self.FastdKeyDict[PeerFileName]['DnsSeg'] != self.FastdKeyDict[PeerFileName]['SegDir'])):
+                (self.FastdKeyDict[PeerFileName]['KeyDir'] != 'vpn00') and
+                (self.FastdKeyDict[PeerFileName]['DnsSeg'] != self.FastdKeyDict[PeerFileName]['KeyDir'])):
 
                 self.__alert('!! DNS Entry missing or wrong: '+PeerFileName+' -> '+self.FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.FastdKeyDict[PeerFileName]['PeerName'])
 
                 if DnsUpdate is not None:
                     PeerDnsName = PeerFileName+'-'+self.FastdKeyDict[PeerFileName]['PeerKey'][:12]
-                    PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,int(self.FastdKeyDict[PeerFileName]['SegDir'][3:]))
+                    PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,int(self.FastdKeyDict[PeerFileName]['KeyDir'][3:]))
 
                     if self.FastdKeyDict[PeerFileName]['DnsSeg'] is None:
                         DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
@@ -1128,7 +1126,7 @@ class ffGatewayInfo:
                     KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
 
                     if KeyFileName in self.FastdKeyDict:
-                        SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['SegDir'], KeyFileName)
+                        SourceFile = '%s/peers/%s' % (self.FastdKeyDict[KeyFileName]['KeyDir'], KeyFileName)
                         PeerDnsName = KeyFileName+'-'+self.FastdKeyDict[KeyFileName]['PeerKey'][:12]
 
                         if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
@@ -1137,7 +1135,7 @@ class ffGatewayInfo:
                             DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
 
 #                        print(SourceFile,'->',DestFile)
-                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC])
+                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['KeyDir'],NodeMoveDict[ffNodeMAC])
                         print(MoveTextLine)
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)) and NodeMoveDict[ffNodeMAC] > 0:
@@ -1150,7 +1148,7 @@ class ffGatewayInfo:
                                 os.remove(os.path.join(self.__GitPath,SourceFile))
                                 print('... File deleted.')
 
-                                if self.FastdKeyDict[KeyFileName]['SegDir'] != 'vpn00':
+                                if self.FastdKeyDict[KeyFileName]['KeyDir'] != 'vpn00':
                                     DnsUpdate.delete(PeerDnsName, 'AAAA')
 
                             else:    # move this Node
@@ -1161,13 +1159,13 @@ class ffGatewayInfo:
 
                                 PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
 
-                                if self.FastdKeyDict[KeyFileName]['SegDir'] == 'vpn00':
+                                if self.FastdKeyDict[KeyFileName]['KeyDir'] == 'vpn00':
                                     DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                                 else:
                                     DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
 
 #                            self.__alert('   '+SourceFile+' -> '+DestFile)
-                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['SegDir'],NodeMoveDict[ffNodeMAC]))
+                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.FastdKeyDict[KeyFileName]['PeerName'],self.FastdKeyDict[KeyFileName]['KeyDir'],NodeMoveDict[ffNodeMAC]))
 
                         elif NodeMoveDict[ffNodeMAC] == 0:
                             self.__alert('!! Will not move to Legacy: '+KeyFileName+' = '+ffNodeMAC)
