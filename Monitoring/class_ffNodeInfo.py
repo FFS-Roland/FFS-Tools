@@ -100,6 +100,7 @@ GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
 GwNewMacTemplate  = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+McastMacTemplate  = re.compile('^(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})$')
 NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
 
 PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
@@ -1256,6 +1257,7 @@ class ffNodeInfo:
             else:
                 for BatctlLine in BatctlResult.split('\n'):
                     BatctlInfo = BatctlLine.split()
+
                     ffNodeMAC  = None
                     ffMeshMAC  = None
 
@@ -1276,9 +1278,6 @@ class ffNodeInfo:
                                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
                                     if ffNodeMAC in self.ffNodeDict:
-                                        if ffMeshMAC in self.MAC2NodeIDDict and self.MAC2NodeIDDict[ffMeshMAC] != ffNodeMAC:
-                                            print('!! MAC mismatch Mesh -> Client: Batman <> NodeDict:',ffMeshMAC,'->',ffNodeMAC,'<>',self.MAC2NodeIDDict[ffMeshMAC])
-
                                         self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
                                         self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
 
@@ -1288,7 +1287,7 @@ class ffNodeInfo:
                                     else:
                                         print('++ New Node in Batman Translation Table:',ffSeg,'/',ffNodeMAC)
 
-                                else:  # Data is from Client
+                                elif not McastMacTemplate.match(ffNodeMAC):  # Data is from Client
                                     ClientCount += 1
 
                                 break   # not neccessary to parse rest of line
