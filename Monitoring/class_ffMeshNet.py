@@ -135,21 +135,18 @@ class ffMeshNet:
 
                 if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < self.__MeshCloudDict[CloudID]['GluonType'] and self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     self.__MeshCloudDict[CloudID]['GluonType'] = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType']
-#                    if self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
-#                        print('>>> GluonType:',ffNeighbourMAC,'=',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'])
 
                 for MeshMAC in self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Neighbours']:
                     if MeshMAC in self.__NodeInfos.MAC2NodeIDDict:
-#                        print('+',Cloud,MAC2NodeIDDict[MeshMAC])
                         self.__AddNeighbour2Cloud(CloudID,self.__NodeInfos.MAC2NodeIDDict[MeshMAC])
                     else:
-                        print('!! Unknown Neighbour:',self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],'-',ffNeighbourMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name']+'\' ->',MeshMAC)
+                        print('!! Unknown Neighbour: %02d - %s = \'%s\' -> %s' % (
+                            self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Segment'],ffNeighbourMAC,self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name'],MeshMAC))
             elif self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud'] == CloudID:
                 print('!! Cloud inconsistent:',CloudID,'-',ffNeighbourMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['Name']+'\' ->',self.__MeshCloudDict[CloudID]['CloudMembers'])
             else:
-                # Node is already part of another Mesh Cloud -> merge Clouds
+                # Node is already part of another Mesh Cloud -> merge Clouds ...
                 oldCloudID = self.__NodeInfos.ffNodeDict[ffNeighbourMAC]['InCloud']
-    #            print('++ Merging Clouds:',ffNeighbourMAC,'= \''+ffNodeDict[ffNeighbourMAC]['Name']+'\'',oldCloudID,'->',CloudID)
 
                 self.__MeshCloudDict[CloudID]['NumClients']   += self.__MeshCloudDict[oldCloudID]['NumClients']
                 self.__MeshCloudDict[CloudID]['CloudMembers'] += self.__MeshCloudDict[oldCloudID]['CloudMembers']
@@ -194,7 +191,7 @@ class ffMeshNet:
                 self.__AddNeighbour2Cloud(ffNodeMAC,ffNodeMAC)
 
                 if len(self.__MeshCloudDict[ffNodeMAC]['CloudMembers']) < 2:
-                    print('++ Single-Node Cloud:',self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],'-',ffNodeMAC,'= \''+self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']+'\'')
+                    print('++ Single-Node Cloud: %02d - %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['InCloud'] = None
                     del self.__MeshCloudDict[ffNodeMAC]
                 else:
@@ -219,7 +216,7 @@ class ffMeshNet:
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '':
                 if int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                     if ffNodeMAC in self.__NodeMoveDict:
-                        print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
+                        print('!! Multiple Move: %s -> %s' % (ffNodeMAC,TargetSeg))
 
                     if TargetSeg == 0:
                         print('!! No move to Legacy: %s/peers/%s\n' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']) )
@@ -614,7 +611,6 @@ class ffMeshNet:
                 Region = self.__NodeInfos.ffNodeDict[ffnb]['Region']
 
                 if Region not in RegionDict:
-#                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['DestSeg'] }
                     RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeInfos.ffNodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeInfos.ffNodeDict[ffnb]['Segment'] }
                 else:
                     RegionDict[Region]['Nodes']   += 1

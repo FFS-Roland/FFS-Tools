@@ -100,7 +100,7 @@ GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
 GwNewMacTemplate  = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
-McastMacTemplate  = re.compile('^(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})$')
+McastMacTemplate  = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})$')
 NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
 
 PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
@@ -1246,7 +1246,7 @@ class ffNodeInfo:
             NodeCount = 0
             ClientCount = 0
 
-            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()    # batman translation table
 
             try:
                 BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
@@ -1262,7 +1262,7 @@ class ffNodeInfo:
                     ffMeshMAC  = None
 
                     for InfoColumn in BatctlInfo:
-                        if MacAdrTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
+                        if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
                             if ffNodeMAC is None:
                                 ffNodeMAC = InfoColumn
                             else:
@@ -1273,7 +1273,7 @@ class ffNodeInfo:
                                 else:  # new Gluon MAC schema
                                     BatmanMacList = self.GenerateGluonMACsNew(ffNodeMAC)
 
-                                if ffMeshMAC in BatmanMacList:  # Data is from Node
+                                if ffMeshMAC in BatmanMacList:  # Data is from Node ...
                                     NodeCount += 1
                                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
@@ -1287,7 +1287,7 @@ class ffNodeInfo:
                                     else:
                                         print('++ New Node in Batman Translation Table:',ffSeg,'/',ffNodeMAC)
 
-                                elif not McastMacTemplate.match(ffNodeMAC):  # Data is from Client
+                                else:  # Data is from Client ...
                                     ClientCount += 1
 
                                 break   # not neccessary to parse rest of line
@@ -1296,7 +1296,8 @@ class ffNodeInfo:
             TotalNodes   += NodeCount
             TotalClients += ClientCount
 
-            BatctlCmd = ('/usr/sbin/batctl -m bat%02d o' % (ffSeg)).split()
+
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d o' % (ffSeg)).split()    # batman originator table
 
             try:
                 BatctlO = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
