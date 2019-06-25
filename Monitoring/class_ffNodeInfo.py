@@ -295,15 +295,15 @@ class ffNodeInfo:
         else:
             if MainMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[MainMAC] != MainMAC:
-                    print('!! MAC-Collision: %s -> %s' % (MainMAC,self.MAC2NodeIDDict[MainMAC]))
+                    print('!!! MAC-Collision:  %s -> %s' % (MainMAC,self.MAC2NodeIDDict[MainMAC]))
             else:
                 self.MAC2NodeIDDict[MainMAC] = MainMAC
 
         for NewMAC in GluonMacList:
             if NewMAC in self.MAC2NodeIDDict:
                 if self.MAC2NodeIDDict[NewMAC] != MainMAC:
-                    print('!! MAC-Collision: %s = %s / %s = \'%s\'' % (NewMAC,MainMAC,MeshMAC,self.ffNodeDict[MainMAC]['Name']))
-                    print('  stored Partner: %s = \'%s\'' % (self.MAC2NodeIDDict[NewMAC],self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name']))
+                    print('!!! MAC-Collision:  %s = %s / %s = \'%s\'' % (NewMAC,MainMAC,MeshMAC,self.ffNodeDict[MainMAC]['Name']))
+                    print('    stored Partner: %s = \'%s\'' % (self.MAC2NodeIDDict[NewMAC],self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['Name']))
 
                     if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[NewMAC]]['last_online']:
                         BadMAC = self.MAC2NodeIDDict[NewMAC]
@@ -316,7 +316,7 @@ class ffNodeInfo:
                     else:
                         BadMAC = MainMAC
 
-                    print('>>      Bad Node: %s = \'%s\'\n' % (BadMAC,self.ffNodeDict[BadMAC]['Name']))
+                    print('    >> Bad Node:    %s = \'%s\'\n' % (BadMAC,self.ffNodeDict[BadMAC]['Name']))
 #                    self.ffNodeDict[BadMAC]['Status'] = NODESTATE_UNKNOWN
 
             else:
@@ -660,7 +660,6 @@ class ffNodeInfo:
 
 
         print('Analysing alfred-json-158.json ...',len(json158Dict))
-        HttpDate -= AlfredDelay    # Delay from Alfred to json-File
 
         for jsonIndex in json158Dict:
             if (('node_id'  not in json158Dict[jsonIndex]) or
@@ -712,9 +711,6 @@ class ffNodeInfo:
                         print('++ Node added:    ',NodeMAC,'= \''+json158Dict[jsonIndex]['hostname']+'\'')
 
                     #---------- updating Node Infos ----------
-                    if HttpDate > self.ffNodeDict[NodeMAC]['last_online']:
-                        self.ffNodeDict[NodeMAC]['last_online'] = HttpDate
-
                     if self.ffNodeDict[NodeMAC]['Name'] != json158Dict[jsonIndex]['hostname']:
                         print('++ Hostname mismatch:',NodeMAC,'= \''+json158Dict[jsonIndex]['hostname']+'\' -> \''+self.ffNodeDict[NodeMAC]['Name']+'\'')
                         self.ffNodeDict[NodeMAC]['Name'] = json158Dict[jsonIndex]['hostname']
@@ -799,6 +795,7 @@ class ffNodeInfo:
             return
 
         print('Analysing alfred-json-159.json ...',len(json159Dict))
+        HttpDate -= AlfredDelay    # Delay from Alfred to json-File
 
         for jsonIndex in json159Dict:
             NodeID = json159Dict[jsonIndex]['node_id'].strip().lower()
@@ -812,9 +809,6 @@ class ffNodeInfo:
                     print('+++ Not in self.ffNodeDict:',NodeMAC)
 
                 else:
-                    if not self.IsOnline(NodeMAC):
-                        self.ffNodeDict[NodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-
                     if 'uptime' in json159Dict[jsonIndex]:
                         self.ffNodeDict[NodeMAC]['Uptime'] = json159Dict[jsonIndex]['uptime']
 
@@ -822,6 +816,9 @@ class ffNodeInfo:
                         if GwNewMacTemplate.match(json159Dict[jsonIndex]['gateway']):
                             if self.ffNodeDict[NodeMAC]['Segment'] is None:
                                 self.ffNodeDict[NodeMAC]['Segment'] = int(json159Dict[jsonIndex]['gateway'][9:11])
+
+                                if not self.IsOnline(NodeMAC):
+                                    self.ffNodeDict[NodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
                     if 'mesh_vpn' in json159Dict[jsonIndex]:
                         if 'groups' in json159Dict[jsonIndex]['mesh_vpn']:
@@ -890,9 +887,6 @@ class ffNodeInfo:
             ffNodeMAC = ffNodeID[0:2] + ':' + ffNodeID[2:4] + ':' + ffNodeID[4:6] + ':' + ffNodeID[6:8] + ':' + ffNodeID[8:10] + ':' + ffNodeID[10:22]
 
             if ffNodeMAC in self.ffNodeDict:
-                if not self.IsOnline(ffNodeMAC):
-                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-
                 for MeshIF in ['batadv','wifi']:
                     if MeshIF in json160Dict[NodeItem]:
                         for MeshMAC in json160Dict[NodeItem][MeshIF]:
@@ -1069,11 +1063,8 @@ class ffNodeInfo:
                                 self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
 
-                        if UnixTime - LastSeen <= MaxOfflineTime:  # Node is online ...
+                        if (UnixTime - LastSeen) <= MaxOfflineTime:  # Node is online ...
                             OnlineNodesCount += 1
-
-                            if not self.IsOnline(ffNodeMAC):
-                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
                             if 'neighbours' in RawJsonDict[ffNodeKey]:
                                 for InterfaceType in ['batadv','wifi']:
@@ -1111,7 +1102,11 @@ class ffNodeInfo:
                                 if 'uptime' in RawJsonDict[ffNodeKey]['statistics']:
                                     self.ffNodeDict[ffNodeMAC]['Uptime'] = RawJsonDict[ffNodeKey]['statistics']['uptime']
 
-                        elif UnixTime - LastSeen <= MaxInactiveTime:
+                            if not self.IsOnline(ffNodeMAC) and self.ffNodeDict[ffNodeMAC]['Segment'] is not None:
+                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+#                                print('++ Node set as online (%d - %d): %s = \'%s\'' % (UnixTime,LastSeen,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+
+                        elif (UnixTime - LastSeen) <= MaxInactiveTime:
                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
 
@@ -1246,7 +1241,7 @@ class ffNodeInfo:
             NodeCount = 0
             ClientCount = 0
 
-            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()    # batman translation table
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()    # batman translation table ...
 
             try:
                 BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
@@ -1268,27 +1263,35 @@ class ffNodeInfo:
                             else:
                                 ffMeshMAC = InfoColumn
 
-                                if ffMeshMAC[:1] == ffNodeMAC[:1] and ffMeshMAC[9:] == ffNodeMAC[9:]:  # old Gluon MAC schema
-                                    BatmanMacList = self.GenerateGluonMACsOld(ffNodeMAC)
-                                else:  # new Gluon MAC schema
-                                    BatmanMacList = self.GenerateGluonMACsNew(ffNodeMAC)
-
-                                if ffMeshMAC in BatmanMacList:  # Data is from Node ...
-                                    NodeCount += 1
-                                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
-
-                                    if ffNodeMAC in self.ffNodeDict:
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                        self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
-
-                                        if not self.IsOnline(ffNodeMAC):
-                                            self.ffNodeDict[ffNodeMAC]['Status'] = ' '
-                                            print('    >> Node is online:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\'')
+                                if ffMeshMAC in self.MAC2NodeIDDict:      # is already known Node
+                                    if ffNodeMAC == self.MAC2NodeIDDict[ffMeshMAC]:
+                                        NodeCount += 1
+                                    elif ffNodeMAC in self.ffNodeDict:    # MAC mismatch
+                                        self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
                                     else:
-                                        print('++ New Node in Batman Translation Table:',ffSeg,'/',ffNodeMAC)
+                                        ClientCount += 1
 
-                                else:  # Data is from Client ...
-                                    ClientCount += 1
+                                else:
+                                    print('++ Analyzing unknown Mesh-MAC in Batman Translation Table:',ffSeg,'/',ffMeshMAC)
+
+                                    if ffMeshMAC[:1] == ffNodeMAC[:1] and ffMeshMAC[9:] == ffNodeMAC[9:]:  # old Gluon MAC schema
+                                        BatmanMacList = self.GenerateGluonMACsOld(ffNodeMAC)
+                                    else:  # new Gluon MAC schema
+                                        BatmanMacList = self.GenerateGluonMACsNew(ffNodeMAC)
+
+                                    if ffMeshMAC in BatmanMacList:  # Data is from Node
+                                        print('++ New Node in Batman Translation Table: Seg.%02d / %s -> %s' % (ffSeg,ffMeshMAC,ffNodeMAC))
+                                        NodeCount += 1
+                                    else:
+                                        ClientCount += 1
+
+                                if ffNodeMAC in self.ffNodeDict:
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                    self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
+
+                                    if not self.IsOnline(ffNodeMAC):
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = ' '
+                                        print('    >> Node is online:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\'')
 
                                 break   # not neccessary to parse rest of line
 
@@ -1297,7 +1300,7 @@ class ffNodeInfo:
             TotalClients += ClientCount
 
 
-            BatctlCmd = ('/usr/sbin/batctl -m bat%02d o' % (ffSeg)).split()    # batman originator table
+            BatctlCmd = ('/usr/sbin/batctl -m bat%02d o' % (ffSeg)).split()    # batman originator table ...
 
             try:
                 BatctlO = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
@@ -1310,7 +1313,7 @@ class ffNodeInfo:
                     BatctlInfo = OriginItem.split()
 
                     for InfoColumn in BatctlInfo:
-                        if MacAdrTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
+                        if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
                             if InfoColumn not in self.MAC2NodeIDDict:
                                 print('++ Unknown Node in Batman Originator Table:',ffSeg,'/',InfoColumn)
 
@@ -1357,7 +1360,7 @@ class ffNodeInfo:
                                     if BatctlInfo[1] == MeshMAC:
                                         UplinkList.append(ffNodeMAC)
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                                        self.ffNodeDict[NodeMAC]['Segment'] = ffSeg
+                                        self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
                                     break
 
         if len(UplinkList) < 1:

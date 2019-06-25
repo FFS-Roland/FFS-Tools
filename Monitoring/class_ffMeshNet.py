@@ -414,8 +414,10 @@ class ffMeshNet:
                 if self.__NodeInfos.IsOnline(ffNodeMAC):
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] is None:
                         print('!! Segment is None: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
+                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
                     elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'] not in SegmentList:
                         print('>>> Bad Segment:   %s %s = \'%s\' in Seg.%02d' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']))
+                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
         print('... done.\n')
         return
