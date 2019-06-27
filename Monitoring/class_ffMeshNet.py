@@ -58,6 +58,8 @@ StatFileName   = 'SegStatistics.json'
 
 MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
 
+GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
+
 NODETYPE_UNKNOWN       = 0
 NODETYPE_LEGACY        = 1
 NODETYPE_SEGMENT_LIST  = 2
@@ -241,12 +243,16 @@ class ffMeshNet:
 
         for CloudID in self.__MeshCloudDict:
             DesiredSegDict = {}    # Weight of Nodes per desired Segments
-            UplinkSegDict  = {}    # Weight of Uplink-Nodes per Segment
-            UptimeSegDict  = {}    # max. Uptime of Uplink-Nodes per Segment
+            CurrentSegList = []    # List of current Segments of the Nodes
+            UpLinkSegDict  = {}    # Weight of UpLink-Nodes per Segment
+            UpTimeSegDict  = {}    # max. UpTime of Uplink-Nodes per Segment
 
             #---------- Analysing nodes and related desired segments ----------
             for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
                 NodeSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']
+
+                if NodeSeg not in CurrentSegList:
+                    CurrentSegList.append(NodeSeg)
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
@@ -254,16 +260,16 @@ class ffMeshNet:
                     else:
                         NodeWeigt = NODEWEIGHT_UPLINK_AUTO
 
-                    if NodeSeg not in UplinkSegDict:
-                        UplinkSegDict[NodeSeg] = NodeWeigt
+                    if NodeSeg not in UpLinkSegDict:
+                        UpLinkSegDict[NodeSeg] = NodeWeigt
                     else:
-                        UplinkSegDict[NodeSeg] += NodeWeigt
+                        UpLinkSegDict[NodeSeg] += NodeWeigt
 
-                    if NodeSeg not in UptimeSegDict:
-                        UptimeSegDict[NodeSeg] = 0.0
+                    if NodeSeg not in UpTimeSegDict:
+                        UpTimeSegDict[NodeSeg] = 0.0
 
-                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime'] > UptimeSegDict[NodeSeg]:
-                        UptimeSegDict[NodeSeg] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime'] > UpTimeSegDict[NodeSeg]:
+                        UpTimeSegDict[NodeSeg] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
 
                 else:
                     NodeWeigt = NODEWEIGHT_MESH_ONLY
@@ -274,51 +280,53 @@ class ffMeshNet:
                     else:
                         DesiredSegDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']] += NodeWeigt
 
-            if len(UplinkSegDict) == 0 and len(DesiredSegDict) > 0:
+            if len(UpLinkSegDict) == 0:
                 print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
-                UplinkList = self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],list(DesiredSegDict))
+                SearchList = CurrentSegList
 
-                if UplinkList is not None:
-                    print('>> Uplink(s) found by Batman:',UplinkList)
+                for Segment in DesiredSegDict:
+                    if Segment not in SearchList:
+                        SearchList.append(Segment)
 
-                    for ffNodeMAC in UplinkList:
-                        NodeSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']
+                for ffNodeMAC in self.__NodeInfos.GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],SearchList):
+                    NodeSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment']
+                    print('>> Uplink found by Batman: Seg.%02d - %s = \'%s\'' % (NodeSeg,ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
-                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
-                            NodeWeigt = NODEWEIGHT_UPLINK_FIX
-                        else:
-                            NodeWeigt = NODEWEIGHT_UPLINK_AUTO
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
+                        NodeWeigt = NODEWEIGHT_UPLINK_FIX
+                    else:
+                        NodeWeigt = NODEWEIGHT_UPLINK_AUTO
 
-                        if NodeSeg not in UplinkSegDict:
-                            UplinkSegDict[NodeSeg] = NodeWeigt
-                        else:
-                            UplinkSegDict[NodeSeg] += NodeWeigt
+                    if NodeSeg not in UpLinkSegDict:
+                        UpLinkSegDict[NodeSeg] = NodeWeigt
+                    else:
+                        UpLinkSegDict[NodeSeg] += NodeWeigt
 
-                        if NodeSeg not in UptimeSegDict:
-                            UptimeSegDict[NodeSeg] = 0.0
+                    if NodeSeg not in UpTimeSegDict:
+                        UpTimeSegDict[NodeSeg] = 0.0
 
-                        if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime'] > UptimeSegDict[NodeSeg]:
-                            UptimeSegDict[NodeSeg] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime'] > UpTimeSegDict[NodeSeg]:
+                        UpTimeSegDict[NodeSeg] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
 
             #---------- Calculating desired Segment for the Cloud ----------
             CloudSegment = None
             SegWeight = 0
 
             for Segment in DesiredSegDict:
-                if DesiredSegDict[Segment] > SegWeight or (DesiredSegDict[Segment] == SegWeight and UptimeSegDict[Segment] > UptimeSegDict[CloudSegment]):
+                if DesiredSegDict[Segment] > SegWeight or (DesiredSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment]):
                     CloudSegment = Segment
                     SegWeight = DesiredSegDict[Segment]
 
             if CloudSegment is None:
-                for Segment in UplinkSegDict:
-                    if UplinkSegDict[Segment] > SegWeight or (UplinkSegDict[Segment] == SegWeight and UptimeSegDict[Segment] > UptimeSegDict[CloudSegment]):
+                for Segment in UpLinkSegDict:
+                    if UpLinkSegDict[Segment] > SegWeight or (UpLinkSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment]):
                         CloudSegment = Segment
-                        SegWeight = UplinkSegDict[Segment]
+                        SegWeight = UpLinkSegDict[Segment]
 
             self.__MeshCloudDict[CloudID]['CloudSegment'] = CloudSegment
 
             #---------- Actions depending of situation in cloud ----------
-            if len(UplinkSegDict) > 1:
+            if len(UpLinkSegDict) > 1 or len(CurrentSegList) > 1:
                 self.__alert('!! Shortcut detected !!!')
 
                 if CloudSegment is None:
@@ -354,9 +362,11 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_MESH:
                     print('++ Node seems to be w/o VPN Uplink: %s / %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
-                    if self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]) is not None:
+                    UplinkList = self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])])
+
+                    if UplinkList is not None:
                         self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                        print('>> Uplink found by Batman.')
+                        print('>> Uplink found by Batman:',UplinkList)
 
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 
@@ -398,6 +408,10 @@ class ffMeshNet:
                         print('!! Segment <> KeyDir: %s %s = \'%s\': Seg.%02d <> %s' % (
                             self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'],
                             self.__NodeInfos.ffNodeDict[ffNodeMAC]['Segment'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir']))
+                else:
+                    for NeighbourMAC in self.__NodeInfos.ffNodeDict[ffNodeMAC]['Neighbours']:
+                        if GwAllMacTemplate.match(NeighbourMAC):
+                            print('!! GW-Connection w/o Uplink: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
                 if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
                     (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] == 'auto')):

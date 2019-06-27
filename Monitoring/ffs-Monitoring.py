@@ -155,13 +155,8 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'],args.GITREPO,args.DATAPATH)
 
-print('Merging fastd-Infos to Nodes ...')
-NewNodeCount = ffsNodes.AddFastdNodes(ffsGWs.FastdKeyDict)    # Merge Node-Data from Git and Gateways to NodeInfos
-print('... %d Nodes added.\n' % (NewNodeCount))
-
-
+ffsNodes.AddFastdNodes(ffsGWs.FastdKeyDict)          # Merge Key-Data from Git and Gateways to NodeInfos
 ffsNodes.GetBatmanNodeMACs(ffsGWs.GetSegmentList())
-
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
 if not ffsNodes.SetDesiredSegments():
