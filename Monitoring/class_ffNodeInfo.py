@@ -102,7 +102,7 @@ GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
 GwNewMacTemplate  = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
-McastMacTemplate  = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})$')
+McastMacTemplate  = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})')
 NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
 
 PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
@@ -1286,14 +1286,15 @@ class ffNodeInfo:
                 for BatctlLine in BatctlResult.split('\n'):
                     BatctlInfo = BatctlLine.split()
 
-                    ffNodeMAC  = None
-                    ffMeshMAC  = None
+                    ffNodeMAC = None
+                    ffMeshMAC = None
+                    VIDfound  = False
 
                     for InfoColumn in BatctlInfo:
                         if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
                             if ffNodeMAC is None:
                                 ffNodeMAC = InfoColumn
-                            else:
+                            elif VIDfound:
                                 ffMeshMAC = InfoColumn
 
                                 if ffMeshMAC in self.MAC2NodeIDDict:      # is already known Node
@@ -1329,6 +1330,9 @@ class ffNodeInfo:
                                         print('    >> Node is online:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\'')
 
                                 break   # not neccessary to parse rest of line
+
+                        elif ffNodeMAC is not None and InfoColumn == '-1':
+                            VIDfound  = True
 
             print('... Nodes / Clients:',NodeCount,'/',ClientCount)
             TotalNodes   += NodeCount
