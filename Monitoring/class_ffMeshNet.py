@@ -413,11 +413,21 @@ class ffMeshNet:
                         if GwAllMacTemplate.match(NeighbourMAC):
                             print('!! GW-Connection w/o Uplink: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
-                if ((self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None and self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != '') and
-                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]) and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] == 'auto')):
-                    print('++ Wrong Segment:   %s %s = \'%s\': %02d -> %02d %s' % (
-                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'],int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]),
-                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode']))
+                if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
+                    if (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] != ''
+                    and self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
+                    and self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] == 'auto'):
+                        print('++ Wrong Segment:   %s %s = \'%s\': %02d -> %02d %s' % (
+                            self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'],int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:]),
+                            self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode']))
+
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] > 8 and self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
+                        print('!! Invalid Segment for Gluon-Type %d: >%s< %s = \'%s\' -> Seg. %02d' % (
+                            self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'],
+                            self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']))
+                    elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] == 0:
+                        print('!! Legacy Node found: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
+                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'] != '':
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != self.__GwInfos.FastdKeyDict[self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():

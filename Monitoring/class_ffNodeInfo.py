@@ -1717,15 +1717,7 @@ class ffNodeInfo:
             isOK = False
         else:
             for ffNodeMAC in self.ffNodeDict.keys():
-                if self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':        # fixed Segment independent of Location
-                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
-                elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'man':      # manually defined Segment
-                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
-                elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'mob':      # No specific Segment for mobile Nodes
-                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
-                elif self.ffNodeDict[ffNodeMAC]['GluonType'] == NODETYPE_LEGACY:    # Gluon w/o Segment support
-                    self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
-                elif self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
+                if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
                     lat = None
                     lon = None
 
@@ -1736,7 +1728,6 @@ class ffNodeInfo:
                     ZipRegion  = None
                     ZipSegment = None
                     ZipCode    = None
-
 
                     if LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Latitude'])) and LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Longitude'])):
 
@@ -1763,7 +1754,6 @@ class ffNodeInfo:
 
                             if GpsRegion is not None:
                                 GpsSegment = RegionDict['Segments'][GpsRegion]
-
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
                         ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]
@@ -1798,20 +1788,25 @@ class ffNodeInfo:
                         else:
                             print('!! Invalid ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
 
-
                     if ZipCode is None or ZipSegment is None:
                         self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
                     elif GpsZipCode is not None and ZipCode != GpsZipCode:
-                        print('>>> ZIP-Code Mismatch GPS <> ZIP:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsZipCode,'<>',ZipCode)
+                        print('>>> ZIP-Code Mismatch GPS <> ZIP: %s = \'%s\' -> %s <> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsZipCode,ZipCode))
                         self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
 
-                    if GpsRegion is not None and GpsSegment is not None:
+                    if GpsRegion is not None:
                         self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
-                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
 
-                        if GpsSegment > 8 and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
-                            print('!! Invalid Segment for Gluon-Type %d: >%s< %s = \'%s\' -> Seg. %02d' % (
-                                self.ffNodeDict[ffNodeMAC]['GluonType'],self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsSegment))
+                    if self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':        # fixed Segment independent of Location
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
+                    elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'man':      # manually defined Segment
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
+                    elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'mob':      # No specific Segment for mobile Nodes
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
+                    elif self.ffNodeDict[ffNodeMAC]['GluonType'] == NODETYPE_LEGACY:    # Firmware w/o Segment support
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
+                    elif GpsSegment is not None:
+                        self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
 
         print('... done.\n')
         return isOK
