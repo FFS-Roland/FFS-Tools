@@ -362,11 +362,9 @@ class ffMeshNet:
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_MESH:
                     print('++ Node seems to be w/o VPN Uplink: %s / %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
-                    UplinkList = self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])])
-
-                    if UplinkList is not None:
-                        self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                        print('>> Uplink found by Batman:',UplinkList)
+                    for UplinkNodeMAC in self.__NodeInfos.GetUplinkList([ffNodeMAC],[int(self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'][3:])]):
+                        self.__NodeInfos.ffNodeDict[UplinkNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                        print('>> Uplink found by Batman:',UplinkNodeMAC)
 
                 TargetSeg = self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg']
 

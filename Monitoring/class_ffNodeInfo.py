@@ -1402,9 +1402,6 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
                                     break
 
-        if len(UplinkList) < 1:
-            UplinkList = None
-
         return UplinkList
 
 
