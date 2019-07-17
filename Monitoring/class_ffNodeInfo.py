@@ -154,9 +154,6 @@ class ffNodeInfo:
         # Initializations
         socket.setdefaulttimeout(5)
 
-#        if self.__LoadNodeDict() < MinNodesCount:  # ffNodeDict[ffNodeMAC] -> saved Infos of ffNodes
-#            self.__LoadNodesDbJson()               # Database of combined Alfred-Infos
-
         self.__LoadNodeDict()             # ffNodeDict[ffNodeMAC] -> saved Infos of ffNodes
         self.__LoadNodesDbJson()          # Database of combined Alfred-Infos
 
@@ -437,8 +434,7 @@ class ffNodeInfo:
 
         else:
             for ffNodeMAC in jsonNodeDict:
-                if ((jsonNodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN) or
-                    (UnixTime - jsonNodeDict[ffNodeMAC]['last_online'] <= MaxInactiveTime)):
+                if (UnixTime - jsonNodeDict[ffNodeMAC]['last_online']) <= MaxInactiveTime:
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'RawKey': None,
@@ -467,9 +463,7 @@ class ffNodeInfo:
 
                     NodeCount += 1
 
-                    if UnixTime - jsonNodeDict[ffNodeMAC]['last_online'] > MaxInactiveTime:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
-                    elif UnixTime - jsonNodeDict[ffNodeMAC]['last_online'] > MaxOfflineTime:
+                    if (UnixTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
                     for MeshMAC in jsonNodeDict[ffNodeMAC]['MeshMACs']:
