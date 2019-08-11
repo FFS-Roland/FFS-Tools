@@ -98,7 +98,8 @@ cp /var/lib/ffs/git/FFS-Tools/Monitoring/* /usr/local/bin
 # Creating cron job for ffs-Check.sh
 # ----------------------------------
 crontab -e
-0-55/5 * * * * /usr/local/bin/ffs-Check.sh
+5-55/10 * * * * /usr/local/bin/ffs-Check.sh    # Monitor01
+0-50/10 * * * * /usr/local/bin/ffs-Check.sh    # Monitor02
 
 /etc/init.d/cron reload
 

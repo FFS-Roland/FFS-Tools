@@ -67,6 +67,7 @@ from glob import glob
 #-------------------------------------------------------------
 
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
+MinGatewayCount     = 1              # minimum number of Gateways per Segment
 
 FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 FreifunkRootDomain  = 'freifunk-stuttgart.de'
@@ -462,7 +463,7 @@ class ffGatewayInfo:
                         self.__alert('!! Unknown Gateway IP: '+GwIP)
 
                 if Segment > 0 and len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
-                    if len(self.__SegmentDict[Segment]['GwDnsNames']) < 2:
+                    if len(self.__SegmentDict[Segment]['GwDnsNames']) < MinGatewayCount:
                         self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
                     else:
                         print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
