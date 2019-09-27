@@ -900,13 +900,11 @@ def GetSegment4Node(NodeInfo,GitPath,DatabasePath):
 
     NodeSegment = None
 
-    if NodeInfo['NodeType'] == NODETYPE_LEGACY:
-        NodeSegment = 0
-    elif NodeInfo['Location'] is not None:
-#        print('*** Location =',NodeInfo['Location'])
-        NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
-    else:
+    if NodeInfo['Location'] is None:
         print('... no Location available ...')
+    else:
+        NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
+#        print('*** Location =',NodeInfo['Location'])
 
     if NodeSegment is None:
         NodeSegment = DEFAULT_SEGMENT
@@ -990,7 +988,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
         print('*** NodeID in GitInfo:',GitSegment,'/',NodeID)
 
-        if NewSegment == INVALID_SEGMENT:   # legacy node in new segment, or new node in legacy segment
+        if NewSegment == INVALID_SEGMENT or GitSegment == 0:   # legacy node or legacy segment
             NewSegment = GitSegment
             Action = 'REMOVE_NODE'
             print('*** Action =',Action)
@@ -1004,10 +1002,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 print('*** Action =',Action)
 
             if NewSegment is None:
-                if ((NodeInfo['NodeType'] != NODETYPE_LEGACY and GitSegment == 0) or
-                    (NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and GitSegment > 8) or
-                    (GitSegment > 64)):
-
+                if ((NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and GitSegment > 8) or (GitSegment > 64)):
                     NewSegment = GetSegment4Node(NodeInfo,GitPath,DatabasePath)
                     print('++ Node was registered in invalid segment: vpn%02d / ffs-%s-%s\n' % (GitSegment,NodeID,GitKey[:12]))
                 else:
@@ -1088,7 +1083,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
                     WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, None, PeerKey)
                     GitIndex.add([NewPeerFile])
-                    if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                    DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                     print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
                     NeedCommit = True
 
@@ -1104,7 +1099,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     if Action == 'REMOVE_NODE':
                         GitIndex.remove([OldPeerFile])
                         os.remove(os.path.join(GitPath,OldPeerFile))
-                        if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                        DnsUpdate.delete(OldPeerDnsName,'AAAA')
                         print('*** Removed Node due to Inconsistency: vpn%02d / ffs-%s \"%s\"' % (GitSegment,NodeID,NodeInfo['Hostname']))
                         NeedCommit = True
 
@@ -1125,16 +1120,10 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                         NeedCommit = True
 
                         if NewPeerDnsName != OldPeerDnsName:
-                            if GitSegment > 0:  DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                            if NewSegment > 0:  DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                            DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                            DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                         else:
-                            if NewSegment > 0:
-                                if GitSegment > 0:
-                                    DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                                else:
-                                    DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                            elif GitSegment > 0:  # no DNS for Legacy-Segment
-                                DnsUpdate.delete(OldPeerDnsName,'AAAA')
+                            DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
                 else:
                     print('... Key File was already changed by other process.')
 
