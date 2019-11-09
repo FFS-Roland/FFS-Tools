@@ -897,7 +897,7 @@ class ffGatewayInfo:
         for GwName in sorted(self.__GatewayDict):
             if len(self.__GatewayDict[GwName]['BatmanSegments']) > 0 : print()
 
-            if GwName not in GwIgnoreList:
+            if GwName not in GwIgnoreList and len(self.__GatewayDict[GwName]['IPs']) > 0:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
