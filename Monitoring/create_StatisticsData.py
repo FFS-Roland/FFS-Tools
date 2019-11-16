@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2018, Roland Volkmann <roland.volkmann@t-online.de>                      #
+#  Copyright (c) 2018-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -50,7 +50,7 @@ from glob import glob
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
-SegIgnoreList = ['19','21']         # Single Nodes (Schools)
+SegIgnoreList = ['11','19','21']         # Single Nodes (Schools)
 
 
 

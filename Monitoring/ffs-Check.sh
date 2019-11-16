@@ -11,7 +11,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2018, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -39,9 +39,8 @@
 
 GITREPO=/var/lib/ffs/git/peers-ffs
 DATADIR=/var/lib/ffs/database
-ALFRED=http://netinfo.freifunk-stuttgart.de/json/
 
-LOGDIR=/var/log/ffs
+LOGDIR=/var/log/ffs/monitor
 LOGFILE=$LOGDIR/$(date +%s).log
 OLDLOGS=$LOGDIR/1*.log
 
@@ -69,7 +68,7 @@ if [ $(ps -e | grep -c "ffs-Monitoring") -gt 0 ]; then
   exit 1
 fi
 
-/usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --alfred=$ALFRED --logs=$LOGDIR >> $LOGFILE
+/usr/local/bin/ffs-Monitoring.py --gitrepo=$GITREPO --data=$DATADIR --logs=$LOGDIR >> $LOGFILE
 
 if [ $? -ne 0 ]; then
   echo "++ERROR!" >> $LOGFILE

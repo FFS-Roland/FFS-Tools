@@ -226,7 +226,6 @@ class ffMeshNet:
                         self.__NodeMoveDict[ffNodeMAC] = TargetSeg
                         print('>> git mv %s/peers/%s vpn%02d/peers/  = \'%s\'\n' % ( self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'],self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyFile'],
                                                                                  TargetSeg,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name'] ))
-
         return
 
 
@@ -327,7 +326,7 @@ class ffMeshNet:
 
             #---------- Actions depending of situation in cloud ----------
             if len(UpLinkSegDict) > 1 or len(CurrentSegList) > 1:
-                self.__alert('!! Shortcut detected !!!')
+                self.__alert('!! Shortcut detected: UplinkSegs = %d / CurrentSegs = %d' % (len(UpLinkSegDict),len(CurrentSegList)))
 
                 if CloudSegment is None:
                     self.__alert('!! Shortcut cannot be corrected, missing CloudSegment !!')

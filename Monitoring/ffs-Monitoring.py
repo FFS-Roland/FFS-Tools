@@ -136,7 +136,6 @@ def __SendEmail(Subject,MailBody,Account):
 parser = argparse.ArgumentParser(description='Check Freifunk Segments')
 parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
 parser.add_argument('--data', dest='DATAPATH', action='store', required=True, help='Path to Databases')
-parser.add_argument('--alfred', dest='ALFREDURL', action='store', required=True, help='URL with alfred-json-???.json')
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
 args = parser.parse_args()
 
@@ -153,7 +152,9 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
-ffsNodes = ffNodeInfo(args.ALFREDURL,AccountsDict['raw.json'],args.GITREPO,args.DATAPATH)
+ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
+
+#exit(1)
 
 ffsNodes.AddFastdInfos(ffsGWs.FastdKeyDict)          # Merge fastd data from Git and Gateways to NodeInfos
 ffsNodes.GetBatmanNodeMACs(ffsGWs.GetSegmentList())
@@ -204,11 +205,11 @@ for Alert in ffsNet.Alerts:
 
 if MailBody != '':
     print('\nSending Email to inform Admins on Errors ...')
-    __SendEmail('Alert from ffs-Monitor',MailBody,AccountsDict['StatusMail'])
+    __SendEmail('Alert from ffs-Monitor \"%s\"' % (socket.gethostname()),MailBody,AccountsDict['StatusMail'])
 else:
     TimeInfo = datetime.datetime.now()
-    if TimeInfo.hour == 12 and TimeInfo.minute < 5:
+    if TimeInfo.hour == 12 and TimeInfo.minute < 9:
         print('\nSending Hello Mail to inform Admins beeing alive ...')
-        __SendEmail('Hello from ffs-Monitor','ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
+        __SendEmail('Hello from ffs-Monitor \"%s\"' % (socket.gethostname()),'ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
 
 print('\nOK.\n')
