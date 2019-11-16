@@ -1,5 +1,15 @@
 {
-  "raw.json":{
+  "YanicData":{
+      "URL": "<URL to raw.json>",
+      "Username": "<user>",
+      "Password": "<password>"
+  },
+  "HopglassData":{
+      "URL": "<URL to raw.json>",
+      "Username": "<user>",
+      "Password": "<password>"
+  },
+  "AlfredData":{
       "URL": "<URL to raw.json>",
       "Username": "<user>",
       "Password": "<password>"
@@ -11,18 +21,17 @@
       "MailTo": "<receipient>",
       "MailBCC": "<BCC>"
   },
-},
   "KeyMail":{
       "Server": "<SMTP-Server>",
       "Username": "<user>",
       "Password": "<password>",
       "MailTo": "vpn-schluessel@lists.freifunk-stuttgart.net",
       "MailBCC": "<BCC>"
-},
- "Git":{
+  },
+  "Git":{
       "URL": "https://<user>:<password>@<URL to Git Repository>"
   },
- "DNS":{
+  "DNS":{
       "Server": "<DNS-Server>",
       "ID": "<DNS-ID>",
       "Key": "<DNS-Key>"
