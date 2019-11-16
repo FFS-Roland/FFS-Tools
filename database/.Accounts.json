@@ -10,7 +10,7 @@
       "Password": "<password>"
   },
   "AlfredData":{
-      "URL": "<URL to raw.json>",
+      "URL": "<URL to nodesdb.json>",
       "Username": "<user>",
       "Password": "<password>"
   },
