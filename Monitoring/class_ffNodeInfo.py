@@ -71,7 +71,7 @@ from dns.rdatatype import *
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
-YANIC_VERSION      = '1.0.0'
+YANIC_VERSIONS     = ['1.0.0']
 
 MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
 MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
@@ -535,6 +535,10 @@ class ffNodeInfo:
             if 'zip' in NodeDict['nodeinfo']['location']:
                 self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip'])[:5]
 
+        if 'custom_fields' in NodeDict:
+            if 'zip' in NodeDict['custom_fields']:
+                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['custom_fields']['zip'])[:5]
+
         if 'owner' in NodeDict['nodeinfo']:
             if NodeDict['nodeinfo']['owner'] is not None:
                 if 'contact' in NodeDict['nodeinfo']['owner']:
@@ -659,7 +663,7 @@ class ffNodeInfo:
             self.__alert('++ Bad Format of Yanic raw.json!')
             return
 
-        if RawJsonDict['version'] != YANIC_VERSION:
+        if RawJsonDict['version'] not in YANIC_VERSIONS:
             self.__alert('++ Bad Version of Yanic raw.json: %s (expecting %s)!' % (RawJsonDict['version'],YANIC_VERSION))
             return
 
