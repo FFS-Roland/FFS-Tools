@@ -379,6 +379,7 @@ class ffNodeInfo:
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'Name': jsonNodeDict[ffNodeMAC]['Name'],
+                        'Hardware': '- unknown -',
                         'Status': jsonNodeDict[ffNodeMAC]['Status'],
                         'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
                         'Uptime': 0.0,
@@ -388,6 +389,7 @@ class ffNodeInfo:
                         'ZIP': jsonNodeDict[ffNodeMAC]['ZIP'],
                         'Region': '??',
                         'DestSeg': None,
+                        'Firmware': '?.?+????-??-??',
                         'GluonType': jsonNodeDict[ffNodeMAC]['GluonType'],
                         'MeshMACs': [],
                         'IPv6': jsonNodeDict[ffNodeMAC]['IPv6'],
@@ -427,11 +429,18 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __ProcessResponddData(self,NodeDict,UnixTime,DateFormat):
 
-        if (('lastseen' not in NodeDict) or
-            ('nodeinfo' not in NodeDict) or
+        if 'lastseen' not in NodeDict:
+            print('+++ Invalid Record!',NodeDict)
+
+        LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
+
+        if (UnixTime - LastSeen) > MaxInactiveTime:  return False    # Data is obsolete
+
+
+        if (('nodeinfo' not in NodeDict) or
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
-            print('+++ Invalid Record!',NodeDict)
+#            print('+++ Invalid Record!',NodeDict)
             return False
 
         if (('node_id' not in NodeDict['nodeinfo']) or
@@ -442,10 +451,6 @@ class ffNodeInfo:
             return False
 
         ffNodeID = NodeDict['nodeinfo']['node_id'].strip().lower()
-        LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
-
-        if (UnixTime - LastSeen) > MaxInactiveTime:  return False    # Data is obsolete
-
 
         if GwIdTemplate.match(ffNodeID):
             print('++ Gateway Data found: %s' % (ffNodeID))
@@ -490,6 +495,7 @@ class ffNodeInfo:
 
             self.ffNodeDict[ffNodeMAC] = {
                 'Name': None,
+                'Hardware': '- unknown -',
                 'Status': NODESTATE_UNKNOWN,
                 'last_online': 0,
                 'Uptime': 0.0,
@@ -499,6 +505,7 @@ class ffNodeInfo:
                 'ZIP': None,
                 'Region': '??',
                 'DestSeg': None,
+                'Firmware': '?.?+????-??-??',
                 'GluonType': NODETYPE_UNKNOWN,
                 'MeshMACs':[],
                 'IPv6': None,
@@ -526,6 +533,10 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['Clients'] = int(NodeDict['statistics']['clients']['total'])
                 else:
                     print('!!! total statistics missing: %s' % (NodeIdx))
+
+        if 'hardware' in NodeDict['nodeinfo']:
+            if 'model' in NodeDict['nodeinfo']['hardware']:
+                self.ffNodeDict[ffNodeMAC]['Hardware'] = NodeDict['nodeinfo']['hardware']['model']
 
         if 'location' in NodeDict['nodeinfo']:
             if 'latitude' in NodeDict['nodeinfo']['location'] and 'longitude' in NodeDict['nodeinfo']['location']:
@@ -598,7 +609,8 @@ class ffNodeInfo:
 #                print('++ Node set as online (%d - %d): %s = \'%s\'' % (UnixTime,LastSeen,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
         self.__AddGluonMACs(ffNodeMAC,None)
-        self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(NodeDict['nodeinfo']['software']['firmware']['release'])
+        self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
+        self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(self.ffNodeDict[ffNodeMAC]['Firmware'])
 
         return (self.ffNodeDict[ffNodeMAC]['last_online'] == LastSeen)
 
@@ -847,6 +859,7 @@ class ffNodeInfo:
 
                         self.ffNodeDict[ffNodeMAC] = {
                             'Name': jsonDbDict[DbIndex]['hostname'],
+                            'Hardware': '- unknown -',
                             'Status': NODESTATE_UNKNOWN,
                             'last_online': 0,
                             'Uptime': 0.0,
@@ -856,6 +869,7 @@ class ffNodeInfo:
                             'ZIP': None,
                             'Region': '??',
                             'DestSeg': None,
+                            'Firmware': '?.?+????-??-??',
                             'GluonType': NODETYPE_UNKNOWN,
                             'MeshMACs':[],
                             'IPv6': None,
@@ -878,6 +892,10 @@ class ffNodeInfo:
                     if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) <= MaxOfflineTime:
                         if not self.IsOnline(ffNodeMAC):
                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+
+                        if 'hardware' in jsonDbDict[DbIndex]:
+                            if 'model' in jsonDbDict[DbIndex]['hardware']:
+                                self.ffNodeDict[ffNodeMAC]['Hardware'] = jsonDbDict[DbIndex]['hardware']['model']
 
                         if 'gateway' in jsonDbDict[DbIndex]:
                             if GwNewMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
@@ -932,7 +950,8 @@ class ffNodeInfo:
                     if 'software' in jsonDbDict[DbIndex]:
                         if 'firmware' in jsonDbDict[DbIndex]['software']:
                             if 'release' in jsonDbDict[DbIndex]['software']['firmware']:
-                                self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(jsonDbDict[DbIndex]['software']['firmware']['release'])
+                                self.ffNodeDict[ffNodeMAC]['Firmware']  = jsonDbDict[DbIndex]['software']['firmware']['release']
+                                self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(self.ffNodeDict[ffNodeMAC]['Firmware'])
 
         print('... done. Newest Info = %d Sec. / New Nodes = %d / Updated Nodes = %d\n' % (UnixTime-NewestTime,NewNodesCount,UpdatedNodesCount))
         return
@@ -983,6 +1002,7 @@ class ffNodeInfo:
                     if ffNodeMAC not in self.ffNodeDict:
                         self.ffNodeDict[ffNodeMAC] = {
                             'Name': FastdKeyInfo['PeerName'],
+                            'Hardware': '- unknown -',
                             'Status': NODESTATE_ONLINE_VPN,
                             'last_online': 0,
                             'Uptime': 0.0,
@@ -992,6 +1012,7 @@ class ffNodeInfo:
                             'ZIP': None,
                             'Region': '??',
                             'DestSeg': None,
+                            'Firmware': '?.?+????-??-??',
                             'GluonType': NODETYPE_UNKNOWN,
                             'MeshMACs':[],
                             'IPv6': None,

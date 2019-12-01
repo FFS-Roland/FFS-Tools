@@ -75,6 +75,8 @@ NODEWEIGHT_MESH_ONLY   = 1
 NODEWEIGHT_UPLINK_AUTO = 1000
 NODEWEIGHT_UPLINK_FIX  = 1000000
 
+CPE_TEMP_SEGMENT       = 22
+
 
 
 class ffMeshNet:
@@ -396,6 +398,12 @@ class ffMeshNet:
 
         for ffNodeMAC in self.__NodeInfos.ffNodeDict.keys():
             if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
+
+                if (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Hardware'].lower().startswith('tp-link cpe') and
+                    (self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MTU_1340 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['Firmware'][:14] < '1.4+2018-06-24')):
+                    print('!! Old CPE found: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = CPE_TEMP_SEGMENT
+                    self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix %02d' % (CPE_TEMP_SEGMENT)
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['KeyDir'] == '':

@@ -82,6 +82,7 @@ AccountFileName = '.Accounts.json'
 ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
+CPE_TEMP_SEGMENT         = 22
 DEFAULT_SEGMENT          = 3
 INVALID_SEGMENT          = 999
 
@@ -537,6 +538,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
         'NodeID'   : None,
         'MAC'      : None,
         'Hostname' : None,
+        'Hardware' : None,
         'Segment'  : None,
         'Location' : None,
         'Contact'  : None
@@ -591,16 +593,17 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
                     if 'contact' in NodeJson['owner']:
                         NodeInfoDict['Contact'] = NodeJson['owner']['contact']
 
+                if 'hardware' in NodeJson:
+                    if 'model' in NodeJson['hardware']:
+                        NodeInfoDict['Hardware'] = NodeJson['hardware']['model'].strip()
+
                 print('>>> NodeID   =',NodeInfoDict['NodeID'])
                 print('>>> MAC      =',NodeInfoDict['MAC'])
                 print('>>> Hostname =',NodeInfoDict['Hostname'].encode('utf-8'))
+                print('>>> Hardware =',NodeInfoDict['Hardware'])
                 print('>>> GluonVer =',NodeInfoDict['GluonVer'])
                 print('>>> Updater  =',NodeInfoDict['Updater'])
                 print('>>> Contact  =',NodeInfoDict['Contact'])
-
-                if 'hardware' in NodeJson:
-                    if 'model' in NodeJson['hardware']:
-                        print('>>> Hardware =',NodeJson['hardware']['model'])
 
                 if 'location' in NodeJson:
                     if ('longitude' in NodeJson['location'] and 'latitude' in NodeJson['location']) or 'zip' in NodeJson['location']:
@@ -1267,7 +1270,12 @@ else:
                 elif BadNameTemplate.match(NodeInfo['Hostname']):
                     print('!!! Invalid Hostname:',NodeInfo['Hostname'])
                 else:
-                    BatSegment = getBatmanSegment(args.BATIF)    # meshing segment from "batctl gwl" (batman gateway list)
+                    if (NodeInfoDict['Hardware'].lower().startswith('tp-link cpe') and
+                        (NodeInfo['NodeType'] < NODETYPE_MTU_1340 or NodeInfo['GluonVer'][:14] < '1.4+2018-06-24')):
+                        BatSegment = CPE_TEMP_SEGMENT
+                        print('!! TP-Link CPE with outdated Firmware found !!')
+                    else:
+                        BatSegment = getBatmanSegment(args.BATIF)    # meshing segment from "batctl gwl" (batman gateway list)
 
                     if BatSegment == INVALID_SEGMENT:
                         print('!! ERROR: Shortcut / multiple segments detected !!')
