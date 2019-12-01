@@ -1270,7 +1270,7 @@ else:
                 elif BadNameTemplate.match(NodeInfo['Hostname']):
                     print('!!! Invalid Hostname:',NodeInfo['Hostname'])
                 else:
-                    if (NodeInfoDict['Hardware'].lower().startswith('tp-link cpe') and
+                    if (NodeInfo['Hardware'].lower().startswith('tp-link cpe') and
                         (NodeInfo['NodeType'] < NODETYPE_MTU_1340 or NodeInfo['GluonVer'][:14] < '1.4+2018-06-24')):
                         BatSegment = CPE_TEMP_SEGMENT
                         print('!! TP-Link CPE with outdated Firmware found !!')
