@@ -273,7 +273,10 @@ class ffMeshNet:
                         UpTimeSegDict[NodeSeg] = self.__NodeInfos.ffNodeDict[ffNodeMAC]['Uptime']
 
                 else:
-                    NodeWeigt = NODEWEIGHT_MESH_ONLY
+                    if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
+                        NodeWeigt = NODEWEIGHT_UPLINK_FIX
+                    else:
+                        NodeWeigt = NODEWEIGHT_MESH_ONLY
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
@@ -401,7 +404,7 @@ class ffMeshNet:
 
                 if (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Hardware'].lower().startswith('tp-link cpe') and
                     (self.__NodeInfos.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MTU_1340 or self.__NodeInfos.ffNodeDict[ffNodeMAC]['Firmware'][:14] < '1.4+2018-06-24')):
-                    print('!! Old CPE found: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
+                    print('++ Old CPE found: %s %s = \'%s\'' % (self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] = CPE_TEMP_SEGMENT
                     self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix %02d' % (CPE_TEMP_SEGMENT)
 
