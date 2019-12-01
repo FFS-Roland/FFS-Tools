@@ -379,7 +379,7 @@ class ffNodeInfo:
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'Name': jsonNodeDict[ffNodeMAC]['Name'],
-                        'Hardware': '- unknown -',
+                        'Hardware': jsonNodeDict[ffNodeMAC]['Hardware'],
                         'Status': jsonNodeDict[ffNodeMAC]['Status'],
                         'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
                         'Uptime': 0.0,
