@@ -400,7 +400,8 @@ class ffNodeInfo:
                         'FastdKey': '',
                         'InCloud': None,
                         'Neighbours': [],
-                        'Owner': jsonNodeDict[ffNodeMAC]['Owner']
+                        'Owner': jsonNodeDict[ffNodeMAC]['Owner'],
+                        'Source': 'DB'
                     }
 
                     NodeCount += 1
@@ -516,7 +517,8 @@ class ffNodeInfo:
                 'FastdKey': '',
                 'InCloud': None,
                 'Neighbours': [],
-                'Owner': None
+                'Owner': None,
+                'Source': None
             }
 
         if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:  return False    # Newer Node info already existing ...
@@ -526,6 +528,9 @@ class ffNodeInfo:
         self.ffNodeDict[ffNodeMAC]['Name']        = NodeDict['nodeinfo']['hostname']
         self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
         self.ffNodeDict[ffNodeMAC]['Clients']     = 0
+        self.ffNodeDict[ffNodeMAC]['Latitude']    = None
+        self.ffNodeDict[ffNodeMAC]['Longitude']   = None
+        self.ffNodeDict[ffNodeMAC]['ZIP']         = None
 
         if 'clients' in NodeDict['statistics']:
             if NodeDict['statistics']['clients'] is not None:
@@ -690,6 +695,7 @@ class ffNodeInfo:
             if self.__ProcessResponddData(NodeDict,UnixTime,'%Y-%m-%dT%H:%M:%S%z'):
                 UsedNodesCount += 1
                 ffNodeMAC = NodeDict['nodeinfo']['network']['mac'].strip().lower()
+                self.ffNodeDict[ffNodeMAC]['Source'] = 'Yanic'
 
                 if self.ffNodeDict[ffNodeMAC]['last_online'] > NewestTime:
                     NewestTime = self.ffNodeDict[ffNodeMAC]['last_online']
@@ -769,6 +775,7 @@ class ffNodeInfo:
             if self.__ProcessResponddData(RawJsonDict[NodeIdx],UnixTime,'%Y-%m-%dT%H:%M:%S.%fZ'):
                 UsedNodesCount += 1
                 ffNodeMAC = RawJsonDict[NodeIdx]['nodeinfo']['network']['mac'].strip().lower()
+                self.ffNodeDict[ffNodeMAC]['Source'] = 'Hopglass'
 
                 if self.ffNodeDict[ffNodeMAC]['last_online'] > NewestTime:
                     NewestTime = self.ffNodeDict[ffNodeMAC]['last_online']
@@ -880,7 +887,8 @@ class ffNodeInfo:
                             'FastdKey': '',
                             'InCloud': None,
                             'Neighbours': [],
-                            'Owner': None
+                            'Owner': None,
+                            'Source': None
                         }
 
                     elif jsonDbDict[DbIndex]['last_online'] <= self.ffNodeDict[ffNodeMAC]['last_online']:  continue    # Newest info alredy available ...
@@ -888,6 +896,10 @@ class ffNodeInfo:
 
                     UpdatedNodesCount += 1
                     self.ffNodeDict[ffNodeMAC]['last_online'] = jsonDbDict[DbIndex]['last_online']
+                    self.ffNodeDict[ffNodeMAC]['Source'] = 'Alfred'
+                    self.ffNodeDict[ffNodeMAC]['Latitude'] = None
+                    self.ffNodeDict[ffNodeMAC]['Longitude'] = None
+                    self.ffNodeDict[ffNodeMAC]['ZIP'] = None
 
                     if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) <= MaxOfflineTime:
                         if not self.IsOnline(ffNodeMAC):
@@ -1023,7 +1035,8 @@ class ffNodeInfo:
                             'FastdKey': None,
                             'InCloud': None,
                             'Neighbours': [],
-                            'Owner': None
+                            'Owner': None,
+                            'Source': 'VPN'
                         }
 
                         print('++ Node added: %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
