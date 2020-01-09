@@ -75,7 +75,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04','gw04n03','gw05n01','gw05n08','gw05n09','gw07']
+GwIgnoreList        = ['gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
 DnsTestTarget       = 'www.google.de'
 
