@@ -71,11 +71,12 @@ done
 
 # Setting up network configuration for connection to FFS (Uplink) -> please pay attention on Monitor-ID!
 # ------------------------------------------------------------------------------------------------------
-/var/lib/ffs/git/FFS-Tools/Monitoring/create-ffs-uplink-config.py --monid 2 --siteconf /var/lib/ffs/git/site-ffs/site.conf  --vpnkeys /var/lib/ffs/keys --gitpeers /var/lib/ffs/git/peers-ffs
+/var/lib/ffs/git/FFS-Tools/Monitoring/create-ffs-uplink-config.py --monid <ID> --siteconf /var/lib/ffs/git/site-ffs/site.conf  --vpnkeys /var/lib/ffs/keys --gitpeers /var/lib/ffs/git/peers-ffs
 
 for seg in $(ls /var/lib/ffs/git/peers-ffs);
 do
   git add /var/lib/ffs/git/peers-ffs/${seg}/peers/ffs-020039${seg/vpn/}ff02
+  systemctl enable fastd@${seg}
 done
 
 git commit -a
