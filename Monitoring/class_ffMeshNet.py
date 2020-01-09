@@ -71,9 +71,10 @@ NODESTATE_OFFLINE      = '#'
 NODESTATE_ONLINE_MESH  = ' '
 NODESTATE_ONLINE_VPN   = 'V'
 
-NODEWEIGHT_MESH_ONLY   = 1
-NODEWEIGHT_UPLINK_AUTO = 1000
-NODEWEIGHT_UPLINK_FIX  = 1000000
+NODEWEIGHT_OFFLINE     = 1
+NODEWEIGHT_MESH_ONLY   = 3
+NODEWEIGHT_UPLINK      = 1000
+NODEWEIGHT_SEGMENT_FIX = 1000000
 
 CPE_TEMP_SEGMENT       = 22
 
@@ -257,9 +258,9 @@ class ffMeshNet:
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
-                        NodeWeigt = NODEWEIGHT_UPLINK_FIX
+                        NodeWeigt = NODEWEIGHT_SEGMENT_FIX
                     else:
-                        NodeWeigt = NODEWEIGHT_UPLINK_AUTO
+                        NodeWeigt = NODEWEIGHT_UPLINK
 
                     if NodeSeg not in UpLinkSegDict:
                         UpLinkSegDict[NodeSeg] = NodeWeigt
@@ -274,9 +275,11 @@ class ffMeshNet:
 
                 else:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
-                        NodeWeigt = NODEWEIGHT_UPLINK_FIX
-                    else:
+                        NodeWeigt = NODEWEIGHT_SEGMENT_FIX
+                    elif self.__NodeInfos.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_MESH:
                         NodeWeigt = NODEWEIGHT_MESH_ONLY
+                    else:
+                        NodeWeigt = NODEWEIGHT_OFFLINE
 
                 if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] is not None:
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
@@ -297,9 +300,9 @@ class ffMeshNet:
                     print('>> Uplink found by Batman: Seg.%02d - %s = \'%s\'' % (NodeSeg,ffNodeMAC,self.__NodeInfos.ffNodeDict[ffNodeMAC]['Name']))
 
                     if self.__NodeInfos.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
-                        NodeWeigt = NODEWEIGHT_UPLINK_FIX
+                        NodeWeigt = NODEWEIGHT_SEGMENT_FIX
                     else:
-                        NodeWeigt = NODEWEIGHT_UPLINK_AUTO
+                        NodeWeigt = NODEWEIGHT_UPLINK
 
                     if NodeSeg not in UpLinkSegDict:
                         UpLinkSegDict[NodeSeg] = NodeWeigt
