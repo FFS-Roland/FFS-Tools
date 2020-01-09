@@ -133,7 +133,6 @@ class ffGatewayInfo:
 
         self.__GetGatewaysFromGit()
         self.__GetGatewaysFromDNS()
-        self.__CheckGwLegacyDnsEntries()
         self.__GetGatewaysFromBatman()
 
         self.__CheckGatewayDnsServer()
@@ -476,66 +475,6 @@ class ffGatewayInfo:
 
         print('\n... done.\n')
         return
-
-
-
-
-    #==========================================================================
-    # private function "__CheckGwLegacyDnsEntries"
-    #
-    #--------------------------------------------------------------------------
-    def __CheckGwLegacyDnsEntries(self):
-
-        print('Checking DNS for Legacy Gateway entries:',FreifunkRootDomain,'...')
-
-        Seg2GwIpDict = {}
-        DnsZone      = self.__GetDnsZone(FreifunkRootDomain)
-
-        if DnsZone is None:
-            print('++ DNS Zone is empty:',FreifunkRootDomain)
-
-        else:
-            #----- get Gateways from Zone File -----
-            for name, node in DnsZone.nodes.items():
-                GwName = name.to_text()
-
-                if GwSegGroupTemplate.match(GwName):
-                    if len(GwName) == 7:
-                        Segment = int(GwName[5:])
-                    else:
-                        Segment = 0    # legacy names -> will be used for onboarding
-
-                    if Segment == 0 or Segment > 64:
-                        continue    # >>> Onboarder or Quarantine
-
-                    if Segment not in self.__SegmentDict:
-                        print('!! Invalid Segment:',Segment)
-                    else:
-                        if Segment not in Seg2GwIpDict:
-                            Seg2GwIpDict[Segment] = []
-
-                        GwIPs = self.__GetSegmentGwIPs(FreifunkRootDomain,node.rdatasets)
-
-#                        print('>>>',GwName,'->',GwIPs)
-                        Seg2GwIpDict[Segment] += GwIPs
-
-#            print()
-            for Segment in sorted(Seg2GwIpDict):
-#                print(Segment,'->',Seg2GwIpDict[Segment])
-
-                for SegIP in Seg2GwIpDict[Segment]:
-                    if SegIP not in self.__SegmentDict[Segment]['GwIPs']:
-                        print('!! Invalid IP-Address for Gateway:',Segment,'->',SegIP)
-
-            for Segment in sorted(self.__SegmentDict):
-                if Segment < 9:
-                    for SegIP in self.__SegmentDict[Segment]['GwIPs']:
-                        if SegIP not in Seg2GwIpDict[Segment]:
-                            print('!! Missing IP-Address of Gateway:',Segment,'->',SegIP)
-
-        print('\n... done.\n')
-        return
-
 
 
 
