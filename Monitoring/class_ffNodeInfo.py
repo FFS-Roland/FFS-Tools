@@ -77,6 +77,8 @@ MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
 MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
 MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
+BatmanTimeout      = 30             # 30 Seconds
+
 MinNodesCount      = 1000           # Minimum number of Nodes
 
 FreifunkNodeDomain = 'nodes.freifunk-stuttgart.de'
@@ -1094,7 +1096,7 @@ class ffNodeInfo:
             BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()    # batman translation table ...
 
             try:
-                BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE, timeout=BatmanTimeout)
                 BatctlResult = BatctlTg.stdout.decode('utf-8')
             except:
                 print('++ ERROR accessing batman: %s' % (BatctlCmd))
@@ -1174,7 +1176,7 @@ class ffNodeInfo:
                 BatctlCmd = ('/usr/sbin/batctl -m bat%02d tr %s' % (ffSeg,ffNodeMAC)).split()
 
                 try:
-                    BatctlTr = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
+                    BatctlTr = subprocess.run(BatctlCmd, stdout=subprocess.PIPE, timeout=BatmanTimeout)
                     BatctlResult = BatctlTr.stdout.decode('utf-8')
                 except:
                     print('++ ERROR accessing batman: % s' % (BatctlCmd))
