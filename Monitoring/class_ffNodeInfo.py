@@ -577,16 +577,16 @@ class ffNodeInfo:
         else:
             #----- Node is online -----
             if NodeDict['neighbours'] is not None:
-                for InterfaceType in ['batadv','wifi']:
-                    if InterfaceType in NodeDict['neighbours']:
-                        for MeshMAC in NodeDict['neighbours'][InterfaceType]:
+                if 'batadv' in NodeDict['neighbours']:
+                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
 
-                            if 'neighbours' in NodeDict['neighbours'][InterfaceType][MeshMAC]:
-                                for ffNeighbour in NodeDict['neighbours'][InterfaceType][MeshMAC]['neighbours']:
-                                    if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
-                                        (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
+                    for MeshMAC in NodeDict['neighbours']['batadv']:
+                        if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
+                            for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
+                                if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
+                                    (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
 
-                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
+                                    self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
             if 'addresses' in NodeDict['nodeinfo']['network']:
                 for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
@@ -923,6 +923,8 @@ class ffNodeInfo:
                                     (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment'],int(jsonDbDict[DbIndex]['segment']),self.ffNodeDict[ffNodeMAC]['Name']))
 
                         if 'neighbours' in jsonDbDict[DbIndex]:
+                            self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
+
                             for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
                                 if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
                                     (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
