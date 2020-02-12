@@ -529,6 +529,7 @@ class ffNodeInfo:
         #---------- Current Data of Node will be used ----------
         self.ffNodeDict[ffNodeMAC]['Name']        = NodeDict['nodeinfo']['hostname']
         self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
+        self.ffNodeDict[ffNodeMAC]['Status']      = NODESTATE_OFFLINE
         self.ffNodeDict[ffNodeMAC]['Clients']     = 0
         self.ffNodeDict[ffNodeMAC]['Latitude']    = None
         self.ffNodeDict[ffNodeMAC]['Longitude']   = None
@@ -572,10 +573,9 @@ class ffNodeInfo:
                 self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
 
-        if (UnixTime - LastSeen) > MaxOfflineTime:
-            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
-        else:
-            #----- Node is online -----
+        if (UnixTime - LastSeen) <= MaxOfflineTime:
+            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+
             if NodeDict['neighbours'] is not None:
                 if 'batadv' in NodeDict['neighbours']:
                     self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
@@ -583,10 +583,11 @@ class ffNodeInfo:
                     for MeshMAC in NodeDict['neighbours']['batadv']:
                         if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
                             for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
-                                if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
-                                    (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
-
-                                    self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
+                                if MacAdrTemplate.match(ffNeighbour):
+                                    if GwAllMacTemplate.match(ffNeighbour):
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                                    elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
+                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
             if 'addresses' in NodeDict['nodeinfo']['network']:
                 for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
@@ -610,10 +611,6 @@ class ffNodeInfo:
 
             if 'uptime' in NodeDict['statistics']:
                 self.ffNodeDict[ffNodeMAC]['Uptime'] = NodeDict['statistics']['uptime']
-
-            if not self.IsOnline(ffNodeMAC) and self.ffNodeDict[ffNodeMAC]['Segment'] is not None:
-                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-#                print('++ Node set as online (%d - %d): %s = \'%s\'' % (UnixTime,LastSeen,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
         self.__AddGluonMACs(ffNodeMAC,None)
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
@@ -897,11 +894,11 @@ class ffNodeInfo:
 
 
                     UpdatedNodesCount += 1
+                    self.ffNodeDict[ffNodeMAC]['Source']      = 'Alfred'
                     self.ffNodeDict[ffNodeMAC]['last_online'] = jsonDbDict[DbIndex]['last_online']
-                    self.ffNodeDict[ffNodeMAC]['Source'] = 'Alfred'
-                    self.ffNodeDict[ffNodeMAC]['Latitude'] = None
-                    self.ffNodeDict[ffNodeMAC]['Longitude'] = None
-                    self.ffNodeDict[ffNodeMAC]['ZIP'] = None
+                    self.ffNodeDict[ffNodeMAC]['Latitude']    = None
+                    self.ffNodeDict[ffNodeMAC]['Longitude']   = None
+                    self.ffNodeDict[ffNodeMAC]['ZIP']         = None
 
                     if jsonDbDict[DbIndex]['status'] == 'online' and (UnixTime - jsonDbDict[DbIndex]['last_online']) <= MaxOfflineTime:
                         if not self.IsOnline(ffNodeMAC):
@@ -926,10 +923,11 @@ class ffNodeInfo:
                             self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
 
                             for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
-                                if ((MacAdrTemplate.match(ffNeighbour) and not GwAllMacTemplate.match(ffNeighbour)) and
-                                    (ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours'])):
-
-                                    self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
+                                if MacAdrTemplate.match(ffNeighbour):
+                                    if GwAllMacTemplate.match(ffNeighbour):
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                                    elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
+                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
                         if 'addresses' in jsonDbDict[DbIndex]['network']:
                             for NodeAddress in jsonDbDict[DbIndex]['network']['addresses']:
@@ -1133,7 +1131,7 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
 
                                         if not self.IsOnline(ffNodeMAC):
-                                            self.ffNodeDict[ffNodeMAC]['Status'] = ' '
+                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
                                             print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                     else:
