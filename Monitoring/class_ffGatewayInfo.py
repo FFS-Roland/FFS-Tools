@@ -603,7 +603,7 @@ class ffGatewayInfo:
 
                     for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
                         if len(GwName) == 7 and GwName not in GwIgnoreList:
-                            InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(Segment/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                            InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 #                            InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
 #                            for DnsServer in [InternalGwIPv4,InternalGwIPv6]:
@@ -839,7 +839,7 @@ class ffGatewayInfo:
             if GwName not in GwIgnoreList and len(self.__GatewayDict[GwName]['IPs']) > 0:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
-                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int(ffSeg/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 #                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
                         #----- MTU 1340 -----
