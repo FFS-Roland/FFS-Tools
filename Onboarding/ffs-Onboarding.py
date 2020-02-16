@@ -82,7 +82,7 @@ AccountFileName = '.Accounts.json'
 ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
-CPE_TEMP_SEGMENT         = 22
+CPE_TEMP_SEGMENT         = 23
 DEFAULT_SEGMENT          = 3
 INVALID_SEGMENT          = 999
 
