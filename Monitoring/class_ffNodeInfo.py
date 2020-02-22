@@ -1004,9 +1004,9 @@ class ffNodeInfo:
     #=========================================================================
     def AddFastdInfos(self,FastdKeyDict):
 
-        newNodes = 0
-        addedInfos = 0
         print('Merging fastd-Infos to Nodes ...')
+        addedInfos = 0
+        fastdNodes = 0
 
         for KeyFileName in FastdKeyDict:
             FastdKeyInfo = FastdKeyDict[KeyFileName]
@@ -1014,38 +1014,16 @@ class ffNodeInfo:
 
             if not MacAdrTemplate.match(ffNodeMAC):
                 print('!! Bad PeerMAC: %s' % (ffNodeMAC))
-            else:
-                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node is connected to Gateway ...
-                    if ffNodeMAC not in self.ffNodeDict:
-                        self.ffNodeDict[ffNodeMAC] = {
-                            'Name': FastdKeyInfo['PeerName'],
-                            'Hardware': '- unknown -',
-                            'Status': NODESTATE_ONLINE_VPN,
-                            'last_online': 0,
-                            'Uptime': 0.0,
-                            'Clients': 0,
-                            'Latitude': None,
-                            'Longitude': None,
-                            'ZIP': None,
-                            'Region': '??',
-                            'DestSeg': None,
-                            'Firmware': '?.?+????-??-??',
-                            'GluonType': NODETYPE_UNKNOWN,
-                            'MeshMACs':[],
-                            'IPv6': None,
-                            'Segment': int(FastdKeyInfo['KeyDir'][3:]),
-                            'SegMode': None,
-                            'KeyDir': None,
-                            'KeyFile': None,
-                            'FastdKey': None,
-                            'InCloud': None,
-                            'Neighbours': [],
-                            'Owner': None,
-                            'Source': 'VPN'
-                        }
+            elif ffNodeMAC in self.ffNodeDict:
+                self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
+                self.ffNodeDict[ffNodeMAC]['KeyDir']   = FastdKeyInfo['KeyDir']
+                self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
+                self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
+                addedInfos += 1
 
-                        print('++ Node added: %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-                        newNodes += 1
+                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node is connected to Gateway ...
+                    fastdNodes += 1
+                    self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
 
                     if FastdKeyInfo['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
                         self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
@@ -1066,16 +1044,7 @@ class ffNodeInfo:
 
                         self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
-                    self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
-
-                if ffNodeMAC in self.ffNodeDict:
-                    self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
-                    self.ffNodeDict[ffNodeMAC]['KeyDir']   = FastdKeyInfo['KeyDir']
-                    self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
-                    self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
-                    addedInfos += 1
-
-        print('... %d Keys added (%d new Nodes).\n' % (addedInfos,newNodes))
+        print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
 
 

@@ -509,7 +509,7 @@ class ffGatewayInfo:
                         else:
                             self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment,GwMAC))
 
-                    else:
+                    elif MacAdrTemplate.match(GwMAC):
                         print('++ Invalid Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
 
                     if GwName is not None:
