@@ -18,7 +18,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -93,8 +93,7 @@ ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttember
 ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
-GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate  = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
+GwMacTemplate     = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
 GwIdTemplate      = re.compile('^0200(3[1-9])([0-9a-f]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
@@ -484,7 +483,7 @@ class ffNodeInfo:
             print('!! Invalid MAC Format: %s -> %s' % (ffNodeID,ffNodeMAC))
             return False
 
-        if GwAllMacTemplate.match(ffNodeMAC):  return False    # Data is from Gateway
+        if GwMacTemplate.match(ffNodeMAC):  return False    # Data is from Gateway
 
         if ffNodeID != ffNodeMAC.replace(':',''):
             print('++ NodeID / MAC Mismatch: NodeID = %s / MAC = %s' % (ffNodeID,ffNodeMAC))
@@ -584,7 +583,7 @@ class ffNodeInfo:
                         if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
                             for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
                                 if MacAdrTemplate.match(ffNeighbour):
-                                    if GwAllMacTemplate.match(ffNeighbour):
+                                    if GwMacTemplate.match(ffNeighbour):
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                                     elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
@@ -595,8 +594,12 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
 
             if 'gateway' in NodeDict['statistics']:
-                if GwNewMacTemplate.match(NodeDict['statistics']['gateway']):
+                if GwMacTemplate.match(NodeDict['statistics']['gateway']):
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeDict['statistics']['gateway'][9:11])
+
+            if 'gateway_nexthop' in NodeDict['statistics']:
+                if GwMacTemplate.match(NodeDict['statistics']['gateway_nexthop']):
+                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
 
             if 'mesh_vpn' in NodeDict['statistics']:
                 if 'groups' in NodeDict['statistics']['mesh_vpn']:
@@ -852,7 +855,7 @@ class ffNodeInfo:
             if not MacAdrTemplate.match(DbIndex) or not MacAdrTemplate.match(ffNodeMAC):
                 print('++ ERROR nodesdb.json ffNode Format: %s -> %s' % (DbIndex,ffNodeMAC))
             else:
-                if GwAllMacTemplate.match(ffNodeMAC):
+                if GwMacTemplate.match(ffNodeMAC):
                     print('++ GW in nodesdb.json: %s -> %s' % (DbIndex,ffNodeMAC))
                 elif (UnixTime - jsonDbDict[DbIndex]['last_online']) <= MaxInactiveTime:
 
@@ -909,7 +912,7 @@ class ffNodeInfo:
                                 self.ffNodeDict[ffNodeMAC]['Hardware'] = jsonDbDict[DbIndex]['hardware']['model']
 
                         if 'gateway' in jsonDbDict[DbIndex]:
-                            if GwNewMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
+                            if GwMacTemplate.match(jsonDbDict[DbIndex]['gateway']):
                                 self.ffNodeDict[ffNodeMAC]['Segment']= int(jsonDbDict[DbIndex]['gateway'][9:11])
 
                         if 'segment' in jsonDbDict[DbIndex] and jsonDbDict[DbIndex]['segment'] is not None:
@@ -924,7 +927,7 @@ class ffNodeInfo:
 
                             for ffNeighbour in jsonDbDict[DbIndex]['neighbours']:
                                 if MacAdrTemplate.match(ffNeighbour):
-                                    if GwAllMacTemplate.match(ffNeighbour):
+                                    if GwMacTemplate.match(ffNeighbour):
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                                     elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
@@ -1113,7 +1116,7 @@ class ffNodeInfo:
                     VIDfound  = False
 
                     for InfoColumn in BatctlInfo:
-                        if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwAllMacTemplate.match(InfoColumn):
+                        if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwMacTemplate.match(InfoColumn):
                             if ffNodeMAC is None:
                                 ffNodeMAC = InfoColumn
                             elif VIDfound:
@@ -1191,7 +1194,7 @@ class ffNodeInfo:
                             if BatctlInfo[0] == 'traceroute':
                                 MeshMAC = BatctlInfo[3]
                             elif MeshMAC is not None:
-                                if MacAdrTemplate.match(BatctlInfo[1]) and not GwAllMacTemplate.match(BatctlInfo[1]):
+                                if MacAdrTemplate.match(BatctlInfo[1]) and not GwMacTemplate.match(BatctlInfo[1]):
                                     if BatctlInfo[1] == MeshMAC:
                                         UplinkList.append(ffNodeMAC)
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN

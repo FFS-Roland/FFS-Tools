@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -86,10 +86,7 @@ GwNameTemplate      = re.compile('^gw[0-6][0-9]{1,2}')
 GwSegGroupTemplate  = re.compile('^gw[0-6][0-9](s[0-9]{2})?$')
 GwInstanceTemplate  = re.compile('^gw[0-6][0-9](n[0-9]{2})?$')
 GwSegmentTemplate   = re.compile('^gw[0-6][0-9](n[0-9]{2})?(s[0-9]{2})$')
-
-GwAllMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
-GwNewMacTemplate    = re.compile('^02:00:3[1-9](:[0-9]{2}){3}')
-GwOldMacTemplate    = re.compile('^02:00:0a:3[1-9]:00:[0-9a-f]{2}')
+GwMacTemplate       = re.compile('^02:00:3[1-9](:[0-9]{2}){3}')
 
 MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
@@ -505,27 +502,19 @@ class ffGatewayInfo:
                     GwMAC  = BatctlInfo[0]
                     GwName = None
 
-                    if GwNewMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
+                    if GwMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
 #                        if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
                         if int(GwMAC[9:11]) == Segment:
                             GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
                         else:
                             self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment,GwMAC))
 
-                    elif GwOldMacTemplate.match(GwMAC):    # e.g. "02:00:0a:38:00:09"
-                        GwName = 'gw'+GwMAC[15:17]
-                        if GwName in self.__GwAliasDict:
-                            GwName = self.__GwAliasDict[GwName]
-                        self.__alert('!! Old Gateway MAC: bat%02d -> %s = %s' % (Segment,GwMAC,GwName))
-
-                    elif MacAdrTemplate.match(GwMAC):
+                    else:
                         print('++ Invalid Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
 
                     if GwName is not None:
                         if GwName not in GwList:
                             GwList.append(GwName)
-                        else:
-                            print('!! Duplicate Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
 
         return GwList
 
@@ -752,7 +741,7 @@ class ffGatewayInfo:
 
                         else:   # Key and Filename found in Git
                             for PeerVpnMAC in FastdPeersDict[PeerKey]['connection']['mac_addresses']:
-                                if PeerVpnMAC != '' and not GwAllMacTemplate.match(PeerVpnMAC):
+                                if PeerVpnMAC != '' and not GwMacTemplate.match(PeerVpnMAC):
                                     ActiveKeyCount += 1
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['VpnMAC'] = PeerVpnMAC
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['Timestamp'] = HttpTime
