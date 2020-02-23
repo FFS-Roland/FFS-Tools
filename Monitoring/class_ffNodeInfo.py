@@ -1021,7 +1021,7 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
                 addedInfos += 1
 
-                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node is connected to Gateway ...
+                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
                     self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
 
@@ -1043,6 +1043,9 @@ class ffNodeInfo:
                                 self.ffNodeDict[ffNodeMAC]['Segment'],FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                         self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
+
+                elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
+                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
