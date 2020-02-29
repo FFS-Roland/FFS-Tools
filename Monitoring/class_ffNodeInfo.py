@@ -1012,6 +1012,7 @@ class ffNodeInfo:
         for KeyFileName in FastdKeyDict:
             FastdKeyInfo = FastdKeyDict[KeyFileName]
             ffNodeMAC = FastdKeyInfo['PeerMAC']
+            ffMeshMAC = FastdKeyInfo['VpnMAC']
 
             if not MacAdrTemplate.match(ffNodeMAC):
                 print('!! Bad PeerMAC: %s' % (ffNodeMAC))
@@ -1022,9 +1023,9 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
                 addedInfos += 1
 
-                if MacAdrTemplate.match(FastdKeyInfo['VpnMAC']):   # Node has VPN-Connection to Gateway ...
+                if MacAdrTemplate.match(ffMeshMAC):   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
-                    self.__AddGluonMACs(ffNodeMAC,FastdKeyInfo['VpnMAC'])
+                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
                     if FastdKeyInfo['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
                         self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
@@ -1048,14 +1049,14 @@ class ffNodeInfo:
                 elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
-            elif MacAdrTemplate.match(FastdKeyInfo['VpnMAC']) and not GwMacTemplate.match(FastdKeyInfo['VpnMAC']):   # unknown Node ...
-                MeshMAC = FastdKeyInfo['VpnMAC']
-
-                if MeshMAC in self.MAC2NodeIDDict:
+            elif MacAdrTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC):   # unknown Node ...
+                if ffMeshMAC in self.MAC2NodeIDDict:
                     print('++ Node Info Mismatch: %s / %s -> %s = \'%s\'' %
-                             (ffNodeMAC,MeshMAC,self.MAC2NodeIDDict[MeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[MeshMAC]]['Name']))
+                             (ffNodeMAC,ffMeshMAC,self.MAC2NodeIDDict[ffMeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[ffMeshMAC]]['Name']))
+                    self.ffNodeDict[self.MAC2NodeIDDict[MeshMAC]]['Status'] = NODESTATE_ONLINE_VPN
                 else:
-                    print('++ Unknown Node with VPN: %s / %s = \'%s\'' % (ffNodeMAC,MeshMAC,FastdKeyInfo['PeerName']))
+                    print('++ Unknown Node with VPN: %s / %s = \'%s\'' % (ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
+                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
@@ -1075,7 +1076,7 @@ class ffNodeInfo:
         TotalNodes = 0
         TotalClients = 0
 
-        for ffSeg in SegmentList:
+        for ffSeg in sorted(SegmentList):
             print('... Segment %02d ...' % (ffSeg))
 
             BatctlCmd = ('/usr/sbin/batctl -m bat%02d tg' % (ffSeg)).split()    # batman translation table ...
@@ -1120,19 +1121,42 @@ class ffNodeInfo:
                                             print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                     else:
-                                        print('    ++ New Node in Batman TG: Seg.%02d / %s -> %s' % (ffSeg,ffMeshMAC,ffNodeMAC))
+                                        print('    ++ New Node in Batman TG: %s -> %s' % (ffMeshMAC,ffNodeMAC))
 
                                 elif ffNodeMAC in self.ffNodeDict:    # Data of known Node with non-Gluon MAC
-                                    print('    !! Special Node in Batman TG: Seg.%02d / %s -> %s = %s' % (ffSeg,ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                    print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
                                 elif ffMeshMAC not in self.MAC2NodeIDDict:
-                                    print('    ++ Unknown Node in Batman TG: Seg.%02d / %s -> %s' % (ffSeg,ffMeshMAC,ffNodeMAC))
+                                    print('    ++ Unknown Node in Batman TG: %s -> %s' % (ffMeshMAC,ffNodeMAC))
 
                                 elif ffNodeMAC in self.MAC2NodeIDDict:    # Mesh-MAC in Client-Net
                                     RealNodeMAC = self.MAC2NodeIDDict[ffNodeMAC]
                                     BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
-                                    print('    !! Mesh-MAC in Client Net: Seg.%02d / %s = \'%s\' -> %s -> %s =\'%s\'' %
-                                             (ffSeg,BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
+
+                                    if BaseNodeMAC in self.ffNodeDict and RealNodeMAC in self.ffNodeDict:
+                                        print('    !! Mesh-MAC in Client Net: %s = \'%s\' -> %s -> %s =\'%s\'' %
+                                                 (BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
+
+                                        self.ffNodeDict[BaseNodeMAC]['Segment'] = ffSeg
+                                        self.ffNodeDict[RealNodeMAC]['Segment'] = ffSeg
+                                        self.ffNodeDict[BaseNodeMAC]['last_online'] = UnixTime
+                                        self.ffNodeDict[RealNodeMAC]['last_online'] = UnixTime
+
+                                        if not self.IsOnline(BaseNodeMAC):
+                                            self.ffNodeDict[BaseNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+
+                                        if not self.IsOnline(RealNodeMAC):
+                                            self.ffNodeDict[RealNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+
+                                        if ffNodeMAC not in self.ffNodeDict[BaseNodeMAC]['Neighbours']:
+                                            self.ffNodeDict[BaseNodeMAC]['Neighbours'].append(ffNodeMAC)
+
+                                        if ffMeshMAC not in self.ffNodeDict[RealNodeMAC]['Neighbours']:
+                                            self.ffNodeDict[RealNodeMAC]['Neighbours'].append(ffMeshMAC)
+
+                                    else:
+                                        print('   !!! ERROR in Database: %s / %s -> %s / %s' % (BaseNodeMAC,ffMeshMAC,RealNodeMAC,ffNodeMAC))
 
                                 else:  # Data of Client
                                     if ffNodeMAC not in ClientList:
