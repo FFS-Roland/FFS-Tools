@@ -239,6 +239,7 @@ class ffNodeInfo:
         if MeshMAC is not None:
             if MeshMAC not in GluonMacList and MeshMAC != MainMAC:
                 GluonMacList.append(MeshMAC)    # not from Gluon MAC schema
+#                print(' ++ Unknown MAC Schema: %s -> %s' % (MainMAC,MeshMAC))
 
         if MainMAC in self.MAC2NodeIDDict:
             if self.MAC2NodeIDDict[MainMAC] != MainMAC:
@@ -455,14 +456,14 @@ class ffNodeInfo:
         ffNodeID = NodeDict['nodeinfo']['node_id'].strip().lower()
 
         if GwIdTemplate.match(ffNodeID):
-            print('++ Gateway Data found: %s' % (ffNodeID))
+            print(' ++ Gateway Data found: %s' % (ffNodeID))
             return False
 
         if (('firmware' not in NodeDict['nodeinfo']['software']) or
             ('release' not in NodeDict['nodeinfo']['software']['firmware']) or
             (NodeDict['nodeinfo']['software']['firmware']['release'] is None) or
             ('mac' not in NodeDict['nodeinfo']['network'])):
-            print('++ Broken Data in Record %s !' % (ffNodeID))
+            print(' ++ Broken Data in Record %s !' % (ffNodeID))
             print(NodeDict)
             return False
 
@@ -1047,6 +1048,15 @@ class ffNodeInfo:
                 elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
+            elif MacAdrTemplate.match(FastdKeyInfo['VpnMAC']) and not GwMacTemplate.match(FastdKeyInfo['VpnMAC']):   # unknown Node ...
+                MeshMAC = FastdKeyInfo['VpnMAC']
+
+                if MeshMAC in self.MAC2NodeIDDict:
+                    print('++ Node Info Mismatch: %s / %s -> %s = \'%s\'' %
+                             (ffNodeMAC,MeshMAC,self.MAC2NodeIDDict[MeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[MeshMAC]]['Name']))
+                else:
+                    print('++ Unknown Node with VPN: %s / %s = \'%s\'' % (ffNodeMAC,MeshMAC,FastdKeyInfo['PeerName']))
+
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
 
@@ -1114,6 +1124,15 @@ class ffNodeInfo:
 
                                 elif ffNodeMAC in self.ffNodeDict:    # Data of known Node with non-Gluon MAC
                                     print('    !! Special Node in Batman TG: Seg.%02d / %s -> %s = %s' % (ffSeg,ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+
+                                elif ffMeshMAC not in self.MAC2NodeIDDict:
+                                    print('    ++ Unknown Node in Batman TG: Seg.%02d / %s -> %s' % (ffSeg,ffMeshMAC,ffNodeMAC))
+
+                                elif ffNodeMAC in self.MAC2NodeIDDict:    # Mesh-MAC in Client-Net
+                                    RealNodeMAC = self.MAC2NodeIDDict[ffNodeMAC]
+                                    BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
+                                    print('    !! Mesh-MAC in Client Net: Seg.%02d / %s = \'%s\' -> %s -> %s =\'%s\'' %
+                                             (ffSeg,BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
 
                                 else:  # Data of Client
                                     if ffNodeMAC not in ClientList:
