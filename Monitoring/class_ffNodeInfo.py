@@ -831,7 +831,7 @@ class ffNodeInfo:
 
         NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
 
-        print('Requesting %s via respondd from %s ...' % (Request,NodeIPv6))
+        print('    >> Requesting %s via respondd from %s ...' % (Request,NodeIPv6))
         Retries = 3
         NodeJsonDict = None
 
@@ -888,18 +888,18 @@ class ffNodeInfo:
                 ClientList = []
 
                 for BatctlLine in BatctlResult.split('\n'):
-                    BatctlInfo = BatctlLine.split()
+                    BatctlInfo = BatctlLine.replace('(','').replace(')','').split()
 
-                    ffNodeMAC = None
-                    ffMeshMAC = None
-                    VIDfound  = False
+                    if len(BatctlInfo) > 6:
+                        if BatctlInfo[0] == '*' and BatctlInfo[2] == '-1' and BatctlInfo[3][0] == '[':
 
-                    for InfoColumn in BatctlInfo:
-                        if MacAdrTemplate.match(InfoColumn) and not McastMacTemplate.match(InfoColumn) and not GwMacTemplate.match(InfoColumn):
-                            if ffNodeMAC is None:
-                                ffNodeMAC = InfoColumn
-                            elif VIDfound:
-                                ffMeshMAC = InfoColumn
+                            ffNodeMAC = BatctlInfo[1]
+                            ffMeshMAC = BatctlInfo[5]
+                            ffTQ      = int(BatctlInfo[4])
+
+                            if (MacAdrTemplate.match(ffNodeMAC) and not McastMacTemplate.match(ffNodeMAC) and not GwMacTemplate.match(ffNodeMAC) and
+                                MacAdrTemplate.match(ffMeshMAC) and not McastMacTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC)):
+
                                 BatmanMacList = self.GenerateGluonMACs(ffNodeMAC)
 
                                 if ((ffNodeMAC in self.ffNodeDict) and ((UnixTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
@@ -920,7 +920,7 @@ class ffNodeInfo:
                                         print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                 elif ffMeshMAC in BatmanMacList:    # New / unknown Node ...
-                                    print('    ++ New Node in Batman TG: NodeID = %s -> Mesh = %s' % (ffNodeMAC,ffMeshMAC))
+                                    print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
 
                                     if ffNodeMAC not in NodeList:
                                         NodeList.append(ffNodeMAC)
@@ -977,11 +977,6 @@ class ffNodeInfo:
                                 else:  # Data of Client
                                     if ffNodeMAC not in ClientList:
                                         ClientList.append(ffNodeMAC)
-
-                                break   # not neccessary to parse rest of line
-
-                        elif ffNodeMAC is not None and InfoColumn == '-1':
-                            VIDfound  = True
 
                 NodeCount = len(NodeList)
                 ClientCount = len(ClientList)
