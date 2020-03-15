@@ -9,11 +9,6 @@
       "Username": "<user>",
       "Password": "<password>"
   },
-  "AlfredData":{
-      "URL": "<URL to nodesdb.json>",
-      "Username": "<user>",
-      "Password": "<password>"
-  },
   "StatusMail":{
       "Server": "<SMTP-Server>",
       "Username": "<user>",

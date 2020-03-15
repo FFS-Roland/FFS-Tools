@@ -550,7 +550,7 @@ class ffGatewayInfo:
 
             for GwName in self.__SegmentDict[Segment]['GwDnsNames']:
                 if GwName not in self.__SegmentDict[Segment]['GwBatNames'] and Segment > 0 and Segment <= 64:
-                    print('!! Gateway in DNS but not in Batman: Seg.%02d -> %s' % (Segment,GwName))
+                    self.__alert('!! Gateway in DNS but not in Batman: Seg.%02d -> %s' % (Segment,GwName))
 
         print()
         for Segment in sorted(self.__SegmentDict):

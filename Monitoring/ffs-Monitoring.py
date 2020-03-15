@@ -9,22 +9,18 @@
 #  Parameter:                                                                             #
 #                                                                                         #
 #       --gitrepo  = Git Repository with fastd KeyFiles                                   #
-#       --data     = Path to Databases Statistics                                         #
-#       --alfred   = URL with alfred-json-???.json                                        #
+#       --data     = Path to Databases                                                    #
 #       --logs     = Path to LogFiles                                                     #
 #                                                                                         #
-#  Needed json-Files from Webserver:                                                      #
+#  Needed json-Files from Webservers:                                                     #
 #                                                                                         #
-#       raw.json             -> Node Names and Information                                #
-#       nodesdb.json         -> Region = Segment                                          #
-#       alfred-json-158.json -> Nodeinfos                                                 #
-#       alfred-json-159.json -> VPN-Uplinks                                               #
-#       alfred-json-160.json -> Neighbors                                                 #
-#       fastd-clean.json     -> fastd-Keys (live Data)                                    #
+#       raw.json (Yanic)     -> Node Names and Information from Yanic                     #
+#       raw.json (Hopglass)  -> Node Names and Information from Hopglass-Server           #
+#       vpyXX.json           -> fastd Status-Files from Gateways                          #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -154,10 +150,8 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
 
-#exit(1)
-
-ffsNodes.AddFastdInfos(ffsGWs.FastdKeyDict)          # Merge fastd data from Git and Gateways to NodeInfos
 ffsNodes.GetBatmanNodeMACs(ffsGWs.GetSegmentList())
+ffsNodes.AddFastdInfos(ffsGWs.FastdKeyDict)
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
 if not ffsNodes.SetDesiredSegments():
@@ -190,7 +184,7 @@ else:
         MailBody = '!! There are Nodes to be moved but cannot due to inconsistent Data !!\n'
     else:
         ffsGWs.MoveNodes(NodeMoveDict,AccountsDict['Git'])
-
+        ffsNodes.WriteNodeDict()
 
 print('\nChecking for Alerts ...')
 
