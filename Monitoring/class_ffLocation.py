@@ -248,8 +248,6 @@ class ffLocation:
                 else:
                     for ZipCode in Region2ZipDict[Region]:
                         if ZipCode in self.ZipAreaDict:
-                            self.ZipAreaDict[ZipCode]['Area'] = Region
-
                             if self.ZipAreaDict[ZipCode]['Segment'] != self.RegionDict['Segments'][Region]:
                                 RegionCount = 0
                                 print('!! Region Segment Mismatch: Region = %s / RegSeg = %02d <-> ZipSeg = %02d' %
