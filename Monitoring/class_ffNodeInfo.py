@@ -53,15 +53,13 @@ import json
 import re
 import hashlib
 
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
-from glob import glob
-
 import dns.resolver
 import dns.query
 import dns.zone
 import dns.tsigkeyring
 import dns.update
+
+from glob import glob
 
 from dns.rdataclass import *
 from dns.rdatatype import *
@@ -1102,8 +1100,6 @@ class ffNodeInfo:
         else:
             for ffNodeMAC in self.ffNodeDict:
                 if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
-                    lat = None
-                    lon = None
 
                     GpsRegion  = None
                     GpsSegment = None
@@ -1113,21 +1109,10 @@ class ffNodeInfo:
                     ZipSegment = None
                     ZipCode    = None
 
-                    if LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Latitude'])) and LocationTemplate.match(str(self.ffNodeDict[ffNodeMAC]['Longitude'])):
+                    lon = self.ffNodeDict[ffNodeMAC]['Longitude']
+                    lat = self.ffNodeDict[ffNodeMAC]['Latitude']
 
-                        lat = self.ffNodeDict[ffNodeMAC]['Latitude']
-                        lon = self.ffNodeDict[ffNodeMAC]['Longitude']
-
-                        if lat < lon:
-                            lat = self.ffNodeDict[ffNodeMAC]['Longitude']
-                            lon = self.ffNodeDict[ffNodeMAC]['Latitude']
-
-                        while lat > 90.0:    # missing decimal separator
-                            lat /= 10.0
-
-                        while lon > 70.0:    # missing decimal separator
-                            lon /= 10.0
-
+                    if LocationTemplate.match(str(lon)) and LocationTemplate.match(str(lat)):
                         (GpsZipCode,GpsRegion,GpsSegment) = LocationInfo.GetLocationDataFromGPS(lon,lat)
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:

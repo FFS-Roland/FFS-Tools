@@ -346,29 +346,42 @@ class ffLocation:
         GpsRegion  = None
         GpsSegment = None
 
-        GpsZipCode = self.__GetZipFromGPS(lon,lat)
+        if lat is not None and lon is not None:
 
-        if GpsZipCode is not None:
-            GpsRegion  = self.ZipAreaDict[GpsZipCode]['Area']
-            GpsSegment = self.ZipAreaDict[GpsZipCode]['Segment']
+            if lat < lon:    # Latitude and Longitude are mixed up
+                x = lat
+                lat = lon
+                lon = x
 
-        elif lat is not None and lon is not None:
-            NodeLocation = Point(lon,lat)
+            while lat > 90.0:    # missing decimal separator
+                lat /= 10.0
 
-            if self.RegionDict['ValidArea'].intersects(NodeLocation):
-                for Region in self.RegionDict['Polygons']:
+            while lon > 70.0:    # missing decimal separator
+                lon /= 10.0
 
-                    if Region not in self.RegionDict['ZipRegions']:
-                        MatchCount = 0
+            GpsZipCode = self.__GetZipFromGPS(lon,lat)
 
-                        for RegionPart in self.RegionDict['Polygons'][Region]:
-                            if RegionPart.intersects(NodeLocation):
-                                MatchCount += 1
+            if GpsZipCode is not None:
+                GpsRegion  = self.ZipAreaDict[GpsZipCode]['Area']
+                GpsSegment = self.ZipAreaDict[GpsZipCode]['Segment']
 
-                        if MatchCount == 1:
-                            GpsRegion  = Region
-                            GpsSegment = self.RegionDict['Segments'][Region]
-                            break
+            else:
+                NodeLocation = Point(lon,lat)
+
+                if self.RegionDict['ValidArea'].intersects(NodeLocation):
+                    for Region in self.RegionDict['Polygons']:
+
+                        if Region not in self.RegionDict['ZipRegions']:
+                            MatchCount = 0
+
+                            for RegionPart in self.RegionDict['Polygons'][Region]:
+                                if RegionPart.intersects(NodeLocation):
+                                    MatchCount += 1
+
+                            if MatchCount == 1:
+                                GpsRegion  = Region
+                                GpsSegment = self.RegionDict['Segments'][Region]
+                                break
 
         return (GpsZipCode,GpsRegion,GpsSegment)
 
