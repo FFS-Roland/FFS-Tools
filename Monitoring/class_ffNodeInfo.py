@@ -106,7 +106,6 @@ PeerTemplate2     = re.compile('^ffs[0-9a-f]{12}')
 
 ZipTemplate       = re.compile('^[0-9]{5}$')
 SegmentTemplate   = re.compile('^[0-9]{2}$')
-LocationTemplate  = re.compile('[0-9]{1,2}[.][0-9]{3,}')
 
 KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
 FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
@@ -450,8 +449,25 @@ class ffNodeInfo:
 #            print('+++ Invalid Record!',NodeDict)
             return False
 
-        if (('node_id' not in NodeDict['nodeinfo']) or
-            ('software' not in NodeDict['nodeinfo']) or
+        if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
+            (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
+#            print('+++ Missing node_id!',NodeDict)
+            return False
+
+        if NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
+            print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
+                     (NodeDict['nodeinfo']['node_id'],NodeDict['statistics']['node_id']))
+            return False
+
+        if NodeDict['neighbours'] is not None:
+            if 'node_id' not in NodeDict['neighbours']:
+                print('+++ Missing node_id of neighbours!',NodeDict['neighbours'])
+                return False
+            elif NodeDict['neighbours']['node_id'] != NodeDict['nodeinfo']['node_id']:
+                print('++ NodeID-Mismatch: nodeinfo = %s / neighbours = %s\n' % (NodeDict['nodeinfo']['node_id'],NodeDict['neighbours']['node_id']))
+                return False
+
+        if (('software' not in NodeDict['nodeinfo']) or
             ('hostname' not in NodeDict['nodeinfo']) or
             ('network' not in NodeDict['nodeinfo'])):
             print('+++ NodeInfo broken!',NodeDict['nodeinfo'])
@@ -467,19 +483,9 @@ class ffNodeInfo:
             ('release' not in NodeDict['nodeinfo']['software']['firmware']) or
             (NodeDict['nodeinfo']['software']['firmware']['release'] is None) or
             ('mac' not in NodeDict['nodeinfo']['network'])):
-            print(' ++ Broken Data in Record %s !' % (ffNodeID))
+            print(' ++ Broken Data in nodeinfo Record %s !' % (ffNodeID))
             print(NodeDict)
             return False
-
-        if NodeDict['nodeinfo']['node_id'] != NodeDict['statistics']['node_id']:
-            print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s' %
-                     (NodeDict['nodeinfo']['node_id'],NodeDict['statistics']['node_id']))
-            return False
-
-        if NodeDict['neighbours'] is not None:
-            if NodeDict['nodeinfo']['node_id'] != NodeDict['neighbours']['node_id']:
-                print('++ NodeID-Mismatch: nodeinfo = %s / neighbours = %s' % (NodeDict['nodeinfo']['node_id'],NodeDict['neighbours']['node_id']))
-                return False
 
 
         ffNodeMAC = NodeDict['nodeinfo']['network']['mac'].strip().lower()
@@ -1112,8 +1118,7 @@ class ffNodeInfo:
                     lon = self.ffNodeDict[ffNodeMAC]['Longitude']
                     lat = self.ffNodeDict[ffNodeMAC]['Latitude']
 
-                    if LocationTemplate.match(str(lon)) and LocationTemplate.match(str(lat)):
-                        (GpsZipCode,GpsRegion,GpsSegment) = LocationInfo.GetLocationDataFromGPS(lon,lat)
+                    (GpsZipCode,GpsRegion,GpsSegment) = LocationInfo.GetLocationDataFromGPS(lon,lat)
 
                     if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
                         ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]

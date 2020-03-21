@@ -190,11 +190,17 @@ class ffLocation:
         print('Setting up Region Data ...')
 
         self.RegionDict = {
-            'ValidArea': Polygon([ (0.0,45.0),(0.0,60.0),(20.0,60.0),(20.0,45.0) ]),
+            'ValidArea': {},
             'Polygons' : {},
             'Segments' : {},
             'ZipRegions': []
         }
+
+        lon_min = 99.0
+        lon_max =  0.0
+
+        lat_min = 99.0
+        lat_max =  0.0
 
 
         JsonFileList = glob(os.path.join(self.__GitPath,'vpn*/regions/*.json'))
@@ -227,10 +233,24 @@ class ffLocation:
                     for t in Track[0]:
                         Shape.append( (t[0],t[1]) )    # t[0] = Longitude = x | t[1] = Latitude = y
 
+                        if t[0] < lon_min:  lon_min = t[0]
+                        if t[0] > lon_max:  lon_max = t[0]
+
+                        if t[1] < lat_min:  lat_min = t[1]
+                        if t[1] > lat_max:  lat_max = t[1]
+
                     self.RegionDict['Polygons'][Region].append(Polygon(Shape))
 
         except:
             RegionCount = 0
+
+        print('>> lon = (%f, %f) / lat = (%f, %f)' % (lon_min, lon_max, lat_min, lat_max))
+        self.RegionDict['ValidArea']['lon_min'] = lon_min -  0.1
+        self.RegionDict['ValidArea']['lon_max'] = lon_max +  0.1
+        self.RegionDict['ValidArea']['lat_min'] = lat_min -  0.1
+        self.RegionDict['ValidArea']['lat_max'] = lat_max +  0.1
+
+        self.RegionDict['ValidArea']['Polygon'] = Polygon([ (lon_min,lat_min),(lon_min,lat_max),(lon_max,lat_max),(lon_max,lat_min) ])
 
 
         try:
@@ -272,48 +292,47 @@ class ffLocation:
 
         ZipCodeResult = None
 
-        if lat is not None and lon is not None:
-            x = int((lon - float(self.ZipGridDict['Meta']['lon_min'])) * self.ZipGridDict['Meta']['lon_scale'])
-            y = int((lat - float(self.ZipGridDict['Meta']['lat_min'])) * self.ZipGridDict['Meta']['lat_scale'])
+        x = int((lon - float(self.ZipGridDict['Meta']['lon_min'])) * self.ZipGridDict['Meta']['lon_scale'])
+        y = int((lat - float(self.ZipGridDict['Meta']['lat_min'])) * self.ZipGridDict['Meta']['lat_scale'])
 
-            if ((x >= 0 and x < self.ZipGridDict['Meta']['lon_fields']) and
-                (y >= 0 and y < self.ZipGridDict['Meta']['lat_fields'])):
+        if ((x >= 0 and x < self.ZipGridDict['Meta']['lon_fields']) and
+            (y >= 0 and y < self.ZipGridDict['Meta']['lat_fields'])):
 
-                NodeLocation = Point(lon,lat)
-                FieldIndex = str(y * self.ZipGridDict['Meta']['lon_fields'] + x)
+            NodeLocation = Point(lon,lat)
+            FieldIndex = str(y * self.ZipGridDict['Meta']['lon_fields'] + x)
 
-                for ZipCode in self.ZipGridDict['Fields'][FieldIndex]:
-                    ZipFileName = self.ZipAreaDict[ZipCode]['FileName']
-                    ZipAreaJson = None
+            for ZipCode in self.ZipGridDict['Fields'][FieldIndex]:
+                ZipFileName = self.ZipAreaDict[ZipCode]['FileName']
+                ZipAreaJson = None
 
-                    with open(ZipFileName,"r") as fp:
-                        ZipAreaJson = json.load(fp)
+                with open(ZipFileName,"r") as fp:
+                    ZipAreaJson = json.load(fp)
 
-                    if "geometries" in ZipAreaJson:
-                        TrackBase = ZipAreaJson["geometries"][0]["coordinates"]
-                    elif "coordinates" in ZipAreaJson:
-                        TrackBase = ZipJson["coordinates"]
-                    else:
-                        TrackBase = None
-                        print('Problem parsing %s' % ZipFileName)
-                        continue
+                if "geometries" in ZipAreaJson:
+                    TrackBase = ZipAreaJson["geometries"][0]["coordinates"]
+                elif "coordinates" in ZipAreaJson:
+                    TrackBase = ZipJson["coordinates"]
+                else:
+                    TrackBase = None
+                    print('Problem parsing %s' % ZipFileName)
+                    continue
 
-                    AreaMatch = 0
+                AreaMatch = 0
 
-                    for Track in TrackBase:
-                        Shape = []
+                for Track in TrackBase:
+                    Shape = []
 
-                        for t in Track[0]:
-                            Shape.append( (t[0],t[1]) )
+                    for t in Track[0]:
+                        Shape.append( (t[0],t[1]) )
 
-                        ZipPolygon = Polygon(Shape)
+                    ZipPolygon = Polygon(Shape)
 
-                        if ZipPolygon.intersects(NodeLocation):
-                            AreaMatch += 1
+                    if ZipPolygon.intersects(NodeLocation):
+                        AreaMatch += 1
 
-                    if AreaMatch == 1:
-                        ZipCodeResult = ZipCode
-                        break
+                if AreaMatch == 1:
+                    ZipCodeResult = ZipCode
+                    break
 
         return ZipCodeResult
 
@@ -346,40 +365,45 @@ class ffLocation:
 
         if lat is not None and lon is not None:
 
-            if lat < lon:    # Latitude and Longitude are mixed up
-                x = lat
-                lat = lon
-                lon = x
+            if ((lon > self.RegionDict['ValidArea']['lon_min'] and lon < self.RegionDict['ValidArea']['lon_max']) and
+                (lat > self.RegionDict['ValidArea']['lat_min'] and lat < self.RegionDict['ValidArea']['lat_max'])):
+                #--- Longitude and Latitude are within valid area ---
+                NodeLocation = Point(lon,lat)
+                GpsZipCode = self.__GetZipFromGPS(lon,lat)
 
-            while lat > 90.0:    # missing decimal separator
-                lat /= 10.0
+            elif ((lon > self.RegionDict['ValidArea']['lat_min'] and lon < self.RegionDict['ValidArea']['lat_max']) and
+                  (lat > self.RegionDict['ValidArea']['lon_min'] and lat < self.RegionDict['ValidArea']['lon_max'])):
+                #--- Longitude and Latitude are mixed up ---
+                NodeLocation = Point(lat,lon)
+                GpsZipCode = self.__GetZipFromGPS(lat,lon)
 
-            while lon > 70.0:    # missing decimal separator
-                lon /= 10.0
+            else:
+                print('*** Invalid GPS: %f, %f' % (lon,lat))
+                while lon > self.RegionDict['ValidArea']['lon_max']:  lon /= 10.0    # missing decimal separator
+                while lat > self.RegionDict['ValidArea']['lat_max']:  lat /= 10.0    # missing decimal separator
 
-            GpsZipCode = self.__GetZipFromGPS(lon,lat)
+                NodeLocation = Point(lon,lat)
+                GpsZipCode = self.__GetZipFromGPS(lon,lat)
+
 
             if GpsZipCode is not None:
                 GpsRegion  = self.ZipAreaDict[GpsZipCode]['Area']
                 GpsSegment = self.ZipAreaDict[GpsZipCode]['Segment']
 
-            else:
-                NodeLocation = Point(lon,lat)
+            elif self.RegionDict['ValidArea']['Polygon'].intersects(NodeLocation):
+                for Region in self.RegionDict['Polygons']:
 
-                if self.RegionDict['ValidArea'].intersects(NodeLocation):
-                    for Region in self.RegionDict['Polygons']:
+                    if Region not in self.RegionDict['ZipRegions']:
+                        MatchCount = 0
 
-                        if Region not in self.RegionDict['ZipRegions']:
-                            MatchCount = 0
+                        for RegionPart in self.RegionDict['Polygons'][Region]:
+                            if RegionPart.intersects(NodeLocation):
+                                MatchCount += 1
 
-                            for RegionPart in self.RegionDict['Polygons'][Region]:
-                                if RegionPart.intersects(NodeLocation):
-                                    MatchCount += 1
-
-                            if MatchCount == 1:
-                                GpsRegion  = Region
-                                GpsSegment = self.RegionDict['Segments'][Region]
-                                break
+                        if MatchCount == 1:
+                            GpsRegion  = Region
+                            GpsSegment = self.RegionDict['Segments'][Region]
+                            break
 
         return (GpsZipCode,GpsRegion,GpsSegment)
 
