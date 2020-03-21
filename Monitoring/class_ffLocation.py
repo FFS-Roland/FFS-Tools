@@ -196,10 +196,10 @@ class ffLocation:
             'ZipRegions': []
         }
 
-        lon_min = 99.0
+        lon_min = 90.0
         lon_max =  0.0
 
-        lat_min = 99.0
+        lat_min = 90.0
         lat_max =  0.0
 
 
@@ -244,7 +244,7 @@ class ffLocation:
         except:
             RegionCount = 0
 
-        print('>> lon = (%f, %f) / lat = (%f, %f)' % (lon_min, lon_max, lat_min, lat_max))
+        print('>> lon = [%f .. %f] / lat = [%f .. %f]' % (lon_min, lon_max, lat_min, lat_max))
         self.RegionDict['ValidArea']['lon_min'] = lon_min -  0.1
         self.RegionDict['ValidArea']['lon_max'] = lon_max +  0.1
         self.RegionDict['ValidArea']['lat_min'] = lat_min -  0.1
@@ -278,7 +278,7 @@ class ffLocation:
         if RegionCount == 0:
             self.RegionDict = None
 
-        print('... Region Areas loaded: %d\n' % (RegionCount))
+        print('... Region Areas loaded: Total = %d / Non-ZIP = %d\n' % (RegionCount, RegionCount - len(self.RegionDict['ZipRegions'])))
         return
 
 
@@ -363,47 +363,45 @@ class ffLocation:
         GpsRegion  = None
         GpsSegment = None
 
-        if lat is not None and lon is not None:
+        if ((lon > self.RegionDict['ValidArea']['lon_min'] and lon < self.RegionDict['ValidArea']['lon_max']) and
+            (lat > self.RegionDict['ValidArea']['lat_min'] and lat < self.RegionDict['ValidArea']['lat_max'])):
+            #--- Longitude and Latitude are within valid area ---
+            NodeLocation = Point(lon,lat)
+            GpsZipCode = self.__GetZipFromGPS(lon,lat)
 
-            if ((lon > self.RegionDict['ValidArea']['lon_min'] and lon < self.RegionDict['ValidArea']['lon_max']) and
-                (lat > self.RegionDict['ValidArea']['lat_min'] and lat < self.RegionDict['ValidArea']['lat_max'])):
-                #--- Longitude and Latitude are within valid area ---
-                NodeLocation = Point(lon,lat)
-                GpsZipCode = self.__GetZipFromGPS(lon,lat)
+        elif ((lon > self.RegionDict['ValidArea']['lat_min'] and lon < self.RegionDict['ValidArea']['lat_max']) and
+              (lat > self.RegionDict['ValidArea']['lon_min'] and lat < self.RegionDict['ValidArea']['lon_max'])):
+            #--- Longitude and Latitude are mixed up ---
+            NodeLocation = Point(lat,lon)
+            GpsZipCode = self.__GetZipFromGPS(lat,lon)
 
-            elif ((lon > self.RegionDict['ValidArea']['lat_min'] and lon < self.RegionDict['ValidArea']['lat_max']) and
-                  (lat > self.RegionDict['ValidArea']['lon_min'] and lat < self.RegionDict['ValidArea']['lon_max'])):
-                #--- Longitude and Latitude are mixed up ---
-                NodeLocation = Point(lat,lon)
-                GpsZipCode = self.__GetZipFromGPS(lat,lon)
+        else:
+            print('** Invalid GPS: %f, %f' % (lon,lat))
+            while lon > self.RegionDict['ValidArea']['lon_max']:  lon /= 10.0    # missing decimal separator
+            while lat > self.RegionDict['ValidArea']['lat_max']:  lat /= 10.0    # missing decimal separator
 
-            else:
-                print('*** Invalid GPS: %f, %f' % (lon,lat))
-                while lon > self.RegionDict['ValidArea']['lon_max']:  lon /= 10.0    # missing decimal separator
-                while lat > self.RegionDict['ValidArea']['lat_max']:  lat /= 10.0    # missing decimal separator
-
-                NodeLocation = Point(lon,lat)
-                GpsZipCode = self.__GetZipFromGPS(lon,lat)
+            NodeLocation = Point(lon,lat)
+            GpsZipCode = self.__GetZipFromGPS(lon,lat)
 
 
-            if GpsZipCode is not None:
-                GpsRegion  = self.ZipAreaDict[GpsZipCode]['Area']
-                GpsSegment = self.ZipAreaDict[GpsZipCode]['Segment']
+        if GpsZipCode is not None:
+            GpsRegion  = self.ZipAreaDict[GpsZipCode]['Area']
+            GpsSegment = self.ZipAreaDict[GpsZipCode]['Segment']
 
-            elif self.RegionDict['ValidArea']['Polygon'].intersects(NodeLocation):
-                for Region in self.RegionDict['Polygons']:
+        elif self.RegionDict['ValidArea']['Polygon'].intersects(NodeLocation):
+            for Region in self.RegionDict['Polygons']:
 
-                    if Region not in self.RegionDict['ZipRegions']:
-                        MatchCount = 0
+                if Region not in self.RegionDict['ZipRegions']:
+                    MatchCount = 0
 
-                        for RegionPart in self.RegionDict['Polygons'][Region]:
-                            if RegionPart.intersects(NodeLocation):
-                                MatchCount += 1
+                    for RegionPart in self.RegionDict['Polygons'][Region]:
+                        if RegionPart.intersects(NodeLocation):
+                            MatchCount += 1
 
-                        if MatchCount == 1:
-                            GpsRegion  = Region
-                            GpsSegment = self.RegionDict['Segments'][Region]
-                            break
+                    if MatchCount == 1:
+                        GpsRegion  = Region
+                        GpsSegment = self.RegionDict['Segments'][Region]
+                        break
 
         return (GpsZipCode,GpsRegion,GpsSegment)
 

@@ -77,7 +77,8 @@ MaxInactiveTime    = 10 * 86400     # 10 Days (in Seconds)
 MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
 MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
-BatmanTimeout      = 30             # 30 Seconds
+BatmanTimeout      = 10             # 10 Seconds
+BatmanMinTQ        = 10             # Minimum Batman TQ for respondd Request
 
 MinNodesCount      = 1000           # Minimum number of Nodes
 
@@ -562,11 +563,11 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['Longitude'] = NodeDict['nodeinfo']['location']['longitude']
 
             if 'zip' in NodeDict['nodeinfo']['location']:
-                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip'])[:5]
+                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip']).strip()
 
         if 'custom_fields' in NodeDict:
             if 'zip' in NodeDict['custom_fields']:
-                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['custom_fields']['zip'])[:5]
+                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['custom_fields']['zip']).strip()
 
         if 'owner' in NodeDict['nodeinfo']:
             if NodeDict['nodeinfo']['owner'] is not None:
@@ -855,9 +856,11 @@ class ffNodeInfo:
                 NodeJsonDict = json.loads(ResponddSock.recv(4096).decode('UTF-8'))
                 ResponddSock.close()
             except:
-                print('++ Error on respondd!')
                 NodeJsonDict = None
                 time.sleep(2)
+
+        if NodeJsonDict is None:
+            print('++ Error on respondd!')
 
         return NodeJsonDict
 
@@ -907,7 +910,7 @@ class ffNodeInfo:
                                 BatmanMacList = self.GenerateGluonMACs(ffNodeMAC)
 
                                 if ((ffNodeMAC in self.ffNodeDict) and ((UnixTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
-                                    (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):    # Data of known Node ...
+                                    (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):    # Current data of Node already available ...
 
                                     if ffNodeMAC not in NodeList:
                                         NodeList.append(ffNodeMAC)
@@ -923,23 +926,26 @@ class ffNodeInfo:
                                     if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
                                         print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                elif ffMeshMAC in BatmanMacList:    # New / unknown Node ...
+                                elif ffMeshMAC in BatmanMacList:    # No current data available for this Node ...
                                     print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
 
                                     if ffNodeMAC not in NodeList:
                                         NodeList.append(ffNodeMAC)
 
-                                    NodeDict = {}
-                                    NodeDict['lastseen'] = UnixTime - 1
-                                    NodeDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
+                                    if ffTQ > BatmanMinTQ:
+                                        NodeDict = { 'lastseen':UnixTime-1, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
-                                    if NodeDict['nodeinfo'] is not None:
-                                        NodeDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
-                                        NodeDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
+                                        NodeDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
 
-                                        if self.__ProcessResponddData(NodeDict,UnixTime,None):
-                                            self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                            print('    >> New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        if NodeDict['nodeinfo'] is not None:
+                                            NodeDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
+
+                                            if NodeDict['statistics'] is not None:
+                                                NodeDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
+
+                                            if self.__ProcessResponddData(NodeDict,UnixTime,None):
+                                                self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
+                                                print('    >> New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                     if ffNodeMAC in self.ffNodeDict:
                                         self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
@@ -1113,38 +1119,34 @@ class ffNodeInfo:
 
                     ZipRegion  = None
                     ZipSegment = None
-                    ZipCode    = None
 
-                    lon = self.ffNodeDict[ffNodeMAC]['Longitude']
-                    lat = self.ffNodeDict[ffNodeMAC]['Latitude']
+                    if self.ffNodeDict[ffNodeMAC]['Longitude'] is not None and self.ffNodeDict[ffNodeMAC]['Latitude'] is not None:
+                        (GpsZipCode,GpsRegion,GpsSegment) = LocationInfo.GetLocationDataFromGPS(self.ffNodeDict[ffNodeMAC]['Longitude'],self.ffNodeDict[ffNodeMAC]['Latitude'])
 
-                    (GpsZipCode,GpsRegion,GpsSegment) = LocationInfo.GetLocationDataFromGPS(lon,lat)
+                    ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP']
 
-                    if self.ffNodeDict[ffNodeMAC]['ZIP'] is not None:
-                        ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP'][:5]
+                    if ZipCode is not None and ZipTemplate.match(ZipCode):
+                        (ZipRegion,ZipSegment) = LocationInfo.GetLocationDataFromZIP(ZipCode)
 
-                        if ZipTemplate.match(ZipCode):
-                            (ZipRegion,ZipSegment) = LocationInfo.GetLocationDataFromZIP(ZipCode)
-
-                            if ZipRegion is None:
-                                print('!!! Unknown ZIP-Region:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
-                            elif GpsRegion is None:
+                        if ZipRegion is None or ZipSegment is None:
+                            print('++ Unknown ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
+                        else:  # valid ZIP-Code
+                            if GpsRegion is None or GpsSegment is None:
                                 GpsRegion  = ZipRegion
-
-                            if GpsSegment is None:
                                 GpsSegment = ZipSegment
 #                                print('>>> Segment set by ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode,'->',lon,'|',lat,'->',GpsSegment)
                             elif ZipSegment != GpsSegment:
                                 print('!! Segment Mismatch GPS <> ZIP:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment,'<>',ZipSegment)
 
-                        else:
-                            print('!! Invalid ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
+                        if GpsZipCode is not None and ZipCode != GpsZipCode:
+                            print('>>> ZIP-Code Mismatch GPS <> ZIP: %s = \'%s\' -> %s <> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsZipCode,ZipCode))
+                            self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
 
-                    if ZipCode is None or ZipSegment is None:
+                    elif self.ffNodeDict[ffNodeMAC]['ZIP'] is None:
                         self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
-                    elif GpsZipCode is not None and ZipCode != GpsZipCode:
-                        print('>>> ZIP-Code Mismatch GPS <> ZIP: %s = \'%s\' -> %s <> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsZipCode,ZipCode))
-                        self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
+                    else:
+                        print('!!! Invalid ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
+
 
                     if GpsRegion is not None:
                         self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
