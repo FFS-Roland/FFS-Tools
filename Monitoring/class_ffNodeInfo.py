@@ -1058,7 +1058,6 @@ class ffNodeInfo:
                     self.ffNodeDict[self.MAC2NodeIDDict[MeshMAC]]['Status'] = NODESTATE_ONLINE_VPN
                 else:
                     print('++ Unknown Node with VPN: %s / %s = \'%s\'' % (ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
-                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
