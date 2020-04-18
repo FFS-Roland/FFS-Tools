@@ -78,7 +78,7 @@ MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
 MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
 BatmanTimeout      = 10             # 10 Seconds
-BatmanMinTQ        = 10             # Minimum Batman TQ for respondd Request
+BatmanMinTQ        =  3             # Minimum Batman TQ for respondd Request
 
 MinNodesCount      = 1000           # Minimum number of Nodes
 
