@@ -435,24 +435,26 @@ class ffNodeInfo:
 
         if 'lastseen' not in NodeDict:
             print('+++ Invalid Record!',NodeDict)
+            return False
 
         if DateFormat is None:
             LastSeen = NodeDict['lastseen']
         else:
             LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
 
-        if (UnixTime - LastSeen) > MaxInactiveTime:  return False    # Data is obsolete
-
+        if (UnixTime - LastSeen) > MaxInactiveTime:
+            print('+++ Data too old: %d Min' % ((UnixTime - LastSeen)/60))
+            return False    # Data is obsolete
 
         if (('nodeinfo' not in NodeDict) or
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
-#            print('+++ Invalid Record!',NodeDict)
+            print('+++ Invalid Record!')
             return False
 
         if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
             (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
-#            print('+++ Missing node_id!',NodeDict)
+            print('+++ Missing node_id!')
             return False
 
         if NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
@@ -534,7 +536,8 @@ class ffNodeInfo:
                 'Source': None
             }
 
-        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:  return False    # Newer Node info already existing ...
+        if (LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']) and (DateFormat is not None):
+            return False    # Newer Node-Info already existing ...
 
 
         #---------- Current Data of Node will be used ----------
@@ -631,7 +634,7 @@ class ffNodeInfo:
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
         self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(self.ffNodeDict[ffNodeMAC]['Firmware'])
 
-        return (self.ffNodeDict[ffNodeMAC]['last_online'] == LastSeen)
+        return True
 
 
 
@@ -921,7 +924,7 @@ class ffNodeInfo:
 
                                     if not self.IsOnline(ffNodeMAC):
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                        print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                     if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
                                         print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
@@ -933,19 +936,28 @@ class ffNodeInfo:
                                         NodeList.append(ffNodeMAC)
 
                                     if ffTQ > BatmanMinTQ:
-                                        NodeDict = { 'lastseen':UnixTime-1, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
+                                        ResponddDict = { 'lastseen':UnixTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
-                                        NodeDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
+                                        ResponddDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
 
-                                        if NodeDict['nodeinfo'] is not None:
-                                            NodeDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
+                                        if ResponddDict['nodeinfo'] is not None:
+                                            if 'hostname' in ResponddDict['nodeinfo']:
+                                                NodeName = ResponddDict['nodeinfo']['hostname']
+                                            else:
+                                                NodeName = '- ?? -'
 
-                                            if NodeDict['statistics'] is not None:
-                                                NodeDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
+                                            ResponddDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
 
-                                            if self.__ProcessResponddData(NodeDict,UnixTime,None):
-                                                self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                                print('    >> New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            if ResponddDict['statistics'] is not None:
+                                                ResponddDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
+                                        else:
+                                            NodeName = '(Corrupted Record)'
+
+                                        if self.__ProcessResponddData(ResponddDict,UnixTime,None):
+                                            self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
+                                            print('    >> New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        else:
+                                            print('       ... Node ignored: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
                                     if ffNodeMAC in self.ffNodeDict:
                                         self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
