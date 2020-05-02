@@ -433,9 +433,21 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __ProcessResponddData(self,NodeDict,UnixTime,DateFormat):
 
-        if 'lastseen' not in NodeDict:
-            print('+++ Invalid Record!',NodeDict)
+        if (('lastseen' not in NodeDict) or
+            ('nodeinfo' not in NodeDict) or
+            ('statistics' not in NodeDict) or
+            ('neighbours' not in NodeDict)):
+
+            if DateFormat is None:
+                print('+++ Invalid Record!',NodeDict)
             return False
+
+        if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
+            (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
+            print('+++ Missing node_id!',NodeDict)
+            return False
+
+        ffNodeID = NodeDict['nodeinfo']['node_id'].strip().lower()
 
         if DateFormat is None:
             LastSeen = NodeDict['lastseen']
@@ -443,19 +455,10 @@ class ffNodeInfo:
             LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
 
         if (UnixTime - LastSeen) > MaxInactiveTime:
-            print('+++ Data too old: %d Min' % ((UnixTime - LastSeen)/60))
-            return False    # Data is obsolete
+            if DateFormat is None:
+                print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(UnixTime - LastSeen) / 60))
+            return False    # Data is obsolete / too old
 
-        if (('nodeinfo' not in NodeDict) or
-            ('statistics' not in NodeDict) or
-            ('neighbours' not in NodeDict)):
-            print('+++ Invalid Record!')
-            return False
-
-        if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
-            (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
-            print('+++ Missing node_id!')
-            return False
 
         if NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
             print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
@@ -475,8 +478,6 @@ class ffNodeInfo:
             ('network' not in NodeDict['nodeinfo'])):
             print('+++ NodeInfo broken!',NodeDict['nodeinfo'])
             return False
-
-        ffNodeID = NodeDict['nodeinfo']['node_id'].strip().lower()
 
         if GwIdTemplate.match(ffNodeID):
             print(' ++ Gateway Data found: %s' % (ffNodeID))
@@ -936,6 +937,7 @@ class ffNodeInfo:
                                         NodeList.append(ffNodeMAC)
 
                                     if ffTQ > BatmanMinTQ:
+                                        NodeName = None
                                         ResponddDict = { 'lastseen':UnixTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
                                         ResponddDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
@@ -943,15 +945,16 @@ class ffNodeInfo:
                                         if ResponddDict['nodeinfo'] is not None:
                                             if 'hostname' in ResponddDict['nodeinfo']:
                                                 NodeName = ResponddDict['nodeinfo']['hostname']
-                                            else:
-                                                NodeName = '- ?? -'
 
                                             ResponddDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
 
                                             if ResponddDict['statistics'] is not None:
                                                 ResponddDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
+
+                                        if ffNodeMAC in self.ffNodeDict and NodeName is None:
+                                            NodeName = self.ffNodeDict[ffNodeMAC]['Name']
                                         else:
-                                            NodeName = '(Corrupted Record)'
+                                            NodeName = '- ?? -'
 
                                         if self.__ProcessResponddData(ResponddDict,UnixTime,None):
                                             self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
