@@ -659,7 +659,7 @@ class ffNodeInfo:
             return
 
         UnixTime = int(time.time())
-        InfoTime = None
+        InfoTime = 0
         NewestTime = 0
         AllNodesCount = 0
         UsedNodesCount = 0
@@ -701,6 +701,9 @@ class ffNodeInfo:
         if RawJsonDict['version'] not in YANIC_VERSIONS:
             self.__alert('++ Bad Version of Yanic raw.json: %s (expecting %s)!' % (RawJsonDict['version'],YANIC_VERSION))
             return
+
+        if 'updated_at' in RawJsonDict:
+            InfoTime = int(calendar.timegm(time.strptime( RawJsonDict['updated_at'],'%Y-%m-%dT%H:%M:%S%z') ))
 
         if (UnixTime - InfoTime) > MaxStatusAge:
             self.__alert('++ Yanic raw.json is too old: %d Sec.!' % (UnixTime - InfoTime))
