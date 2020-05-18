@@ -905,7 +905,7 @@ class ffNodeInfo:
                     BatctlInfo = BatctlLine.replace('(','').replace(')','').split()
 
                     if len(BatctlInfo) > 6:
-                        if BatctlInfo[0] == '*' and BatctlInfo[2] == '-1' and BatctlInfo[3][0] == '[':
+                        if BatctlInfo[0] == '*' and BatctlInfo[3][0] == '[':
 
                             ffNodeMAC = BatctlInfo[1]
                             ffMeshMAC = BatctlInfo[5]
@@ -917,7 +917,8 @@ class ffNodeInfo:
                                 BatmanMacList = self.GenerateGluonMACs(ffNodeMAC)
 
                                 if ((ffNodeMAC in self.ffNodeDict) and ((UnixTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
-                                    (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):    # Current data of Node already available ...
+                                    (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):
+                                    #---------- Current data of Node already available ----------
 
                                     if ffNodeMAC not in NodeList:
                                         NodeList.append(ffNodeMAC)
@@ -926,20 +927,23 @@ class ffNodeInfo:
                                     self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
                                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
-                                    if not self.IsOnline(ffNodeMAC):
-                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                        print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                    if self.ffNodeDict[ffNodeMAC]['Source'] != 'respondd':
+                                        if not self.IsOnline(ffNodeMAC):
+                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                            print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                    if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
-                                        print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
+                                            print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                elif ffMeshMAC in BatmanMacList:    # No current data available for this Node ...
-                                    print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
+                                elif ffMeshMAC in BatmanMacList:
+                                    #---------- Node without current data available ----------
 
-                                    if ffNodeMAC not in NodeList:
-                                        NodeList.append(ffNodeMAC)
+                                    if ffTQ >= BatmanMinTQ and BatctlInfo[2] == '0':
+                                        print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
 
-                                    if ffTQ > BatmanMinTQ:
+                                        if ffNodeMAC not in NodeList:
+                                            NodeList.append(ffNodeMAC)
+
                                         NodeName = None
                                         ResponddDict = { 'lastseen':UnixTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
@@ -974,33 +978,35 @@ class ffNodeInfo:
                                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
                                             print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                elif ffNodeMAC in self.MAC2NodeIDDict:    # Mesh-MAC in Client-Net
+                                elif ffNodeMAC in self.MAC2NodeIDDict:
+                                    #---------- Check for Mesh-MAC in Client-Net ----------
+
                                     RealNodeMAC = self.MAC2NodeIDDict[ffNodeMAC]
-                                    BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
 
-                                    if BaseNodeMAC in self.ffNodeDict and RealNodeMAC in self.ffNodeDict:
-                                        print('    !! Mesh-MAC in Client Net: %s = \'%s\' -> %s -> %s =\'%s\'' %
-                                                 (BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
+                                    if RealNodeMAC != ffNodeMAC:
+                                        if ffMeshMAC in self.MAC2NodeIDDict:
+                                            BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
 
-                                        self.ffNodeDict[BaseNodeMAC]['Segment'] = ffSeg
-                                        self.ffNodeDict[RealNodeMAC]['Segment'] = ffSeg
-                                        self.ffNodeDict[BaseNodeMAC]['last_online'] = UnixTime
-                                        self.ffNodeDict[RealNodeMAC]['last_online'] = UnixTime
+                                            if BaseNodeMAC in self.ffNodeDict and RealNodeMAC in self.ffNodeDict:
+                                                print('    !! Mesh-MAC in Client Net: %s = \'%s\' -> %s -> %s =\'%s\'' %
+                                                         (BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
 
-                                        if not self.IsOnline(BaseNodeMAC):
-                                            self.ffNodeDict[BaseNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                                self.ffNodeDict[BaseNodeMAC]['Segment'] = ffSeg
+                                                self.ffNodeDict[RealNodeMAC]['Segment'] = ffSeg
+                                                self.ffNodeDict[BaseNodeMAC]['last_online'] = UnixTime
+                                                self.ffNodeDict[RealNodeMAC]['last_online'] = UnixTime
 
-                                        if not self.IsOnline(RealNodeMAC):
-                                            self.ffNodeDict[RealNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                                if not self.IsOnline(BaseNodeMAC):
+                                                    self.ffNodeDict[BaseNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
-                                        if ffNodeMAC not in self.ffNodeDict[BaseNodeMAC]['Neighbours']:
-                                            self.ffNodeDict[BaseNodeMAC]['Neighbours'].append(ffNodeMAC)
+                                                if not self.IsOnline(RealNodeMAC):
+                                                    self.ffNodeDict[RealNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
-                                        if ffMeshMAC not in self.ffNodeDict[RealNodeMAC]['Neighbours']:
-                                            self.ffNodeDict[RealNodeMAC]['Neighbours'].append(ffMeshMAC)
+                                            else:
+                                                print('   !!! ERROR in Database: %s / %s -> %s / %s\n' % (ffNodeMAC,ffMeshMAC,RealNodeMAC,BaseNodeMAC))
 
-                                    else:
-                                        print('   !!! ERROR in Database: %s / %s -> %s / %s' % (BaseNodeMAC,ffMeshMAC,RealNodeMAC,ffNodeMAC))
+                                        else:
+                                            print('   !!! ERROR in Database: %s / %s -> %s\n' % (ffNodeMAC,ffMeshMAC,RealNodeMAC))
 
                                 else:  # Data of Client
                                     if ffNodeMAC not in ClientList:
