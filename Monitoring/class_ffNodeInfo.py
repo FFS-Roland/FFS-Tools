@@ -827,7 +827,7 @@ class ffNodeInfo:
             if self.ffNodeDict[ffNodeMAC]['Name'] is None:
                 print('!! Hostname is None: %s %s' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC))
             elif BadNameTemplate.match(self.ffNodeDict[ffNodeMAC]['Name']):
-                print('!! Invalid ffNode Hostname: %s = %s -> \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                print('!! Invalid ffNode Hostname: %s = %s -> \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Status'],self.ffNodeDict[ffNodeMAC]['Name']))
 
         print('... done.\n')
         return
