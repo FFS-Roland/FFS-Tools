@@ -78,7 +78,7 @@ MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
 MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
 BatmanTimeout      = 10             # 10 Seconds
-BatmanMinTQ        =  3             # Minimum Batman TQ for respondd Request
+BatmanMinTQ        =  5             # Minimum Batman TQ for respondd Request
 
 MinNodesCount      = 1000           # Minimum number of Nodes
 
@@ -909,7 +909,7 @@ class ffNodeInfo:
 
                             ffNodeMAC = BatctlInfo[1]
                             ffMeshMAC = BatctlInfo[5]
-                            ffTQ      = int(BatctlInfo[4])
+                            ffTQ      = int(BatctlInfo[6])
 
                             if (MacAdrTemplate.match(ffNodeMAC) and not McastMacTemplate.match(ffNodeMAC) and not GwMacTemplate.match(ffNodeMAC) and
                                 MacAdrTemplate.match(ffMeshMAC) and not McastMacTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC)):
@@ -938,12 +938,11 @@ class ffNodeInfo:
                                 elif ffMeshMAC in BatmanMacList:
                                     #---------- Node without current data available ----------
 
+                                    if ffNodeMAC not in NodeList:
+                                        NodeList.append(ffNodeMAC)
+
                                     if ffTQ >= BatmanMinTQ and BatctlInfo[2] == '0':
                                         print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
-
-                                        if ffNodeMAC not in NodeList:
-                                            NodeList.append(ffNodeMAC)
-
                                         NodeName = None
                                         ResponddDict = { 'lastseen':UnixTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
