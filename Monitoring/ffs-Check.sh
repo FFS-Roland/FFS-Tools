@@ -11,7 +11,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -73,7 +73,7 @@ fi
 if [ $? -ne 0 ]; then
   echo "++ERROR!" >> $LOGFILE
 else
-  /usr/local/bin/create_StatisticsData.py --nodefile=$DATADIR/NodeDict.json --gitrepo=$GITREPO --regions=$DATADIR/Region2ZIP.json --statistics=$DATADIR/StatisticsDict.json >> $LOGFILE
+  /usr/local/bin/create_StatisticsData.py --nodefile=$DATADIR/NodeDict.json --regions=$DATADIR/Region2ZIP.json --statistics=$DATADIR/StatisticsDict.json >> $LOGFILE
 fi
 
 echo "---------------------------------------" >> $LOGFILE

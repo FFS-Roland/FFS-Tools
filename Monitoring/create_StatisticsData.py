@@ -9,11 +9,12 @@
 #  Parameter:                                                                             #
 #                                                                                         #
 #      --nodefile   = Path+Filename to NodeDict.json                                      #
+#      --regions    = Path+Filename to Region2Zip.json                                    #
 #      --statistics = Path+Filename to Statistics.json                                    #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2018-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2018-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -45,31 +46,12 @@ import json
 import re
 import argparse
 
-from glob import glob
 
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
 SegIgnoreList = ['11','19','21','22']    # Single Nodes (Schools)
 
-
-
-#-------------------------------------------------------------
-#     Create Region2SegmentDict
-#-------------------------------------------------------------
-def CreateRegion2SegmentDict(RegionFiles):
-    print('Creating Region2SegmentDict ...')
-
-    Region2SegmentDict = {}
-
-    for RegionFilename in RegionFiles:
-        Region  = os.path.basename(RegionFilename).split(".")[0]
-        Segment = os.path.dirname(RegionFilename).split("/")[-2][3:]
-
-        Region2SegmentDict[Region] = Segment
-
-    print(len(Region2SegmentDict),'Region Files loaded.\n')
-    return Region2SegmentDict
 
 
 #-----------------------------------------------------------------------
@@ -99,13 +81,14 @@ def GetZip2RegionDict(RegionFileName):
     return Zip2RegionDict
 
 
+
 #-----------------------------------------------------------------------
 # Function "CreateCurrentLoadDict"
 #
 #   Get Load Data from NodeDict.json
 #
 #-----------------------------------------------------------------------
-def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
+def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict):
 
     print('Loading NodeDict.json ...')
     OnlineStates       = [' ','V']      # online, online with VPN-Uplink
@@ -125,14 +108,6 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
         print('... %d Node Infos loaded.' % (len(NodeDict)))
         LoadDict = { 'Segments':{}, 'Regions':{}, 'ZipAreas':{}}
 
-        Segment2RegionDict = {}
-
-        for Region in Region2SegmentDict:
-            if Region2SegmentDict[Region] not in Segment2RegionDict:
-                Segment2RegionDict[Region2SegmentDict[Region]] = Region
-            else:
-                Segment2RegionDict[Region2SegmentDict[Region]] = None
-
         for NodeID in NodeDict:
             if NodeDict[NodeID]['Status'] in OnlineStates:
 
@@ -142,7 +117,9 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
 
                 ZipCode = str(NodeDict[NodeID]['ZIP'])
                 Segment = '%02d' % (NodeDict[NodeID]['Segment'])
-                Region  = str(NodeDict[NodeID]['Region'])
+
+                if Segment in SegIgnoreList: continue
+
 
                 #----- Segments -----
                 if Segment not in LoadDict['Segments']:
@@ -150,57 +127,30 @@ def CreateCurrentLoadDict(NodeDictName,Zip2RegionDict,Region2SegmentDict):
 
                 LoadDict['Segments'][Segment] += NodeDict[NodeID]['Clients'] + 1
 
-                #----- Regions -----
-                if Region is None:
-                    print('++ Unknown Region:',NodeID,'=',ZipCode,'->',Segment)
-                    Region = '??'
-
-                if Region == '??' and Segment != '03':
-                    if Segment in Segment2RegionDict:
-                        if Segment2RegionDict[Segment] is not None:
-                            Region = Segment2RegionDict[Segment]
-#                            print('>> Region set by Segment:',NodeID,'=',Segment,'->',Region)
-#                        else:
-#                            print('++ Region not unique:',NodeID,'=',ZipCode,'->',Segment)
-                    else:
-                        print('++ No Region for Segment:',NodeID,'=',ZipCode,'->',Segment)
-
-                elif PlzTemplate.match(Region):
-                    if Region[:5] != ZipCode:
-                        print('++ Bad ZipCode / Region:',NodeID,'=',ZipCode,'<>',Region)
-
-                    if ZipCode in Zip2RegionDict:
-                        Region = Zip2RegionDict[ZipCode]
-                    else:
-                        print('++ Unknown ZipRegion:',NodeID,'=',Region,'<>',ZipCode)
-
-                if Region not in LoadDict['Regions']:
-                    LoadDict['Regions'][Region] = 0
-
-                if Segment not in SegIgnoreList:
-                    LoadDict['Regions'][Region] += NodeDict[NodeID]['Clients'] + 1
-
-                    if Region in Region2SegmentDict:
-                        if Region2SegmentDict[Region] != Segment:
-                            print('++ Segment Mismatch:',NodeID,'=',Region,'<>',Segment)
-
                 #----- ZipAreas -----
                 if not PlzTemplate.match(ZipCode):
                     ZipCode = '-----'
-                else:
-                    if ZipCode in Zip2RegionDict:
-                        if Zip2RegionDict[ZipCode] != Region:
-                            print('++ Region Mismatch:',NodeID,'=',Region,'<>',ZipCode,'=',Zip2RegionDict[ZipCode])
 
                 if ZipCode not in LoadDict['ZipAreas']:
                     LoadDict['ZipAreas'][ZipCode] = 0
 
-                if Segment not in SegIgnoreList:
-                    LoadDict['ZipAreas'][ZipCode] += NodeDict[NodeID]['Clients'] + 1
+                LoadDict['ZipAreas'][ZipCode] += NodeDict[NodeID]['Clients'] + 1
+
+                #----- Regions -----
+                if ZipCode in Zip2RegionDict:
+                    Region = Zip2RegionDict[ZipCode]
+                else:
+                    Region = '??'
+
+                if Region not in LoadDict['Regions']:
+                    LoadDict['Regions'][Region] = 0
+
+                LoadDict['Regions'][Region] += NodeDict[NodeID]['Clients'] + 1
 
         print('... StatLoadDict loaded: S = %d / R = %d / Z = %d\n' % (len(LoadDict['Segments']),len(LoadDict['Regions']),len(LoadDict['ZipAreas'])))
 
     return LoadDict
+
 
 
 #-----------------------------------------------------------------------
@@ -242,20 +192,10 @@ print('\nCreating / Updating Statistics Data\n')
 
 parser = argparse.ArgumentParser(description='Create and/or update Statistcs Data from NodeDict')
 parser.add_argument('--nodefile', dest='NodeFile', action='store', help='Input = NodeDictFile Name')
-parser.add_argument('--gitrepo', dest='GitRepo', action='store', help='Path to Git Repository')
 parser.add_argument('--regions', dest='RegionFile', action='store', help='Input = Region2ZipFile Name')
 parser.add_argument('--statistics', dest='StatisticsFile', action='store', help='Output = StatisticsFile Name')
 
 args = parser.parse_args()
-
-
-if args.GitRepo is None:
-    GitRepoPath = 'Y:/Git-Repository/peers-ffs/'
-else:
-    GitRepoPath = args.GitRepo
-
-Region2SegmentDict = CreateRegion2SegmentDict( glob(os.path.join(GitRepoPath,'vpn*/regions/*.json')) )
-
 
 if args.RegionFile is None:
     RegionFileName = 'Region2ZIP.json'
@@ -274,7 +214,7 @@ if args.NodeFile is None:
 else:
     NodeFileName = args.NodeFile
 
-LoadDict = CreateCurrentLoadDict(NodeFileName,Zip2RegionDict,Region2SegmentDict)
+LoadDict = CreateCurrentLoadDict(NodeFileName,Zip2RegionDict)
 
 if LoadDict is None:
     print('++ ERROR: Node and Load Data not available!')
@@ -298,6 +238,8 @@ for Segment in LoadDict['Segments']:
         StatisticsDict['Segments'][Segment] = LoadDict['Segments'][Segment]
     elif LoadDict['Segments'][Segment] > StatisticsDict['Segments'][Segment]:
         StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 3 + LoadDict['Segments'][Segment]) / 4 + 0.5)
+    else:
+        StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 143 + LoadDict['Segments'][Segment]) / 144 + 0.5)
 
 print('Total Segment Load =',TotalLoad)
 
@@ -305,15 +247,14 @@ print('Total Segment Load =',TotalLoad)
 #---------- Regions ----------
 TotalLoad  = 0
 for Region in LoadDict['Regions']:
-    if PlzTemplate.match(Region):
-        print('++ Bad Region:',Region)
-    else:
-        TotalLoad += LoadDict['Regions'][Region]
+    TotalLoad += LoadDict['Regions'][Region]
 
-        if Region not in StatisticsDict['Regions']:
-            StatisticsDict['Regions'][Region] = LoadDict['Regions'][Region]
-        elif LoadDict['Regions'][Region] > StatisticsDict['Regions'][Region]:
-            StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 3 + LoadDict['Regions'][Region]) / 4 + 0.5)
+    if Region not in StatisticsDict['Regions']:
+        StatisticsDict['Regions'][Region] = LoadDict['Regions'][Region]
+    elif LoadDict['Regions'][Region] > StatisticsDict['Regions'][Region]:
+        StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 3 + LoadDict['Regions'][Region]) / 4 + 0.5)
+    else:
+        StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 143 + LoadDict['Regions'][Region]) / 144 + 0.5)
 
 print('Total Region Load  =',TotalLoad)
 
@@ -328,6 +269,8 @@ for ZipCode in LoadDict['ZipAreas']:
         StatisticsDict['ZipAreas'][ZipCode] = LoadDict['ZipAreas'][ZipCode]
     elif LoadDict['ZipAreas'][ZipCode] > StatisticsDict['ZipAreas'][ZipCode]:
         StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 3 + LoadDict['ZipAreas'][ZipCode]) / 4 + 0.5)
+    else:
+        StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 143 + LoadDict['ZipAreas'][ZipCode]) / 144 + 0.5)
 
 print('Total ZipArea Load =',TotalLoad)
 
