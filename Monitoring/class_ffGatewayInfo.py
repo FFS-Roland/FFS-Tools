@@ -75,7 +75,7 @@ FreifunkRootDomain  = 'freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw01n01','gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -87,6 +87,8 @@ GwSegGroupTemplate  = re.compile('^gw[0-6][0-9](s[0-9]{2})?$')
 GwInstanceTemplate  = re.compile('^gw[0-6][0-9](n[0-9]{2})?$')
 GwSegmentTemplate   = re.compile('^gw[0-6][0-9](n[0-9]{2})?(s[0-9]{2})$')
 GwMacTemplate       = re.compile('^02:00:3[1-9](:[0-9]{2}){3}')
+
+MonitorMacTemplate  = re.compile('^02:00:3[1-9]:[0-9]{2}:ff:[0-9]{2}')
 
 MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
@@ -681,6 +683,7 @@ class ffGatewayInfo:
                         elif not LowerCharLine.startswith('#') and LowerCharLine != '':
                             self.__alert('!! Invalid Entry in Key File: '+KeyFilePath+' -> '+DataLine)
 
+
                     if PeerMAC is None or PeerKey is None:
                         self.__alert('!! Invalid Key File: '+KeyFilePath)
                     else:
@@ -695,7 +698,7 @@ class ffGatewayInfo:
                                 'PeerMAC'  : PeerMAC,
                                 'PeerName' : PeerName,
                                 'PeerKey'  : PeerKey,
-                                'VpnMAC'   : '',
+                                'VpnMAC'   : None,
                                 'Timestamp': 0,
                                 'DnsSeg'   : None
                             }
@@ -741,7 +744,7 @@ class ffGatewayInfo:
 
                         else:   # Key and Filename found in Git
                             for PeerVpnMAC in FastdPeersDict[PeerKey]['connection']['mac_addresses']:
-                                if PeerVpnMAC != '' and not GwMacTemplate.match(PeerVpnMAC):
+                                if MacAdrTemplate.match(PeerVpnMAC) and not GwMacTemplate.match(PeerVpnMAC) and not MonitorMacTemplate.match(PeerVpnMAC):
                                     ActiveKeyCount += 1
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['VpnMAC'] = PeerVpnMAC
                                     self.FastdKeyDict[FastdPeersDict[PeerKey]['name']]['Timestamp'] = HttpTime

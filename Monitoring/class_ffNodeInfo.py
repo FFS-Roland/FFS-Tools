@@ -94,8 +94,8 @@ ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttember
 ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
 
 GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
-GwMacTemplate     = re.compile('^02:00:(3[1-9])(:[0-9a-f]{2}){3}')
-GwIdTemplate      = re.compile('^0200(3[1-9])([0-9a-f]{2}){3}')
+GwMacTemplate     = re.compile('^02:00:(3[1-9])(:[0-9]{2}){3}')
+GwIdTemplate      = re.compile('^0200(3[1-9])([0-9]{2}){3}')
 
 MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
 McastMacTemplate  = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})')
@@ -1025,7 +1025,7 @@ class ffNodeInfo:
     #=========================================================================
     # Method "AddFastdInfo"
     #
-    #   Add fastd-Infos for Nodes { 'KeyDir','SegMode','VpnMAC','PeerMAC','PeerName','PeerKey' }
+    #   Add fastd-Infos for Nodes { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC' }
     #
     #=========================================================================
     def AddFastdInfos(self,FastdKeyDict):
@@ -1041,14 +1041,23 @@ class ffNodeInfo:
 
             if not MacAdrTemplate.match(ffNodeMAC):
                 print('!! Bad PeerMAC: %s' % (ffNodeMAC))
-            elif ffNodeMAC in self.ffNodeDict:
+                continue
+
+            if ffMeshMAC is not None:
+                if ffMeshMAC in self.MAC2NodeIDDict:
+                    if ffNodeMAC != self.MAC2NodeIDDict[ffMeshMAC]:
+                        print('++ Node Info Mismatch: %s - %s / %s -> %s = \'%s\'' %
+                             (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,self.MAC2NodeIDDict[ffMeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[ffMeshMAC]]['Name']))
+                        ffNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
+
+            if ffNodeMAC in self.ffNodeDict:
                 self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
                 self.ffNodeDict[ffNodeMAC]['KeyDir']   = FastdKeyInfo['KeyDir']
                 self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
                 self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
                 addedInfos += 1
 
-                if MacAdrTemplate.match(ffMeshMAC):   # Node has VPN-Connection to Gateway ...
+                if ffMeshMAC is not None:   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
@@ -1074,13 +1083,8 @@ class ffNodeInfo:
                 elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
-            elif MacAdrTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC):   # unknown Node ...
-                if ffMeshMAC in self.MAC2NodeIDDict:
-                    print('++ Node Info Mismatch: %s / %s -> %s = \'%s\'' %
-                             (ffNodeMAC,ffMeshMAC,self.MAC2NodeIDDict[ffMeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[ffMeshMAC]]['Name']))
-                    self.ffNodeDict[self.MAC2NodeIDDict[MeshMAC]]['Status'] = NODESTATE_ONLINE_VPN
-                else:
-                    print('++ Unknown Node with VPN: %s / %s = \'%s\'' % (ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
+            elif ffMeshMAC is not None:
+                print('++ Unknown Node with VPN: %s - %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
