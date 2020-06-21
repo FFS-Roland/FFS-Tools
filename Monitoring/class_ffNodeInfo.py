@@ -91,26 +91,25 @@ Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenS
 ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 
-ffsIPv6Template   = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
+ffsIPv6Template     = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
 
-GwNameTemplate    = re.compile('^gw[01][0-9]{1,2}')
-GwMacTemplate     = re.compile('^02:00:(3[1-9])(:[0-9]{2}){3}')
-GwIdTemplate      = re.compile('^0200(3[1-9])([0-9]{2}){3}')
+GwMacTemplate       = re.compile('^02:00:(3[1-9])(:[0-9]{2}){3}')
+GwIdTemplate        = re.compile('^0200(3[1-9])([0-9]{2}){3}')
 
-MacAdrTemplate    = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
-McastMacTemplate  = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})')
-NodeIdTemplate    = re.compile('^[0-9a-f]{12}$')
+MacAdrTemplate      = re.compile('^([0-9a-f]{2}:){5}[0-9a-f]{2}$')
+McastMacTemplate    = re.compile('^(00(:00){5})|(ff(:ff){5})|(33:33(:[0-9a-f]{2}){4})|(01:00:5e:[0-7][0-9a-f](:[0-9a-f]{2}){2})')
+MonitorMacTemplate  = re.compile('^02:00:3[1-9]:[0-9]{2}:ff:[0-9]{2}')
 
-PeerTemplate      = re.compile('^ffs-[0-9a-f]{12}')
-PeerTemplate1     = re.compile('^ffs[-_][0-9a-f]{12}')
-PeerTemplate2     = re.compile('^ffs[0-9a-f]{12}')
+NodeIdTemplate      = re.compile('^[0-9a-f]{12}$')
 
-ZipTemplate       = re.compile('^[0-9]{5}$')
-SegmentTemplate   = re.compile('^[0-9]{2}$')
+PeerTemplate        = re.compile('^ffs-[0-9a-f]{12}')
 
-KeyDirTemplate    = re.compile('^vpn[0-9]{2}$')
-FastdKeyTemplate  = re.compile('^[0-9a-f]{64}$')
-BadNameTemplate   = re.compile('.*[|/\\<>]+.*')
+ZipTemplate         = re.compile('^[0-9]{5}$')
+SegmentTemplate     = re.compile('^[0-9]{2}$')
+
+KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
+FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
+BadNameTemplate     = re.compile('.*[|/\\<>]+.*')
 
 NODETYPE_UNKNOWN       = 0
 NODETYPE_LEGACY        = 1
@@ -964,7 +963,7 @@ class ffNodeInfo:
 
                                         if self.__ProcessResponddData(ResponddDict,UnixTime,None):
                                             self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                            print('    >> New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            print('    ** New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                         else:
                                             print('       ... Node ignored: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
@@ -1039,10 +1038,6 @@ class ffNodeInfo:
             ffNodeMAC = FastdKeyInfo['PeerMAC']
             ffMeshMAC = FastdKeyInfo['VpnMAC']
 
-            if not MacAdrTemplate.match(ffNodeMAC):
-                print('!! Bad PeerMAC: %s' % (ffNodeMAC))
-                continue
-
             if ffMeshMAC is not None:
                 if ffMeshMAC in self.MAC2NodeIDDict:
                     if ffNodeMAC != self.MAC2NodeIDDict[ffMeshMAC]:
@@ -1083,7 +1078,7 @@ class ffNodeInfo:
                 elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
-            elif ffMeshMAC is not None:
+            elif ffMeshMAC is not None and not MonitorMacTemplate.match(ffNodeMAC):
                 print('++ Unknown Node with VPN: %s - %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
@@ -1162,7 +1157,7 @@ class ffNodeInfo:
                                 GpsSegment = ZipSegment
 #                                print('>>> Segment set by ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode,'->',lon,'|',lat,'->',GpsSegment)
                             elif ZipSegment != GpsSegment:
-                                print('!! Segment Mismatch GPS <> ZIP:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment,'<>',ZipSegment)
+                                print('!!!! Segment Mismatch GPS <> ZIP:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment,'<>',ZipSegment)
 
                         if GpsZipCode is not None and ZipCode != GpsZipCode:
                             print('>>> ZIP-Code Mismatch GPS <> ZIP: %s = \'%s\' -> %s <> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsZipCode,ZipCode))
