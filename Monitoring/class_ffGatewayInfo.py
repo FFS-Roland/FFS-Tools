@@ -74,7 +74,7 @@ FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw01n01','gw04n03','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -95,6 +95,7 @@ SegmentTemplate     = re.compile('^[0-9]{2}$')
 KeyDirTemplate      = re.compile('^vpn[0-9]{2}$')
 
 FastdKeyTemplate    = re.compile('^[0-9a-f]{64}$')
+FastdFileTemplate   = re.compile('^vp.[0-6][0-9]\.json$')
 
 
 
@@ -152,6 +153,7 @@ class ffGatewayInfo:
         return
 
 
+
     #=======================================================================
     # private function "__GitPullPeersFFS
     #
@@ -189,6 +191,7 @@ class ffGatewayInfo:
         return
 
 
+
     #=======================================================================
     # private function "__GetGatewaysFromGit"
     #
@@ -222,7 +225,6 @@ class ffGatewayInfo:
 
         print('... done.\n')
         return
-
 
 
 
@@ -807,6 +809,44 @@ class ffGatewayInfo:
 
 
 
+    #-----------------------------------------------------------------------
+    # private function "__GetFastdStatusFileList"
+    #
+    #   Get List of fastd-status.json files on Gateway
+    #
+    #-----------------------------------------------------------------------
+    def __GetFastdStatusFileList(self,URL,ffSeg):
+
+        FileList = None
+        Retries  = 5
+
+        while Retries > 0:
+            Retries -= 1
+
+            try:
+                FastdHTTPlist = urllib.request.urlopen(URL,timeout=1)
+                HttpData = FastdHTTPlist.read().decode('utf-8')
+                FastdHTTPlist.close()
+            except:
+                print('** need retry ...')
+                HttpData = None
+                time.sleep(2)
+            else:
+                Retries = 0
+
+        if HttpData is not None:
+            FileList = []
+            InfoBlock = HttpData.split('\"')
+
+            for info in InfoBlock:
+                if FastdFileTemplate.match(info):
+                    if int(info[3:5]) == ffSeg:
+                        FileList.append(info)
+
+        return FileList
+
+
+
     #==========================================================================
     # private function "__LoadFastdStatusInfos"
     #
@@ -827,24 +867,17 @@ class ffGatewayInfo:
             if GwName not in GwIgnoreList and GwName not in ['gw01n03','gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
-                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-#                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( ffSeg, int(GwName[2:4])*100 + int(GwName[6:8]) )
+                        GwDataURL = 'http://10.%d.%d.%d/data/' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                        FileList = self.__GetFastdStatusFileList(GwDataURL,ffSeg)
 
-                        #----- MTU 1340 -----
-                        FastdJsonURL = 'http://%s/data/vpy%02d.json' % (InternalGwIPv4,ffSeg)
-#                        FastdJsonURL = 'http://[%s]/data/vpy%02d.json' % (InternalGwIPv6,ffSeg)
+                        if FileList is None:
+                            print('... %s / Seg.%02d -> ERROR' % (GwName,ffSeg))
+                        else:
+                            for JsonFile in FileList:
+                                ActiveConnections = self.__LoadFastdStatusFile(GwDataURL+JsonFile,ffSeg)
 
-                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                        if ActiveConnections is not None:
-                            print('... %ss%02d = %d' % (GwName,ffSeg,ActiveConnections))
-
-                        #----- MTU 1406 -----
-                        FastdJsonURL = 'http://%s/data/vpn%02d.json' % (InternalGwIPv4,ffSeg)
-#                        FastdJsonURL = 'http://[%s]/data/vpn%02d.json' % (InternalGwIPv6,ffSeg)
-
-                        ActiveConnections = self.__LoadFastdStatusFile(FastdJsonURL,ffSeg)
-                        if ActiveConnections is not None and ActiveConnections != 0:
-                            print('... %ss%02d (MTU 1406) = %d' % (GwName,ffSeg,ActiveConnections))
+                                if ActiveConnections is not None and ActiveConnections != 0:
+                                    print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
 
             else:
                 print('\n... %s ... ignored.' % (GwName))
@@ -852,7 +885,6 @@ class ffGatewayInfo:
         print('\n... done.')
         print('-------------------------------------------------------')
         return
-
 
 
 
