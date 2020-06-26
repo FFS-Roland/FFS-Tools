@@ -60,6 +60,8 @@ from dns.rdatatype import *
 
 from glob import glob
 
+from class_ffDHCP import *
+
 
 
 #-------------------------------------------------------------
@@ -132,6 +134,7 @@ class ffGatewayInfo:
         self.__GetGatewaysFromBatman()
 
         self.__CheckGatewayDnsServer()
+        self.__CheckGatewayDhcpServer()
 
         self.__LoadNodeKeysFromGit()
         self.__LoadFastdStatusInfos()
@@ -619,10 +622,43 @@ class ffGatewayInfo:
 
                                     if DnsResult is None:
                                         self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
-#                                        print('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
 
         print('... done.\n')
         return
+
+
+
+    #==========================================================================
+    # private function "__CheckGatewayDhcpServer"
+    #
+    #
+    #--------------------------------------------------------------------------
+    def __CheckGatewayDhcpServer(self):
+
+        print('\nChecking DHCP-Server on Gateways ...')
+
+        ffDhcpClient = DHCPClient()
+
+        for Segment in sorted(self.__SegmentDict.keys()):
+            if Segment > 0:
+                print('... Segment %02d' % (Segment))
+
+                for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
+                    if len(GwName) == 7 and GwName not in GwIgnoreList:
+                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                        DhcpResult = None
+                        Retries = 3
+
+                        while DhcpResult is None and Retries > 0:
+                            DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
+                            Retries = Retries - 1
+
+                        if DhcpResult is None:
+                            self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+
+        print('... done.\n')
+        return
+
 
 
 
@@ -864,7 +900,7 @@ class ffGatewayInfo:
         for GwName in sorted(self.__GatewayDict):
             if len(self.__GatewayDict[GwName]['BatmanSegments']) > 0 : print()
 
-            if GwName not in GwIgnoreList and GwName not in ['gw01n03','gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
+            if GwName not in GwIgnoreList and GwName not in ['gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     if ffSeg > 0:
                         GwDataURL = 'http://10.%d.%d.%d/data/' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
