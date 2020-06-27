@@ -22,6 +22,7 @@ pip3 install gitpython
 pip3 install dnspython
 pip3 install psutil
 pip3 install shapely
+pip3 install scapy
 
 if [ $(grep -c "batman_adv" /etc/modules) = 0 ]; then
   echo batman_adv >>/etc/modules
