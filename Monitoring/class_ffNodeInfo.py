@@ -400,8 +400,10 @@ class ffNodeInfo:
                         'KeyDir': '',
                         'KeyFile': '',
                         'FastdKey': '',
+                        'FastdGW': None,
                         'InCloud': None,
                         'Neighbours': [],
+                        'AutoUpdate': None,
                         'Owner': jsonNodeDict[ffNodeMAC]['Owner'],
                         'Source': 'DB'
                     }
@@ -413,6 +415,9 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
                     else:
                         self.ffNodeDict[ffNodeMAC]['Neighbours'] = jsonNodeDict[ffNodeMAC]['Neighbours']
+
+                    if 'AutoUpdate' in jsonNodeDict[ffNodeMAC]:
+                        self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = jsonNodeDict[ffNodeMAC]['AutoUpdate']
 
         print('... %d Nodes done.\n' % (NodeCount))
         return NodeCount
@@ -529,9 +534,11 @@ class ffNodeInfo:
                 'SegMode': 'auto',
                 'KeyDir': '',
                 'KeyFile': '',
+                'FastdGW': None,
                 'FastdKey': '',
                 'InCloud': None,
                 'Neighbours': [],
+                'AutoUpdate': None,
                 'Owner': None,
                 'Source': None
             }
@@ -586,6 +593,11 @@ class ffNodeInfo:
             for MeshMAC in NodeDict['nodeinfo']['network']['mesh_interfaces']:
                 self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
+        if 'autoupdater' in NodeDict['nodeinfo']['software']:
+            if 'branch' in NodeDict['nodeinfo']['software']['autoupdater'] and 'enabled' in NodeDict['nodeinfo']['software']['autoupdater']:
+                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = NodeDict['nodeinfo']['software']['autoupdater']['branch']
+            else:
+                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '---'
 
         if (UnixTime - LastSeen) <= MaxOfflineTime:
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
@@ -1055,6 +1067,7 @@ class ffNodeInfo:
                 if ffMeshMAC is not None:   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                    self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
 
                     if FastdKeyInfo['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
                         self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN

@@ -76,7 +76,7 @@ FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09','gw09n02']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -744,6 +744,7 @@ class ffGatewayInfo:
                                 'PeerName' : PeerName,
                                 'PeerKey'  : PeerKey,
                                 'VpnMAC'   : None,
+                                'VpnGW'    : None,
                                 'Timestamp': 0,
                                 'DnsSeg'   : None
                             }
@@ -769,7 +770,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __AnalyseFastdStatus(self,FastdPeersDict,Segment,HttpTime):
+    def __AnalyseFastdStatus(self,FastdPeersDict,GwName,Segment,HttpTime):
 
         ActiveKeyCount = 0
 
@@ -786,6 +787,7 @@ class ffGatewayInfo:
                         if MacAdrTemplate.match(PeerVpnMAC) and not GwMacTemplate.match(PeerVpnMAC):
                             ActiveKeyCount += 1
                             self.FastdKeyDict[KeyFileName]['VpnMAC'] = PeerVpnMAC
+                            self.FastdKeyDict[KeyFileName]['VpnGW']  = GwName
                             self.FastdKeyDict[KeyFileName]['Timestamp'] = HttpTime
 
                 else:
@@ -804,7 +806,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __LoadFastdStatusFile(self,URL,Segment):
+    def __LoadFastdStatusFile(self,GwName,URL,Segment):
 
         ActiveConnections = 0
         jsonFastdDict = None
@@ -835,7 +837,7 @@ class ffGatewayInfo:
                         print('!! Bad Interface in fastd status file: %s = %s -> %02d' % (URL,jsonFastdDict['interface'],Segment))
                         return None
 
-                ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],Segment,HttpTime)
+                ActiveConnections = self.__AnalyseFastdStatus(jsonFastdDict['peers'],GwName,Segment,HttpTime)
             else:
                 print('!! Bad fastd status file! %s' % (URL))
         else:
@@ -910,7 +912,7 @@ class ffGatewayInfo:
                             print('... %s / Seg.%02d -> ERROR' % (GwName,ffSeg))
                         else:
                             for JsonFile in FileList:
-                                ActiveConnections = self.__LoadFastdStatusFile(GwDataURL+JsonFile,ffSeg)
+                                ActiveConnections = self.__LoadFastdStatusFile(GwName,GwDataURL+JsonFile,ffSeg)
 
                                 if ActiveConnections is not None and ActiveConnections != 0:
                                     print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
