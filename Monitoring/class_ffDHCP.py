@@ -69,7 +69,7 @@ from scapy.all import (
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
-SNIFF_TIMEOUT = 3		# int: seconds to wait for a reply from server
+SNIFF_TIMEOUT = 2		# int: seconds to wait for a reply from server
 
 
 
