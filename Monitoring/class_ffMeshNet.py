@@ -58,25 +58,10 @@ StatFileName   = 'SegStatistics.json'
 
 MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
 
-GwAllMacTemplate  = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
-
-NODETYPE_UNKNOWN       = 0
-NODETYPE_LEGACY        = 1
-NODETYPE_SEGMENT_LIST  = 2
-NODETYPE_DNS_SEGASSIGN = 3
-NODETYPE_MTU_1340      = 4
-
-NODESTATE_UNKNOWN      = '?'
-NODESTATE_OFFLINE      = '#'
-NODESTATE_ONLINE_MESH  = ' '
-NODESTATE_ONLINE_VPN   = 'V'
-
 NODEWEIGHT_OFFLINE     = 1
 NODEWEIGHT_MESH_ONLY   = 3
 NODEWEIGHT_UPLINK      = 1000
 NODEWEIGHT_SEGMENT_FIX = 1000000
-
-CPE_TEMP_SEGMENT       = 23
 
 
 
@@ -112,72 +97,6 @@ class ffMeshNet:
 
         self.Alerts.append(Message)
         print(Message)
-        return
-
-
-
-    #==============================================================================
-    # Method "CheckConsistency"
-    #
-    #
-    #==============================================================================
-    def CheckConsistency(self,SegmentList,FastdKeyDict):
-
-        print('Checking Consistency of Data ...')
-
-        for ffNodeMAC in self.__NodeDict.keys():
-            if self.__NodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
-
-                if (self.__NodeDict[ffNodeMAC]['Hardware'].lower().startswith('tp-link cpe') and
-                    (self.__NodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MTU_1340 or self.__NodeDict[ffNodeMAC]['Firmware'][:14] < '1.4+2018-06-24')):
-                    print('++ Old CPE found: %s %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-                    self.__NodeDict[ffNodeMAC]['DestSeg'] = CPE_TEMP_SEGMENT
-                    self.__NodeDict[ffNodeMAC]['SegMode'] = 'fix %02d' % (CPE_TEMP_SEGMENT)
-
-                if self.__NodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
-                    if self.__NodeDict[ffNodeMAC]['KeyDir'] == '':
-                        print('!! Uplink w/o Key: %s %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-                        self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                    elif self.__NodeDict[ffNodeMAC]['Segment'] != int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:]):
-                        print('!! Segment <> KeyDir: %s %s = \'%s\': Seg.%02d <> %s' % (
-                            self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name'],
-                            self.__NodeDict[ffNodeMAC]['Segment'],self.__NodeDict[ffNodeMAC]['KeyDir']))
-                else:
-                    for NeighbourMAC in self.__NodeDict[ffNodeMAC]['Neighbours']:
-                        if GwAllMacTemplate.match(NeighbourMAC):
-                            print('!! GW-Connection w/o Uplink: %s %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-
-                if self.__NodeDict[ffNodeMAC]['DestSeg'] is not None:
-                    if (self.__NodeDict[ffNodeMAC]['KeyDir'] != ''
-                    and self.__NodeDict[ffNodeMAC]['DestSeg'] != int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:])
-                    and self.__NodeDict[ffNodeMAC]['SegMode'] == 'auto'):
-                        print('++ Wrong Segment:   %s %s = \'%s\': %02d -> %02d %s' % (
-                            self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name'],int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:]),
-                            self.__NodeDict[ffNodeMAC]['DestSeg'],self.__NodeDict[ffNodeMAC]['SegMode']))
-
-                    if self.__NodeDict[ffNodeMAC]['DestSeg'] > 8 and self.__NodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
-                        print('!! Invalid Segment for Gluon-Type %d: >%s< %s = \'%s\' -> Seg. %02d' % (
-                            self.__NodeDict[ffNodeMAC]['GluonType'],self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name'],
-                            self.__NodeDict[ffNodeMAC]['DestSeg']))
-                    elif self.__NodeDict[ffNodeMAC]['DestSeg'] == 0:
-                        print('!! Legacy Node found: %s %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-                        self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
-
-                if self.__NodeDict[ffNodeMAC]['KeyFile'] != '':
-                    if self.__NodeDict[ffNodeMAC]['Name'].strip().lower() != FastdKeyDict[self.__NodeDict[ffNodeMAC]['KeyFile']]['PeerName'].strip().lower():
-                        print('++ Hostname Mismatch:  %s = \'%s\' <- \'%s\'' % (
-                            self.__NodeDict[ffNodeMAC]['KeyFile'],self.__NodeDict[ffNodeMAC]['Name'],
-                            FastdKeyDict[self.__NodeDict[ffNodeMAC]['KeyFile']]['PeerName']))
-
-                if self.__NodeDict[ffNodeMAC]['Status'] in [ NODESTATE_ONLINE_MESH, NODESTATE_ONLINE_VPN ]:
-                    if self.__NodeDict[ffNodeMAC]['Segment'] is None:
-                        print('!! Segment is None: %s %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-                        self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
-                    elif self.__NodeDict[ffNodeMAC]['Segment'] not in SegmentList:
-                        print('>>> Bad Segment:   %s %s = \'%s\' in Seg.%02d' % (self.__NodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Segment']))
-                        self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
-
-        print('... done.\n')
         return
 
 
@@ -230,7 +149,7 @@ class ffMeshNet:
 
 
     #==============================================================================
-    # Method "CreateMeshCloudList"
+    # public function "CreateMeshCloudList"
     #
     #   Create Mesh-Cloud-List
     #
@@ -495,7 +414,7 @@ class ffMeshNet:
 
 
     #==============================================================================
-    # Method "CheckNodeConnections"
+    # public function "CheckNodeConnections"
     #
     #
     #==============================================================================
@@ -508,7 +427,7 @@ class ffMeshNet:
 
 
     #==============================================================================
-    # Method "GetMoveDict"
+    # public function "GetMoveDict"
     #
     #   returns NodeMoveDict if there are nodes to be moved
     #
@@ -548,7 +467,7 @@ class ffMeshNet:
 
 
     #==============================================================================
-    # Method "WriteMeshCloudList"
+    # public function "WriteMeshCloudList"
     #
     #   Write out Mesh Cloud List
     #==============================================================================

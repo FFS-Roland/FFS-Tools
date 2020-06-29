@@ -223,7 +223,7 @@ class DHCPClient:
 
 
     #==============================================================================
-    # Method "is_matching_reply"
+    # public fuction "is_matching_reply"
     #
     #     Called for each packet captured by sniffer.
     #
@@ -240,7 +240,7 @@ class DHCPClient:
 
 
     #==============================================================================
-    # Method "sniffer_thread"
+    # public function "sniffer_thread"
     #
     #     Starts scapy sniffer and stops when a timeout is reached or a valid packet
     #     is received.
@@ -283,7 +283,7 @@ class DHCPClient:
 
 
     #==============================================================================
-    # Method "LocationDataOK"
+    # public function "LocationDataOK"
     #
     #     Check for available Location Data
     #

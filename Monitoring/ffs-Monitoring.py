@@ -150,14 +150,15 @@ ffsGWs.CheckGatewayDnsServer()
 ffsGWs.CheckGatewayDhcpServer()
 
 GwSegmentList = ffsGWs.GetSegmentList()
-GwFastdInfos  = ffsGWs.GetFastdInfo()
+GwUplinkInfos = ffsGWs.GetNodeUplinkInfos()
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
 
-ffsNodes.GetBatmanNodeMACs(GwSegmentList)
-ffsNodes.AddFastdInfos(GwFastdInfos)
+ffsNodes.AddUplinkInfos(GwUplinkInfos)
+ffsNodes.CheckConsistency(GwSegmentList)
+
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
 if not ffsNodes.SetDesiredSegments():
@@ -168,7 +169,6 @@ if not ffsNodes.SetDesiredSegments():
 print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
 ffsNet = ffMeshNet(ffsNodes)
 
-ffsNet.CheckConsistency(GwSegmentList,GwFastdInfos)
 ffsNet.CreateMeshCloudList()
 ffsNet.CheckNodeConnections()
 

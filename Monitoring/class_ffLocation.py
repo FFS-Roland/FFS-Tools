@@ -339,7 +339,7 @@ class ffLocation:
 
 
     #==============================================================================
-    # Method "LocationDataOK"
+    # public function "LocationDataOK"
     #
     #     Check for available Location Data
     #
@@ -352,7 +352,7 @@ class ffLocation:
 
 
     #==============================================================================
-    # Method "GetLocationDataFromGPS"
+    # public function "GetLocationDataFromGPS"
     #
     #     Get Location-Data from GPS using area polygons
     #
@@ -408,7 +408,7 @@ class ffLocation:
 
 
     #==============================================================================
-    # Method "GetLocationDataFromZIP"
+    # public function "GetLocationDataFromZIP"
     #
     #     Get Location-Data from ZIP using area polygons
     #

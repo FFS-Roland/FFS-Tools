@@ -68,6 +68,9 @@ from class_ffDHCP import *
 # Global Constants
 #-------------------------------------------------------------
 
+DNS_RETRIES         = 3
+DHCP_RETRIES        = 5
+
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
 MinGatewayCount     = 1              # minimum number of Gateways per Segment
 
@@ -151,7 +154,7 @@ class ffGatewayInfo:
 
 
     #=======================================================================
-    # private function "__GitPullPeersFFS
+    # private init function "__GitPullPeersFFS"
     #
     #   Git Pull on Repository "peers-ffs"
     #
@@ -189,7 +192,7 @@ class ffGatewayInfo:
 
 
     #=======================================================================
-    # private function "__GetGatewaysFromGit"
+    # private init function "__GetGatewaysFromGit"
     #
     #   Load and analyse Gateway-Files from Git
     #
@@ -209,7 +212,12 @@ class ffGatewayInfo:
                 continue
 
             if Segment not in self.__SegmentDict:
-                self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
+                self.__SegmentDict[Segment] = {
+                    'GwGitNames':[],
+                    'GwDnsNames':[],
+                    'GwBatNames':[],
+                    'GwIPs':[]
+                }
 
             if GwSegmentTemplate.match(FileName):
                 if int(FileName.split('s')[1]) == Segment:
@@ -366,7 +374,7 @@ class ffGatewayInfo:
 
 
     #==========================================================================
-    # private function "__GetGatewaysFromDNS"
+    # private init function "__GetGatewaysFromDNS"
     #
     #   Result = __GatewayDict[GwInstanceName] -> IPs and Segments for the GW
     #
@@ -403,7 +411,13 @@ class ffGatewayInfo:
 
                     if Segment not in self.__SegmentDict:
                         print('!! Segment in DNS but not in Git: %s' % (GwName))
-                        self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwIPs':[], 'GwBatNames':[] }
+
+                        self.__SegmentDict[Segment] = {
+                            'GwGitNames':[],
+                            'GwDnsNames':[],
+                            'GwBatNames':[],
+                            'GwIPs':[]
+                        }
 
                     self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(FreifunkGwDomain,node.rdatasets)
 
@@ -524,7 +538,7 @@ class ffGatewayInfo:
 
 
     #==========================================================================
-    # private function "__GetGatewaysFromBatman"
+    # private init function "__GetGatewaysFromBatman"
     #
     #   Result = __GatewayDict[GwInstanceName] -> IPs and Segments for the GW
     #
@@ -567,8 +581,9 @@ class ffGatewayInfo:
         return
 
 
+
     #==============================================================================
-    # Method "CheckGatewayDnsServer"
+    # public function "CheckGatewayDnsServer"
     #
     #
     #==============================================================================
@@ -601,7 +616,7 @@ class ffGatewayInfo:
 
 #                                for DnsType in ['A','AAAA']:
                                 for DnsType in ['A']:
-                                    for i in range(3):
+                                    for i in range(DNS_RETRIES):
                                         try:
                                             DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
                                         except:
@@ -619,7 +634,7 @@ class ffGatewayInfo:
 
 
     #==============================================================================
-    # Methode "CheckGatewayDhcpServer"
+    # public function "CheckGatewayDhcpServer"
     #
     #
     #==============================================================================
@@ -637,7 +652,7 @@ class ffGatewayInfo:
                     if len(GwName) == 7 and GwName not in GwIgnoreList:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                         DhcpResult = None
-                        Retries = 3
+                        Retries = DHCP_RETRIES
 
                         while DhcpResult is None and Retries > 0:
                             DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
@@ -677,8 +692,14 @@ class ffGatewayInfo:
                 continue
 
             if Segment not in self.__SegmentDict:
-                self.__SegmentDict[Segment] = { 'GwGitNames':[], 'GwDnsNames':[], 'GwBatNames':[], 'GwIPs':[] }
                 print('!! Segment without Gateway: %0d' % (Segment))
+
+                self.__SegmentDict[Segment] = {
+                    'GwGitNames':[],
+                    'GwDnsNames':[],
+                    'GwBatNames':[],
+                    'GwIPs':[]
+                }
 
             if PeerTemplate.match(FileName):
                 with open(KeyFilePath,'r') as KeyFile:
@@ -875,7 +896,7 @@ class ffGatewayInfo:
 
 
 
-    #==========================================================================
+    #--------------------------------------------------------------------------
     # private function "__LoadFastdStatusInfos"
     #
     #   Load and analyse fastd-status.json
@@ -1051,12 +1072,12 @@ class ffGatewayInfo:
 
 
     #=========================================================================
-    # Method "GetFastdInfo"
+    # public function "GetNodeUplinkInfos"
     #
     #   Returns Dictionary with fastd-Infos
     #
     #=========================================================================
-    def GetFastdInfo(self):
+    def GetNodeUplinkInfos(self):
 
         self.__LoadNodeKeysFromGit()
         self.__LoadFastdStatusInfos()
@@ -1067,7 +1088,7 @@ class ffGatewayInfo:
 
 
     #=========================================================================
-    # Method "GetSegmentList"
+    # public function "GetSegmentList"
     #
     #   Returns List of Segments
     #
@@ -1085,7 +1106,7 @@ class ffGatewayInfo:
 
 
     #==============================================================================
-    # Method "MoveNodes"
+    # public function "MoveNodes"
     #
     #   Moving Nodes in GIT and DNS
     #==============================================================================
