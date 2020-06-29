@@ -146,12 +146,18 @@ if AccountsDict is None:
 print('====================================================================================\n\nSetting up Gateway Data ...\n')
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
+ffsGWs.CheckGatewayDnsServer()
+ffsGWs.CheckGatewayDhcpServer()
+
+GwSegmentList = ffsGWs.GetSegmentList()
+GwFastdInfos  = ffsGWs.GetFastdInfo()
+
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
 ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
 
-ffsNodes.GetBatmanNodeMACs(ffsGWs.GetSegmentList())
-ffsNodes.AddFastdInfos(ffsGWs.FastdKeyDict)
+ffsNodes.GetBatmanNodeMACs(GwSegmentList)
+ffsNodes.AddFastdInfos(GwFastdInfos)
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
 if not ffsNodes.SetDesiredSegments():
@@ -160,8 +166,11 @@ if not ffsNodes.SetDesiredSegments():
 
 
 print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
+ffsNet = ffMeshNet(ffsNodes)
 
-ffsNet = ffMeshNet(ffsNodes,ffsGWs)    # Find Mesh-Clouds with analysing for shortcuts
+ffsNet.CheckConsistency(GwSegmentList,GwFastdInfos)
+ffsNet.CreateMeshCloudList()
+ffsNet.CheckNodeConnections()
 
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 
