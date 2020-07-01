@@ -79,7 +79,7 @@ FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09','gw09n02']
+GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09']
 
 DnsTestTarget       = 'www.google.de'
 
@@ -404,7 +404,7 @@ class ffGatewayInfo:
                     if len(GwName) == 7:
                         Segment = int(GwName[5:])
                     else:
-                        Segment = 0    # legacy names -> will be used for onboarding
+                        Segment = 99    # legacy names are used for onboarding
 
                     if Segment == 0 or Segment > 64:
                         continue    # >>> Onboarder or Quarantine
@@ -475,7 +475,7 @@ class ffGatewayInfo:
                     else:
                         self.__alert('!! Unknown Gateway IP: %s' % (GwIP))
 
-                if Segment > 0 and len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
+                if len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
                     if len(self.__SegmentDict[Segment]['GwDnsNames']) < MinGatewayCount:
                         self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
                     else:
@@ -520,7 +520,6 @@ class ffGatewayInfo:
                     GwName = None
 
                     if GwMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
-#                        if int(GwMAC[9:11]) == Segment or GwMAC[9:11] == '61':
                         if int(GwMAC[9:11]) == Segment:
                             GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
                         else:
@@ -602,31 +601,32 @@ class ffGatewayInfo:
 
         if DnsResolver is not None:
             for Segment in sorted(self.__SegmentDict.keys()):
-                if Segment > 0:
-                    print('... Segment %02d' % (Segment))
+                print('... Segment %02d' % (Segment))
 
-                    for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                        if len(GwName) == 7 and GwName not in GwIgnoreList:
-                            InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-#                            InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
+                for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
+                    if len(GwName) == 7 and GwName not in GwIgnoreList:
+                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+#                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
-#                            for DnsServer in [InternalGwIPv4,InternalGwIPv6]:
-                            for DnsServer in [InternalGwIPv4]:
-                                DnsResolver.nameservers = [DnsServer]
+#                        for DnsServer in [InternalGwIPv4,InternalGwIPv6]:
+                        for DnsServer in [InternalGwIPv4]:
+                            DnsResolver.nameservers = [DnsServer]
 
-#                                for DnsType in ['A','AAAA']:
-                                for DnsType in ['A']:
-                                    for i in range(DNS_RETRIES):
-                                        try:
-                                            DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
-                                        except:
-                                            time.sleep(1)
-                                            DnsResult = None
-                                        else:
-                                            break
+#                            for DnsType in ['A','AAAA']:
+                            for DnsType in ['A']:
+                                DnsResult = None
+                                Retries = DNS_RETRIES
 
-                                    if DnsResult is None:
-                                        self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
+                                while DnsResult is None and Retries > 0:
+                                    Retries -= 1
+                                    try:
+                                        DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
+                                    except:
+                                        time.sleep(1)
+                                        DnsResult = None
+
+                                if DnsResult is None:
+                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
 
         print('... done.\n')
         return
@@ -645,21 +645,24 @@ class ffGatewayInfo:
         ffDhcpClient = DHCPClient()
 
         for Segment in sorted(self.__SegmentDict.keys()):
-            if Segment > 0:
-                print('... Segment %02d' % (Segment))
+            print('... Segment %02d' % (Segment))
 
-                for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                    if len(GwName) == 7 and GwName not in GwIgnoreList:
-                        InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-                        DhcpResult = None
-                        Retries = DHCP_RETRIES
+            for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
+                if len(GwName) == 7 and GwName not in GwIgnoreList:
+                    InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                    DhcpResult = None
+                    Retries = DHCP_RETRIES
 
-                        while DhcpResult is None and Retries > 0:
+                    while DhcpResult is None and Retries > 0:
+                        Retries -= 1
+                        try:
                             DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
-                            Retries = Retries - 1
+                        except:
+                            time.sleep(1)
+                            DhcpResult = None
 
-                        if DhcpResult is None:
-                            self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                    if DhcpResult is None:
+                        self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
 
         print('... done.\n')
         return
@@ -915,18 +918,19 @@ class ffGatewayInfo:
 
             if GwName not in GwIgnoreList and GwName not in ['gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
-                    if ffSeg > 0:
-                        GwDataURL = 'http://10.%d.%d.%d/data/' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-                        FileList = self.__GetFastdStatusFileList(GwDataURL,ffSeg)
+                    GwDataURL = 'http://10.%d.%d.%d/data/' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                    FileList = self.__GetFastdStatusFileList(GwDataURL,ffSeg)
 
-                        if FileList is None:
-                            print('... %s / Seg.%02d -> ERROR' % (GwName,ffSeg))
-                        else:
-                            for JsonFile in FileList:
-                                ActiveConnections = self.__LoadFastdStatusFile(GwName,GwDataURL+JsonFile,ffSeg)
+                    if FileList is None:
+                        print('... %s / Seg.%02d -> ERROR' % (GwName,ffSeg))
+                    elif len(FileList) < 1:
+                        print('... %s / Seg.%02d -> Missing File!' % (GwName,ffSeg))
+                    else:
+                        for JsonFile in FileList:
+                            ActiveConnections = self.__LoadFastdStatusFile(GwName,GwDataURL+JsonFile,ffSeg)
 
-                                if ActiveConnections is not None and ActiveConnections != 0:
-                                    print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
+                            if ActiveConnections is not None and ActiveConnections != 0:
+                                print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
 
             else:
                 print('\n... %s ... ignored.' % (GwName))
