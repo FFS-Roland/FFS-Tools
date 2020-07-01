@@ -170,32 +170,6 @@ class DHCPClient:
         return
 
 
-
-    #-------------------------------------------------------------
-    # private function "__sniff_start"
-    #
-    #     Starts listening for packets in a new thread
-    #
-    #-------------------------------------------------------------
-    def __sniff_start(self):
-
-        self.sniffer = threading.Thread(target=sniffer, args=[self])
-        self.sniffer.start()
-        return
-
-
-    #-------------------------------------------------------------
-    # private function "__sniff_stop"
-    #
-    #     Waits for sniffer thread to finish
-    #
-    #-------------------------------------------------------------
-    def __sniff_stop(self):
-
-        self.sniffer.join()
-        return
-
-
     #-------------------------------------------------------------
     # private function "__is_offer_type"
     #

@@ -917,6 +917,8 @@ class ffGatewayInfo:
             if len(self.__GatewayDict[GwName]['BatmanSegments']) > 0 : print()
 
             if GwName not in GwIgnoreList and GwName not in ['gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
+                ConnectionCount = 0
+
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
                     GwDataURL = 'http://10.%d.%d.%d/data/' % ( 190+int((ffSeg-1)/32), ((ffSeg-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                     FileList = self.__GetFastdStatusFileList(GwDataURL,ffSeg)
@@ -931,6 +933,10 @@ class ffGatewayInfo:
 
                             if ActiveConnections is not None and ActiveConnections != 0:
                                 print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
+                                ConnectionCount += 1
+
+                if ConnectionCount > 0:
+                    print('    >>>>>>> VPN-Connections: %d' % (ConnectionCount))
 
             else:
                 print('\n... %s ... ignored.' % (GwName))
