@@ -933,7 +933,7 @@ class ffGatewayInfo:
 
                             if ActiveConnections is not None and ActiveConnections != 0:
                                 print('... %s / %s = %d' % (GwName,JsonFile,ActiveConnections))
-                                ConnectionCount += 1
+                                ConnectionCount += ActiveConnections
 
                 if ConnectionCount > 0:
                     print('    >>>>>>> VPN-Connections: %d' % (ConnectionCount))

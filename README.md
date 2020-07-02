@@ -1,7 +1,7 @@
 # FFS-Tools
 Tools for managing and monitoring Freifunk-Stuttgart network
 
-* Monitoring = Analysing all data from Alfred and Respondd to get complete list of all nodes and their relation ship. This is for checking
+* Monitoring = Analysing all data from Respondd and batman-adv to get complete list of all nodes and their relationship. This is for checking
   - Availability of valid data
   - Correct Segment Assignment of the nodes to prevent "short cuts"
   - Creating statistcs data used for reports
