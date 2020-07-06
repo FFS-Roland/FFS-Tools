@@ -911,12 +911,12 @@ class ffGatewayInfo:
     def __LoadFastdStatusInfos(self):
 
         print('-------------------------------------------------------')
-        print('Loading fastd Status Infos ...')
+        print('Loading fastd Status Infos ...\n')
 
         for GwName in sorted(self.__GatewayDict):
-            if len(self.__GatewayDict[GwName]['BatmanSegments']) > 0 : print()
-
-            if GwName not in GwIgnoreList and GwName not in ['gw04n05'] and len(self.__GatewayDict[GwName]['IPs']) > 0:
+            if GwName in GwIgnoreList or GwName in ['gw04n05']:
+                print('... %s ... ignored.\n' % (GwName))
+            elif len(self.__GatewayDict[GwName]['BatmanSegments']) > 0:
                 ConnectionCount = 0
 
                 for ffSeg in sorted(self.__GatewayDict[GwName]['BatmanSegments']):
@@ -936,12 +936,11 @@ class ffGatewayInfo:
                                 ConnectionCount += ActiveConnections
 
                 if ConnectionCount > 0:
-                    print('    >>>>>>> VPN-Connections: %d' % (ConnectionCount))
+                    print('    >>>>>>> VPN-Connections: %d\n' % (ConnectionCount))
+                else:
+                    print('... %s ... no VPN-Connections.\n' % (GwName))
 
-            else:
-                print('\n... %s ... ignored.' % (GwName))
-
-        print('\n... done.')
+        print('... done.')
         print('-------------------------------------------------------')
         return
 
