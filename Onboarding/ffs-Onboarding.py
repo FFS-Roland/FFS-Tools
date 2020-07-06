@@ -596,6 +596,8 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
                 if 'hardware' in NodeJson:
                     if 'model' in NodeJson['hardware']:
                         NodeInfoDict['Hardware'] = NodeJson['hardware']['model'].strip()
+                    else:
+                        NodeInfoDict['Hardware'] = '???'
 
                 print('>>> NodeID   =',NodeInfoDict['NodeID'])
                 print('>>> MAC      =',NodeInfoDict['MAC'])
