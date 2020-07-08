@@ -912,6 +912,7 @@ class ffGatewayInfo:
 
         print('-------------------------------------------------------')
         print('Loading fastd Status Infos ...\n')
+        TotalUplinks = 0
 
         for GwName in sorted(self.__GatewayDict):
             if GwName in GwIgnoreList or GwName in ['gw04n05']:
@@ -937,10 +938,11 @@ class ffGatewayInfo:
 
                 if ConnectionCount > 0:
                     print('    >>>>>>> VPN-Connections: %d\n' % (ConnectionCount))
+                    TotalUplinks += ConnectionCount
                 else:
                     print('... %s ... no VPN-Connections.\n' % (GwName))
 
-        print('... done.')
+        print('... done: %d.' % (TotalUplinks))
         print('-------------------------------------------------------')
         return
 
