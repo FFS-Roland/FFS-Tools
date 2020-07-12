@@ -58,6 +58,8 @@ import dns.update
 from dns.rdataclass import *
 from dns.rdatatype import *
 
+from scapy.all import conf, sr1, IP, ICMP
+
 from glob import glob
 
 from class_ffDHCP import *
@@ -70,6 +72,7 @@ from class_ffDHCP import *
 
 DNS_RETRIES         = 3
 DHCP_RETRIES        = 5
+PING_RETRIES        = 3
 
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
 MinGatewayCount     = 1              # minimum number of Gateways per Segment
@@ -79,9 +82,9 @@ FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n03','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
-DnsTestTarget       = 'www.google.de'
+InternetTestTarget  = 'www.google.de'
 
 DnsSegTemplate      = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
@@ -620,13 +623,13 @@ class ffGatewayInfo:
                                 while DnsResult is None and Retries > 0:
                                     Retries -= 1
                                     try:
-                                        DnsResult = DnsResolver.query(DnsTestTarget,DnsType)
+                                        DnsResult = DnsResolver.query(InternetTestTarget,DnsType)
                                     except:
                                         time.sleep(1)
                                         DnsResult = None
 
                                 if DnsResult is None:
-                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,DnsTestTarget,DnsType) )
+                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTarget,DnsType) )
 
         print('... done.\n')
         return
@@ -667,6 +670,52 @@ class ffGatewayInfo:
         print('... done.\n')
         return
 
+
+
+    #==============================================================================
+    # public function "CheckGatewayInternet"
+    #
+    #
+    #==============================================================================
+    def CheckGatewayInternet(self):
+
+        print('\nChecking Internet-Connection via Gateways ...')
+
+        DnsResolver = dns.resolver.Resolver()
+        TestIP = DnsResolver.query('%s.' % (InternetTestTarget),'A')[0].to_text()
+        PingPacket = IP(dst=TestIP,ttl=20)/ICMP()
+
+        for Segment in sorted(self.__SegmentDict.keys()):
+            print('... Segment %02d' % (Segment))
+
+            for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
+                if len(GwName) == 7 and GwName not in GwIgnoreList:
+                    InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
+                    conf.verb = 0
+                    conf.route.resync()
+                    conf.route.add(host=TestIP,gw=InternalGwIPv4)
+
+                    PingResult = None
+                    Retries = PING_RETRIES
+
+                    while PingResult is None and Retries > 0:
+                        Retries -= 1
+                        try:
+                            PingResult = sr1(PingPacket,timeout=2)
+                        except:
+                            time.sleep(1)
+                            PingResult = None
+
+                        if PingResult is not None:
+                            if PingResult.src != TestIP or PingResult.dst[:7] != InternalGwIPv4[:7]:
+                            	PingResult = None
+
+                    if PingResult is None:
+                        self.__alert('!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
+
+        conf.route.resync()
+        print('... done.\n')
+        return
 
 
 
@@ -942,7 +991,7 @@ class ffGatewayInfo:
                 else:
                     print('... %s ... no VPN-Connections.\n' % (GwName))
 
-        print('... done: %d.' % (TotalUplinks))
+        print('... done: %d' % (TotalUplinks))
         print('-------------------------------------------------------')
         return
 

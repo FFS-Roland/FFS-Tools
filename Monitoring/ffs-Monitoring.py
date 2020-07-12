@@ -148,6 +148,7 @@ ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 ffsGWs.CheckGatewayDnsServer()
 ffsGWs.CheckGatewayDhcpServer()
+ffsGWs.CheckGatewayInternet()
 
 GwSegmentList = ffsGWs.GetSegmentList()
 GwUplinkInfos = ffsGWs.GetNodeUplinkInfos()
