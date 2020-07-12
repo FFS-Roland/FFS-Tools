@@ -58,7 +58,7 @@ import dns.update
 from dns.rdataclass import *
 from dns.rdatatype import *
 
-from scapy.all import conf, sr1, IP, ICMP
+from scapy.all import conf, sr1, IP, ICMP, TCP
 
 from glob import glob
 
@@ -73,6 +73,7 @@ from class_ffDHCP import *
 DNS_RETRIES         = 3
 DHCP_RETRIES        = 5
 PING_RETRIES        = 3
+HTTPS_RETRIES       = 3
 
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
 MinGatewayCount     = 1              # minimum number of Gateways per Segment
@@ -684,6 +685,7 @@ class ffGatewayInfo:
         DnsResolver = dns.resolver.Resolver()
         TestIP = DnsResolver.query('%s.' % (InternetTestTarget),'A')[0].to_text()
         PingPacket = IP(dst=TestIP,ttl=20)/ICMP()
+        TcpPacket  = IP(dst=TestIP)/TCP(dport=[443])
 
         for Segment in sorted(self.__SegmentDict.keys()):
             print('... Segment %02d' % (Segment))
@@ -695,6 +697,7 @@ class ffGatewayInfo:
                     conf.route.resync()
                     conf.route.add(host=TestIP,gw=InternalGwIPv4)
 
+                    #---------- Ping ----------
                     PingResult = None
                     Retries = PING_RETRIES
 
@@ -712,6 +715,26 @@ class ffGatewayInfo:
 
                     if PingResult is None:
                         self.__alert('!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
+
+
+                    #---------- HTTPS ----------
+                    HttpsResult = None
+                    Retries = HTTPS_RETRIES
+
+                    while HttpsResult is None and Retries > 0:
+                        Retries -= 1
+                        try:
+                            HttpsResult = sr1(TcpPacket,inter=0.5,retry=-2,timeout=1)
+                        except:
+                            time.sleep(1)
+                            HttpsResult = None
+
+                        if HttpsResult is not None:
+                            if HttpsResult.src != TestIP or HttpsResult.dst[:7] != InternalGwIPv4[:7]:
+                                HttpsResult = None
+
+                    if HttpsResult is None:
+                        self.__alert('!! Error on HTTPS to Internet: Seg.%02d -> %s' % (Segment,GwName))
 
         conf.route.resync()
         print('... done.\n')

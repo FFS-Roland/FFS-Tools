@@ -108,7 +108,7 @@ def __SendEmail(Subject,MailBody,Account):
             Email['Subject'] = Subject
             Email['From']    = Account['Username']
             Email['To']      = Account['MailTo']
-#            Email['Bcc']     = Account['MailBCC']
+            Email['Bcc']     = Account['MailBCC']
 
             server = smtplib.SMTP(Account['Server'])
             server.starttls()
