@@ -85,7 +85,7 @@ SegAssignIPv6Prefix = '2001:2:0:711::'
 
 GwIgnoreList        = ['gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
-InternetTestTarget  = 'www.google.de'
+InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
 
 DnsSegTemplate      = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
@@ -624,13 +624,13 @@ class ffGatewayInfo:
                                 while DnsResult is None and Retries > 0:
                                     Retries -= 1
                                     try:
-                                        DnsResult = DnsResolver.query(InternetTestTarget,DnsType)
+                                        DnsResult = DnsResolver.query(InternetTestTargets[0],DnsType)
                                     except:
                                         time.sleep(1)
                                         DnsResult = None
 
                                 if DnsResult is None:
-                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTarget,DnsType) )
+                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTargets[0],DnsType) )
 
         print('... done.\n')
         return
@@ -683,9 +683,7 @@ class ffGatewayInfo:
         print('\nChecking Internet-Connection via Gateways ...')
 
         DnsResolver = dns.resolver.Resolver()
-        TestIP = DnsResolver.query('%s.' % (InternetTestTarget),'A')[0].to_text()
-        PingPacket = IP(dst=TestIP,ttl=20)/ICMP()
-        TcpPacket  = IP(dst=TestIP)/TCP(dport=[443])
+        conf.verb = 0
 
         for Segment in sorted(self.__SegmentDict.keys()):
             print('... Segment %02d' % (Segment))
@@ -693,18 +691,21 @@ class ffGatewayInfo:
             for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
                 if len(GwName) == 7 and GwName not in GwIgnoreList:
                     InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
-                    conf.verb = 0
-                    conf.route.resync()
-                    conf.route.add(host=TestIP,gw=InternalGwIPv4)
 
                     #---------- Ping ----------
                     PingResult = None
                     Retries = PING_RETRIES
 
                     while PingResult is None and Retries > 0:
+                        TestIdx = (PING_RETRIES - Retries) % len(InternetTestTargets)
+                        TestIP = DnsResolver.query('%s.' % (InternetTestTargets[TestIdx]),'A')[0].to_text()
+                        PingPacket = IP(dst=TestIP,ttl=20)/ICMP()
+                        conf.route.resync()
+                        conf.route.add(host=TestIP,gw=InternalGwIPv4)
                         Retries -= 1
+
                         try:
-                            PingResult = sr1(PingPacket,timeout=2)
+                            PingResult = sr1(PingPacket,timeout=1)
                         except:
                             time.sleep(1)
                             PingResult = None
@@ -722,9 +723,15 @@ class ffGatewayInfo:
                     Retries = HTTPS_RETRIES
 
                     while HttpsResult is None and Retries > 0:
+                        TestIdx = (PING_RETRIES - Retries) % len(InternetTestTargets)
+                        TestIP = DnsResolver.query('%s.' % (InternetTestTargets[TestIdx]),'A')[0].to_text()
+                        TcpPacket  = IP(dst=TestIP)/TCP(dport=[443])
+                        conf.route.resync()
+                        conf.route.add(host=TestIP,gw=InternalGwIPv4)
                         Retries -= 1
+
                         try:
-                            HttpsResult = sr1(TcpPacket,inter=0.5,retry=-2,timeout=1)
+                            HttpsResult = sr1(TcpPacket,timeout=1)
                         except:
                             time.sleep(1)
                             HttpsResult = None
