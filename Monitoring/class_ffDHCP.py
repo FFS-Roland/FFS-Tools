@@ -69,7 +69,8 @@ from scapy.all import (
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
-SNIFF_TIMEOUT = 2		# int: seconds to wait for a reply from server
+SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
+DHCP_RETRIES  = 5
 
 
 
@@ -82,7 +83,6 @@ class DHCPClient:
         self.xid = None
         self.relay_mode  = False
         self.request = None
-        self.reply = None
         self.sniffer = None
         self.offered_address = None
         return
@@ -149,6 +149,8 @@ class DHCPClient:
 
         if srv_ip is not None:
             self.__add_relay(self.request, srv_ip)
+        else:
+            self.relay_mode = False
 
         return self.request
 
@@ -205,7 +207,6 @@ class DHCPClient:
     def is_matching_reply(self, reply):
 
         if self.__is_offer_type(reply):
-            self.reply = reply
             self.offered_address = reply[BOOTP].yiaddr
             return True
 
@@ -255,7 +256,6 @@ class DHCPClient:
 
 
 
-
     #==============================================================================
     # public function "LocationDataOK"
     #
@@ -264,19 +264,21 @@ class DHCPClient:
     #==============================================================================
     def CheckDhcp(self, BatIF, srv_ip):
 
-        self.xid = randint(0, (2 ** 24) - 1)  # BOOTP 4 bytes, DHCPv6 3 bytes
-        self.relay_mode  = False
-        self.request = None
-        self.reply = None
-        self.sniffer = None
-        self.offered_address = None
-
         conf.iface = BatIF
+        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP 4 bytes
+        self.offered_address = None
+        Retries = DHCP_RETRIES
 
         self.__craft_request(srv_ip)
 
-        self.__sniff_start()
-        self.__send_request()
-        self.__sniff_stop()
+        while self.offered_address is None and Retries > 0:
+            Retries -= 1
+
+            self.__sniff_start()
+            self.__send_request()
+            self.__sniff_stop()
+
+            if self.offered_address is None and Retries > 0:
+                time.sleep(1)
 
         return self.offered_address

@@ -71,7 +71,6 @@ from class_ffDHCP import *
 #-------------------------------------------------------------
 
 DNS_RETRIES         = 3
-DHCP_RETRIES        = 5
 PING_RETRIES        = 3
 HTTPS_RETRIES       = 3
 
@@ -655,15 +654,11 @@ class ffGatewayInfo:
                 if len(GwName) == 7 and GwName not in GwIgnoreList:
                     InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
                     DhcpResult = None
-                    Retries = DHCP_RETRIES
 
-                    while DhcpResult is None and Retries > 0:
-                        Retries -= 1
-                        try:
-                            DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
-                        except:
-                            time.sleep(1)
-                            DhcpResult = None
+                    try:
+                        DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
+                    except:
+                        DhcpResult = None
 
                     if DhcpResult is None:
                         self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
