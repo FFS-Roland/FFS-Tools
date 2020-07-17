@@ -66,11 +66,12 @@ from scapy.all import (
 )
 
 
+
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
-DHCP_RETRIES  = 5
+DHCP_RETRIES  = 10
 
 
 
@@ -81,6 +82,7 @@ class DHCPClient:
     def __init__(self):
 
         self.xid = None
+        self.iface = None
         self.relay_mode  = False
         self.request = None
         self.sniffer = None
@@ -125,12 +127,12 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __add_relay(self, p, srv_ip):
 
-        relay_ip = get_if_addr(conf.iface)
+        my_ip = get_if_addr(conf.iface)
 
-        p[BOOTP].giaddr = relay_ip
-        p[BOOTP].flags = 0  # unset broadcast flag
+        p[BOOTP].giaddr = '0.0.0.0'
+        p[BOOTP].flags = 0   # unset broadcast flag
         p[UDP].sport = 67
-        p[IP].src = relay_ip
+        p[IP].src = my_ip
         p[IP].dst = srv_ip
 
         self.relay_mode = True
@@ -182,7 +184,7 @@ class DHCPClient:
 
         if not packet.haslayer(BOOTP):
             return False
-        if packet[BOOTP].op != 2:
+        if packet[BOOTP].op != 2:   # BOOTREPLY
             return False
         if packet[BOOTP].xid != self.xid:
             return False
@@ -208,6 +210,7 @@ class DHCPClient:
 
         if self.__is_offer_type(reply):
             self.offered_address = reply[BOOTP].yiaddr
+#            print('>>>>> Answer = %s' % (self.offered_address))
             return True
 
         return False
@@ -224,8 +227,10 @@ class DHCPClient:
     def sniffer_thread(self):
 
         sniff(
+            iface=self.iface,
             timeout=SNIFF_TIMEOUT,
             stop_filter=self.is_matching_reply,
+            store=0
         )
 
 
@@ -264,21 +269,24 @@ class DHCPClient:
     #==============================================================================
     def CheckDhcp(self, BatIF, srv_ip):
 
+#        print('Starting DHCP-Check in IF = %s to Server = %s...' % (BatIF, srv_ip))
+
         conf.iface = BatIF
-        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP 4 bytes
+        conf.sniff_promisc = False
+
+        self.iface = BatIF
         self.offered_address = None
         Retries = DHCP_RETRIES
 
-        self.__craft_request(srv_ip)
-
         while self.offered_address is None and Retries > 0:
+            self.xid = randint(0, (2 ** 32) - 1)  # BOOTP 4 bytes
+            self.__craft_request(srv_ip)
+
             Retries -= 1
+#            Retries = 0
 
             self.__sniff_start()
             self.__send_request()
             self.__sniff_stop()
-
-            if self.offered_address is None and Retries > 0:
-                time.sleep(1)
 
         return self.offered_address
