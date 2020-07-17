@@ -202,7 +202,7 @@ def WriteFastdConfigFile(MyKeysDict,Segment,WanInterface):
         OutFile.write('status socket \"/var/run/fastd-vpn%02d.status\";\n' % (Segment))
         OutFile.write('method \"salsa2012+umac\";\n')
         OutFile.write('mtu 1340;\n')
-        OutFile.write('peer limit 2;\n')
+#        OutFile.write('peer limit 2;\n')
         OutFile.write('secret \"%s\";\n' % (MyKeysDict['Secret']))
         OutFile.write('include peers from \"peers\";\n')
         OutFile.close()
