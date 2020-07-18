@@ -51,16 +51,14 @@ from random import randint
 from scapy.all import (
     BOOTP,
     DHCP,
-    DUID_LL,
+    ARP,
     IP,
     UDP,
-    AnsweringMachine,
     Ether,
     conf,
     get_if_addr,
     get_if_hwaddr,
-    get_if_raw_hwaddr,
-    send,
+    sr1,
     sendp,
     sniff,
 )
@@ -71,7 +69,7 @@ from scapy.all import (
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
-DHCP_RETRIES  = 10
+DHCP_RETRIES  = 15
 
 
 
@@ -82,26 +80,25 @@ class DHCPClient:
     def __init__(self):
 
         self.xid = None
-        self.iface = None
-        self.relay_mode  = False
-        self.request = None
         self.sniffer = None
         self.offered_address = None
+        self.offered_gateway = None
         return
 
 
 
     #-------------------------------------------------------------
-    # private function "__craft_discover"
+    # private function "__craft_discover_request"
     #
-    #     Generates a DHCPDICSOVER packet
+    #     Generates a DHCPDICSOVER request
     #
     #     <  scapy.layers.inet.IP: DHCPDISCOVER packet
     #
     #-------------------------------------------------------------
-    def __craft_discover(self):
+    def __craft_discover_request(self):
 
         mac = get_if_hwaddr(conf.iface)
+        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
 
         if isinstance(mac, bytes):
             hw = mac
@@ -110,51 +107,14 @@ class DHCPClient:
         else:
             raise TypeError('MAC address given must be a string')
 
-        dhcp_discover = (
+        dhcp_request = (
             IP(src="0.0.0.0", dst="255.255.255.255")
             / UDP(sport=68, dport=67)
             / BOOTP(chaddr=hw, xid=self.xid, flags=0x8000)
             / DHCP(options=[("message-type", "discover"), "end"])
         )
-        return dhcp_discover
+        return dhcp_request
 
-
-    #-------------------------------------------------------------
-    # private function "__add_relay"
-    #
-    #     Modify passed DHCP client packet as if a DHCP relay would
-    #
-    #-------------------------------------------------------------
-    def __add_relay(self, p, srv_ip):
-
-        my_ip = get_if_addr(conf.iface)
-
-        p[BOOTP].giaddr = '0.0.0.0'
-        p[BOOTP].flags = 0   # unset broadcast flag
-        p[UDP].sport = 67
-        p[IP].src = my_ip
-        p[IP].dst = srv_ip
-
-        self.relay_mode = True
-        return
-
-
-    #-------------------------------------------------------------
-    # private function "__craft_request"
-    #
-    #     Generates a DHCPDICSOVER request
-    #
-    #-------------------------------------------------------------
-    def __craft_request(self, srv_ip):
-
-        self.request = self.__craft_discover()
-
-        if srv_ip is not None:
-            self.__add_relay(self.request, srv_ip)
-        else:
-            self.relay_mode = False
-
-        return self.request
 
 
     #-------------------------------------------------------------
@@ -163,15 +123,24 @@ class DHCPClient:
     #     Transmit DHCPDICSOVER request
     #
     #-------------------------------------------------------------
-    def __send_request(self):
-        if self.relay_mode:
-            # sending unicast, let scapy handle ethernet
-            send(self.request, verbose=False)
+    def __send_request(self, srv_ip, srv_request):
+        srv_mac = 'FF:FF:FF:FF:FF:FF'
+        my_ip = get_if_addr(conf.iface)
+
+        reply = sr1(ARP(op='who-has', psrc=my_ip, pdst=srv_ip), verbose=False)
+
+        if reply is not None:
+            if reply.psrc == srv_ip:
+                srv_mac = reply.hwsrc
+            else:
+                print('!! ERROR on ARP: Invalid Response = %s -> %s' % (reply.hwsrc,reply.psrc))
         else:
-            # sending to local link, need to set Ethernet ourselves
-            sendp(Ether(dst='FF:FF:FF:FF:FF:FF') / self.request, verbose=False)
+            print('!! ERROR on ARP: No Resonse for %s !!' % (srv_ip))
+
+        sendp(Ether(dst=srv_mac) / srv_request, verbose=False)
 
         return
+
 
 
     #-------------------------------------------------------------
@@ -184,10 +153,13 @@ class DHCPClient:
 
         if not packet.haslayer(BOOTP):
             return False
+
         if packet[BOOTP].op != 2:   # BOOTREPLY
             return False
+
         if packet[BOOTP].xid != self.xid:
             return False
+
         if not packet.haslayer(DHCP):
             return False
 
@@ -210,7 +182,8 @@ class DHCPClient:
 
         if self.__is_offer_type(reply):
             self.offered_address = reply[BOOTP].yiaddr
-#            print('>>>>> Answer = %s' % (self.offered_address))
+            self.offered_gateway = reply[BOOTP].giaddr
+#            print('    > %s from %s' % (self.offered_address, reply[BOOTP].giaddr))
             return True
 
         return False
@@ -227,7 +200,7 @@ class DHCPClient:
     def sniffer_thread(self):
 
         sniff(
-            iface=self.iface,
+            iface=conf.iface,
             timeout=SNIFF_TIMEOUT,
             stop_filter=self.is_matching_reply,
             store=0
@@ -272,21 +245,21 @@ class DHCPClient:
 #        print('Starting DHCP-Check in IF = %s to Server = %s...' % (BatIF, srv_ip))
 
         conf.iface = BatIF
-        conf.sniff_promisc = False
+#        conf.sniff_promisc = False
 
-        self.iface = BatIF
         self.offered_address = None
+        self.offered_gateway = None
         Retries = DHCP_RETRIES
 
         while self.offered_address is None and Retries > 0:
-            self.xid = randint(0, (2 ** 32) - 1)  # BOOTP 4 bytes
-            self.__craft_request(srv_ip)
-
             Retries -= 1
-#            Retries = 0
+            dhcp_request = self.__craft_discover_request()
 
             self.__sniff_start()
-            self.__send_request()
+            self.__send_request(srv_ip, dhcp_request)
             self.__sniff_stop()
+
+        if self.offered_address is not None and self.offered_gateway != srv_ip:
+            print('!! Reply from wrong Gateway: IP = %s / GW = %s' % (self.offered_address,self.offered_gateway))
 
         return self.offered_address

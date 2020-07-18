@@ -82,7 +82,7 @@ FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw04n02','gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
 InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
 
@@ -649,10 +649,6 @@ class ffGatewayInfo:
 
         for Segment in sorted(self.__SegmentDict.keys()):
             print('... Segment %02d' % (Segment))
-            DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), None)
-
-            if DhcpResult is None:
-                self.__alert('!! Error on DHCP via Broadcast in Seg.%02d' % (Segment))
 
             for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
                 if len(GwName) == 7 and GwName not in GwIgnoreList:
@@ -661,10 +657,7 @@ class ffGatewayInfo:
                     DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
 
                     if DhcpResult is None:
-                        if Segment < 25:
-                            self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
-                        else:
-                            print('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                        self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
 
         print('... done.\n')
         return
