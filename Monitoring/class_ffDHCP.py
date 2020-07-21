@@ -69,7 +69,30 @@ from scapy.all import (
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
-DHCP_RETRIES  = 15
+DHCP_RETRIES  = 10
+
+
+
+
+#==============================================================================
+# "sniffer_thread"
+#
+#     Starts scapy sniffer and stops when a timeout is reached or a valid packet
+#     is received.
+#
+#==============================================================================
+def sniffer_thread(is_matching):
+
+    sniff(
+        timeout=SNIFF_TIMEOUT,
+        stop_filter=is_matching,
+        store=0
+    )
+
+    time.sleep(0.1)
+    return
+
+
 
 
 
@@ -190,24 +213,6 @@ class DHCPClient:
 
 
 
-    #==============================================================================
-    # public function "sniffer_thread"
-    #
-    #     Starts scapy sniffer and stops when a timeout is reached or a valid packet
-    #     is received.
-    #
-    #==============================================================================
-    def sniffer_thread(self):
-
-        sniff(
-            iface=conf.iface,
-            timeout=SNIFF_TIMEOUT,
-            stop_filter=self.is_matching_reply,
-            store=0
-        )
-
-
-
     #-------------------------------------------------------------
     # private function "__sniff_start"
     #
@@ -216,8 +221,9 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __sniff_start(self):
 
-        self.sniffer = threading.Thread(target=self.sniffer_thread)
+        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.is_matching_reply])
         self.sniffer.start()
+        time.sleep(0.1)
         return
 
 
@@ -229,7 +235,10 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __sniff_stop(self):
 
-        self.sniffer.join()
+#        self.sniffer.join()
+
+        while self.offered_address is None and self.sniffer.is_alive():
+            time.sleep(0.1)
         return
 
 
@@ -245,7 +254,7 @@ class DHCPClient:
 #        print('Starting DHCP-Check in IF = %s to Server = %s...' % (BatIF, srv_ip))
 
         conf.iface = BatIF
-#        conf.sniff_promisc = False
+        conf.sniff_promisc = False
 
         self.offered_address = None
         self.offered_gateway = None
