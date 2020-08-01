@@ -11,6 +11,7 @@
   },
   "StatusMail":{
       "Server": "<SMTP-Server>",
+      "Port": <Port>,
       "Username": "<user>",
       "Password": "<password>",
       "MailTo": "<receipient>",

@@ -110,7 +110,7 @@ def __SendEmail(Subject,MailBody,Account):
             Email['To']      = Account['MailTo']
             Email['Bcc']     = Account['MailBCC']
 
-            server = smtplib.SMTP(Account['Server'])
+            server = smtplib.SMTP(host=Account['Server'],port=Account['Port'])
             server.starttls()
             server.login(Account['Username'],Account['Password'])
             server.send_message(Email)
@@ -147,7 +147,7 @@ print('=========================================================================
 ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
 
 ffsGWs.CheckGatewayDnsServer()
-ffsGWs.CheckGatewayDhcpServer()
+#ffsGWs.CheckGatewayDhcpServer()
 ffsGWs.CheckGatewayInternet()
 
 GwSegmentList = ffsGWs.GetSegmentList()
@@ -212,7 +212,7 @@ if MailBody != '':
     __SendEmail('Alert from ffs-Monitor \"%s\"' % (socket.gethostname()),MailBody,AccountsDict['StatusMail'])
 else:
     TimeInfo = datetime.datetime.now()
-    if TimeInfo.hour == 12 and TimeInfo.minute < 9:
+    if TimeInfo.hour == 12 and TimeInfo.minute < 10:
         print('\nSending Hello Mail to inform Admins beeing alive ...')
         __SendEmail('Hello from ffs-Monitor \"%s\"' % (socket.gethostname()),'ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
 
