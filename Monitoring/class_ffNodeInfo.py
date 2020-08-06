@@ -542,7 +542,7 @@ class ffNodeInfo:
                 'Source': None
             }
 
-        if (LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']) and (DateFormat is not None):
+        if (LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']) and (DateFormat is not None) and (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB'):
             return False    # Newer Node-Info already existing ...
 
 
@@ -1065,6 +1065,7 @@ class ffNodeInfo:
 
                 if self.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != FastdKeyInfo['PeerName'].strip().lower():
                     print('++ Hostname Mismatch:  %s = \'%s\' <- \'%s\'' % (KeyFileName,self.ffNodeDict[ffNodeMAC]['Name'],FastdKeyInfo['PeerName']))
+                    FastdKeyInfo['PeerName'] = self.ffNodeDict[ffNodeMAC]['Name']
 
                 if ffMeshMAC is not None:   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
