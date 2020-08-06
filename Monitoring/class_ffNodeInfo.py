@@ -1161,7 +1161,7 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
                     elif self.ffNodeDict[ffNodeMAC]['Segment'] not in ValidSegmentList:
-                        print('>>> Bad Segment:   %s %s = \'%s\' in Seg.%02d' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ff_NodeDict[ffNodeMAC]['Segment']))
+                        print('>>> Bad Segment:   %s %s = \'%s\' in Seg.%02d' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment']))
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
         print('... done.\n')
