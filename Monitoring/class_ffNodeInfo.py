@@ -304,7 +304,7 @@ class ffNodeInfo:
     def __LoadNodeDict(self):
 
         print('Loading',NodeDictName,'...')
-        UnixTime = int(time.time())
+        CurrentTime = int(time.time())
         NodeCount = 0
 
         try:
@@ -317,7 +317,7 @@ class ffNodeInfo:
 
         else:
             for ffNodeMAC in jsonNodeDict:
-                if (UnixTime - jsonNodeDict[ffNodeMAC]['last_online']) <= MaxInactiveTime:
+                if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) <= MaxInactiveTime:
 
                     self.ffNodeDict[ffNodeMAC] = {
                         'Name': jsonNodeDict[ffNodeMAC]['Name'],
@@ -351,7 +351,7 @@ class ffNodeInfo:
                     NodeCount += 1
                     self.__AddGluonMACs(ffNodeMAC,None)
 
-                    if (UnixTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
+                    if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
                     else:
                         self.ffNodeDict[ffNodeMAC]['Neighbours'] = jsonNodeDict[ffNodeMAC]['Neighbours']
@@ -434,7 +434,7 @@ class ffNodeInfo:
     #
     #     return:    True = Data can be used
     #-----------------------------------------------------------------------
-    def __ProcessResponddData(self,NodeDict,UnixTime,DateFormat):
+    def __ProcessResponddData(self,NodeDict,CurrentTime,DateFormat):
 
         if (('lastseen' not in NodeDict) or
             ('nodeinfo' not in NodeDict) or
@@ -457,9 +457,9 @@ class ffNodeInfo:
         else:
             LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
 
-        if (UnixTime - LastSeen) > MaxInactiveTime:
+        if (CurrentTime - LastSeen) > MaxInactiveTime:
             if DateFormat is None:
-                print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(UnixTime - LastSeen) / 60))
+                print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
             return False    # Data is obsolete / too old
 
 
@@ -542,7 +542,8 @@ class ffNodeInfo:
                 'Source': None
             }
 
-        if (LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']) and (DateFormat is not None) and (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB'):
+#        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
+        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online'] and self.ffNodeDict[ffNodeMAC]['Source'] != 'DB':
             return False    # Newer Node-Info already existing ...
 
 
@@ -598,7 +599,7 @@ class ffNodeInfo:
             else:
                 self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '---'
 
-        if (UnixTime - LastSeen) <= MaxOfflineTime:
+        if (CurrentTime - LastSeen) <= MaxOfflineTime:
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
             if NodeDict['neighbours'] is not None:
@@ -668,7 +669,7 @@ class ffNodeInfo:
             self.AnalyseOnly = True
             return
 
-        UnixTime = int(time.time())
+        CurrentTime = int(time.time())
         InfoTime = 0
         NewestTime = 0
         AllNodesCount = 0
@@ -715,15 +716,15 @@ class ffNodeInfo:
         if 'updated_at' in RawJsonDict:
             InfoTime = int(calendar.timegm(time.strptime( RawJsonDict['updated_at'],'%Y-%m-%dT%H:%M:%S%z') ))
 
-        if (UnixTime - InfoTime) > MaxStatusAge:
-            self.__alert('++ Yanic raw.json is too old: %d Sec.!' % (UnixTime - InfoTime))
+        if (CurrentTime - InfoTime) > MaxStatusAge:
+            self.__alert('++ Yanic raw.json is too old: %d Sec.!' % (CurrentTime - InfoTime))
             return
 
 
-        print('Analysing raw.json (%d Records, Yanic Data Age = %d Sec.) ...' % (len(RawJsonDict['nodes']),UnixTime - InfoTime))
+        print('Analysing raw.json (%d Records, Yanic Data Age = %d Sec.) ...' % (len(RawJsonDict['nodes']),CurrentTime - InfoTime))
 
         for NodeDict in RawJsonDict['nodes']:
-            if self.__ProcessResponddData(NodeDict,UnixTime,'%Y-%m-%dT%H:%M:%S%z'):
+            if self.__ProcessResponddData(NodeDict,CurrentTime,'%Y-%m-%dT%H:%M:%S%z'):
                 UsedNodesCount += 1
                 ffNodeMAC = NodeDict['nodeinfo']['network']['mac'].strip().lower()
                 self.ffNodeDict[ffNodeMAC]['Source'] = 'Yanic'
@@ -734,9 +735,9 @@ class ffNodeInfo:
                 if self.__IsOnline(ffNodeMAC):
                     OnlineNodesCount += 1
 
-        print('... %d Nodes selected, online = %d (Age = %d sec.)\n' % (UsedNodesCount,OnlineNodesCount,UnixTime-NewestTime))
+        print('... %d Nodes selected, online = %d (Age = %d sec.)\n' % (UsedNodesCount,OnlineNodesCount,CurrentTime-NewestTime))
 
-        if UsedNodesCount > MinNodesCount and (UnixTime - NewestTime) < MaxStatusAge:
+        if UsedNodesCount > MinNodesCount and (CurrentTime - NewestTime) < MaxStatusAge:
             self.AnalyseOnly = False
 
         return
@@ -762,7 +763,7 @@ class ffNodeInfo:
             self.AnalyseOnly = True
             return
 
-        UnixTime = int(time.time())
+        CurrentTime = int(time.time())
         NewestTime = 0
         AllNodesCount = 0
         UsedNodesCount = 0
@@ -803,7 +804,7 @@ class ffNodeInfo:
         print('Analysing raw.json (%d Records) ...' % (len(RawJsonDict)))
 
         for NodeIdx in RawJsonDict:
-            if self.__ProcessResponddData(RawJsonDict[NodeIdx],UnixTime,'%Y-%m-%dT%H:%M:%S.%fZ'):
+            if self.__ProcessResponddData(RawJsonDict[NodeIdx],CurrentTime,'%Y-%m-%dT%H:%M:%S.%fZ'):
                 UsedNodesCount += 1
                 ffNodeMAC = RawJsonDict[NodeIdx]['nodeinfo']['network']['mac'].strip().lower()
                 self.ffNodeDict[ffNodeMAC]['Source'] = 'Hopglass'
@@ -814,9 +815,9 @@ class ffNodeInfo:
                 if self.__IsOnline(ffNodeMAC):
                     OnlineNodesCount += 1
 
-        print('... %d Nodes selected, online = %d (Age = %d sec.)\n' % (UsedNodesCount,OnlineNodesCount,UnixTime-NewestTime))
+        print('... %d Nodes selected, online = %d (Age = %d sec.)\n' % (UsedNodesCount,OnlineNodesCount,CurrentTime-NewestTime))
 
-        if UsedNodesCount > MinNodesCount and (UnixTime - NewestTime) < MaxStatusAge:
+        if UsedNodesCount > MinNodesCount and (CurrentTime - NewestTime) < MaxStatusAge:
             self.AnalyseOnly = False
 
         return
@@ -889,7 +890,7 @@ class ffNodeInfo:
     def __LoadBatmanData(self):
 
         print('\nAnalyzing Batman Tables ...')
-        UnixTime = int(time.time())
+        CurrentTime = int(time.time())
         TotalNodes = 0
         TotalClients = 0
 
@@ -926,7 +927,7 @@ class ffNodeInfo:
 
                                 BatmanMacList = self.__GenerateGluonMACs(ffNodeMAC)
 
-                                if ((ffNodeMAC in self.ffNodeDict) and ((UnixTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
+                                if ((ffNodeMAC in self.ffNodeDict) and ((CurrentTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
                                     (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):
                                     #---------- Current data of Node already available ----------
 
@@ -934,7 +935,6 @@ class ffNodeInfo:
                                         NodeList.append(ffNodeMAC)
 
                                     self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                    self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
                                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
                                     if self.ffNodeDict[ffNodeMAC]['Source'] != 'respondd':
@@ -954,7 +954,7 @@ class ffNodeInfo:
                                     if ffTQ >= BatmanMinTQ and BatctlInfo[2] == '0':
                                         print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
                                         NodeName = None
-                                        ResponddDict = { 'lastseen':UnixTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
+                                        ResponddDict = { 'lastseen':CurrentTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
                                         ResponddDict['nodeinfo'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'nodeinfo')
 
@@ -972,7 +972,7 @@ class ffNodeInfo:
                                         else:
                                             NodeName = '- ?? -'
 
-                                        if self.__ProcessResponddData(ResponddDict,UnixTime,None):
+                                        if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
                                             self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
                                             print('    ** New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                         else:
@@ -980,7 +980,6 @@ class ffNodeInfo:
 
                                     if ffNodeMAC in self.ffNodeDict:
                                         self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                        self.ffNodeDict[ffNodeMAC]['last_online'] = UnixTime
                                         self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
                                         if not self.__IsOnline(ffNodeMAC):
@@ -1002,8 +1001,6 @@ class ffNodeInfo:
 
                                                 self.ffNodeDict[BaseNodeMAC]['Segment'] = ffSeg
                                                 self.ffNodeDict[RealNodeMAC]['Segment'] = ffSeg
-                                                self.ffNodeDict[BaseNodeMAC]['last_online'] = UnixTime
-                                                self.ffNodeDict[RealNodeMAC]['last_online'] = UnixTime
 
                                                 if not self.__IsOnline(BaseNodeMAC):
                                                     self.ffNodeDict[BaseNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
@@ -1080,9 +1077,6 @@ class ffNodeInfo:
                     if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                         print('++ Node has active VPN-Connection: %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-
-                    if FastdKeyInfo['Timestamp'] > self.ffNodeDict[ffNodeMAC]['last_online']:
-                        self.ffNodeDict[ffNodeMAC]['last_online'] = FastdKeyInfo['Timestamp']
 
                     if self.ffNodeDict[ffNodeMAC]['Segment'] != int(FastdKeyInfo['KeyDir'][3:]):
                         if self.ffNodeDict[ffNodeMAC]['Segment'] is not None:
