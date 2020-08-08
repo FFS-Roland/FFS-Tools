@@ -69,7 +69,8 @@ from scapy.all import (
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
-DHCP_RETRIES  = 5
+ARP_RETRIES   = 3
+DHCP_RETRIES  = 10
 
 
 
@@ -89,7 +90,7 @@ def sniffer_thread(is_matching):
         store=0
     )
 
-#    print('    ... sniffing stopped.')
+#    print('    ... sniff() returned.')
     return
 
 
@@ -141,27 +142,45 @@ class DHCPClient:
 
 
     #-------------------------------------------------------------
+    # private function "__get_mac_of_ip"
+    #
+    #     Transmit ARP request
+    #
+    #-------------------------------------------------------------
+    def __get_mac_of_ip(self, srv_ip):
+        srv_mac = 'FF:FF:FF:FF:FF:FF'
+        my_ip = get_if_addr(conf.iface)
+        reply = None
+        Retries = ARP_RETRIES
+
+#        print('    ... sending ARP-Request %s -> %s ...' % (my_ip,srv_ip))
+
+        while reply is None and Retries > 0:
+            Retries -= 1
+            reply = sr1(ARP(op='who-has', psrc=my_ip, pdst=srv_ip), timeout=1, verbose=False)
+
+        if reply is not None:
+            if reply.psrc == srv_ip:
+                srv_mac = reply.hwsrc
+#                print('    ++ ARP = %s -> %s' % (reply.hwsrc,reply.psrc))
+            else:
+                print('    !! ERROR on ARP: Invalid Response = %s -> %s' % (reply.hwsrc,reply.psrc))
+        else:
+            print('    !! ERROR on ARP: No Resonse for %s !!' % (srv_ip))
+
+        return srv_mac
+
+
+
+    #-------------------------------------------------------------
     # private function "__send_request"
     #
     #     Transmit DHCPDICSOVER request
     #
     #-------------------------------------------------------------
-    def __send_request(self, srv_ip, srv_request):
-        srv_mac = 'FF:FF:FF:FF:FF:FF'
-        my_ip = get_if_addr(conf.iface)
-
-        reply = sr1(ARP(op='who-has', psrc=my_ip, pdst=srv_ip), verbose=False)
-
-        if reply is not None:
-            if reply.psrc == srv_ip:
-                srv_mac = reply.hwsrc
-            else:
-                print('!! ERROR on ARP: Invalid Response = %s -> %s' % (reply.hwsrc,reply.psrc))
-        else:
-            print('!! ERROR on ARP: No Resonse for %s !!' % (srv_ip))
+    def __send_request(self, srv_mac, srv_request):
 
         sendp(Ether(dst=srv_mac) / srv_request, verbose=False)
-
         return
 
 
@@ -206,7 +225,7 @@ class DHCPClient:
         if self.__is_offer_type(reply):
             self.offered_address = reply[BOOTP].yiaddr
             self.offered_gateway = reply[BOOTP].giaddr
-#            print('    > %s from %s' % (self.offered_address, reply[BOOTP].giaddr))
+            print('    %s from %s' % (self.offered_address, reply[BOOTP].giaddr))
             return True
 
         return False
@@ -236,14 +255,9 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __sniff_stop(self):
 
-        # CAUTION: function "<thread>.join()" is buggy, so self.sniffer.join() cannot be used!
-        LoopCount = SNIFF_TIMEOUT * 10 + 2
-
-        while self.offered_address is None and LoopCount > 0:
-            LoopCount -= 1
-            time.sleep(0.1)
-
-        time.sleep(0.1)
+#        print('    ... waiting for sniff-result ...')
+        self.sniffer.join()
+#        print('    ... sniff_stop finished.\n')
         return
 
 
@@ -268,12 +282,13 @@ class DHCPClient:
         while self.offered_address is None and Retries > 0:
             Retries -= 1
             dhcp_request = self.__craft_discover_request()
+            srv_mac      = self.__get_mac_of_ip(srv_ip)
 
             self.__sniff_start()
-            self.__send_request(srv_ip, dhcp_request)
+            self.__send_request(srv_mac, dhcp_request)
             self.__sniff_stop()
 
         if self.offered_address is not None and self.offered_gateway != srv_ip:
-            print('!! Reply from wrong Gateway: IP = %s / GW = %s' % (self.offered_address,self.offered_gateway))
+            print('    !! Reply from wrong Gateway: IP = %s / GW = %s' % (self.offered_address,self.offered_gateway))
 
         return self.offered_address
