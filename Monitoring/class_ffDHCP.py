@@ -69,7 +69,7 @@ from scapy.all import (
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
-DHCP_RETRIES  = 10
+DHCP_RETRIES  = 5
 
 
 
@@ -89,7 +89,7 @@ def sniffer_thread(is_matching):
         store=0
     )
 
-    time.sleep(0.1)
+#    print('    ... sniffing stopped.')
     return
 
 
@@ -222,6 +222,7 @@ class DHCPClient:
     def __sniff_start(self):
 
         self.sniffer = threading.Thread(target=sniffer_thread,args=[self.is_matching_reply])
+#        print('    ... Starting sniffer ...')
         self.sniffer.start()
         time.sleep(0.1)
         return
@@ -235,10 +236,14 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __sniff_stop(self):
 
-#        self.sniffer.join()
+        # CAUTION: function "<thread>.join()" is buggy, so self.sniffer.join() cannot be used!
+        LoopCount = SNIFF_TIMEOUT * 10 + 2
 
-        while self.offered_address is None and self.sniffer.is_alive():
+        while self.offered_address is None and LoopCount > 0:
+            LoopCount -= 1
             time.sleep(0.1)
+
+        time.sleep(0.1)
         return
 
 
