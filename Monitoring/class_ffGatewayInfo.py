@@ -629,7 +629,7 @@ class ffGatewayInfo:
                                         DnsResult = None
 
                                 if DnsResult is None:
-                                    self.__alert('!! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTargets[0],DnsType) )
+                                    self.__alert('    !! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTargets[0],DnsType) )
 
         print('... done.\n')
         return
@@ -657,7 +657,7 @@ class ffGatewayInfo:
                     DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
 
                     if DhcpResult is None:
-                        self.__alert('!! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                        self.__alert('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
 
         print('... done.\n')
         return
@@ -706,7 +706,7 @@ class ffGatewayInfo:
                             	PingResult = None
 
                     if PingResult is None:
-                        self.__alert('!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
+                        self.__alert('    !! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
 
 
                     #---------- HTTPS ----------
@@ -732,7 +732,7 @@ class ffGatewayInfo:
                                 HttpsResult = None
 
                     if HttpsResult is None:
-                        self.__alert('!! Error on HTTPS to Internet: Seg.%02d -> %s' % (Segment,GwName))
+                        self.__alert('    !! Error on HTTPS to Internet: Seg.%02d -> %s' % (Segment,GwName))
 
         conf.route.resync()
         print('... done.\n')

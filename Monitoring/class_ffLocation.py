@@ -64,7 +64,7 @@ class ffLocation:
     #==========================================================================
     # Constructor
     #==========================================================================
-    def __init__(self,DatabasePath,GitPath):
+    def __init__(self,GitPath,DatabasePath):
 
         # private Attributes
         self.__DatabasePath = DatabasePath

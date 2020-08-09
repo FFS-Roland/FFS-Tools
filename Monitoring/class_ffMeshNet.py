@@ -254,13 +254,13 @@ class ffMeshNet:
 
 
 
-    #-----------------------------------------------------------------------
-    # private function "__CheckMeshClouds"
+    #==============================================================================
+    # public function "CheckMeshClouds"
     #
     #   Analysing Mesh Clouds for Segment Shortcuts and set common Segment
     #
-    #-----------------------------------------------------------------------
-    def __CheckMeshClouds(self):
+    #==============================================================================
+    def CheckMeshClouds(self):
 
         print('Checking Mesh-Clouds ...')
 
@@ -373,13 +373,13 @@ class ffMeshNet:
 
 
 
-    #-----------------------------------------------------------------------
-    # private function "__CheckSingleNodes"
+    #==============================================================================
+    # public function "CheckSingleNodes"
     #
     #   Check if Node is in correct Segment
     #
-    #-----------------------------------------------------------------------
-    def __CheckSingleNodes(self):
+    #==============================================================================
+    def CheckSingleNodes(self):
 
         print('Checking Single Nodes ...')
 
@@ -409,19 +409,6 @@ class ffMeshNet:
                             print('!! Gluon too old for desired Segment: %s = \'%s\' -> Seg. %02d' % (ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name'],TargetSeg))
 
         print('... done.\n')
-        return
-
-
-
-    #==============================================================================
-    # public function "CheckNodeConnections"
-    #
-    #
-    #==============================================================================
-    def CheckNodeConnections(self):
-
-        self.__CheckMeshClouds()
-        self.__CheckSingleNodes()
         return
 
 

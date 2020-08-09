@@ -55,6 +55,7 @@ from email.mime.text import MIMEText
 from class_ffGatewayInfo import *
 from class_ffNodeInfo import *
 from class_ffMeshNet import *
+from class_ffLocation import *
 
 
 
@@ -158,20 +159,25 @@ print('=========================================================================
 ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
 
 ffsNodes.AddUplinkInfos(GwUplinkInfos)
-ffsNodes.CheckConsistency(GwSegmentList)
-
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
 
-if not ffsNodes.SetDesiredSegments():
+
+print('====================================================================================\n\nSetting up Location Data ...\n')
+ffsLocationInfo = ffLocation(args.GITREPO,args.DATAPATH)
+
+if not ffsNodes.SetDesiredSegments(ffsLocationInfo):
     print('!! FATAL ERROR: Regions / Segments not available!')
     exit(1)
+
+ffsNodes.CheckConsistency(GwSegmentList)
 
 
 print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
 ffsNet = ffMeshNet(ffsNodes)
 
 ffsNet.CreateMeshCloudList()
-ffsNet.CheckNodeConnections()
+ffsNet.CheckMeshClouds()
+ffsNet.CheckSingleNodes()
 
 ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
 
@@ -212,7 +218,7 @@ if MailBody != '':
     __SendEmail('Alert from ffs-Monitor \"%s\"' % (socket.gethostname()),MailBody,AccountsDict['StatusMail'])
 else:
     TimeInfo = datetime.datetime.now()
-    if TimeInfo.hour == 12 and TimeInfo.minute < 10:
+    if TimeInfo.hour == 12 and TimeInfo.minute < 12:
         print('\nSending Hello Mail to inform Admins beeing alive ...')
         __SendEmail('Hello from ffs-Monitor \"%s\"' % (socket.gethostname()),'ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
 
