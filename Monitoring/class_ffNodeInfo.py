@@ -234,12 +234,10 @@ class ffNodeInfo:
     #-------------------------------------------------------------
     def __AddGluonMACs(self,MainMAC,MeshMAC):
 
-        GluonMacList = self.__GenerateGluonMACs(MainMAC)
-
         if MeshMAC is not None:
-            if MeshMAC not in GluonMacList and MeshMAC != MainMAC:
-                GluonMacList.append(MeshMAC)    # not from Gluon MAC schema
-#                print(' ++ Unknown MAC Schema: %s -> %s' % (MainMAC,MeshMAC))
+            GluonMacList = self.__GenerateGluonMACs(MainMAC)
+        else:
+            GluonMacList = [ MeshMAC ]
 
         if MainMAC in self.MAC2NodeIDDict:
             if self.MAC2NodeIDDict[MainMAC] != MainMAC:
@@ -333,7 +331,7 @@ class ffNodeInfo:
                         'DestSeg': None,
                         'Firmware': '?.?+????-??-??',
                         'GluonType': jsonNodeDict[ffNodeMAC]['GluonType'],
-                        'MeshMACs': [],
+                        'MeshMACs': jsonNodeDict[ffNodeMAC]['MeshMACs'],
                         'IPv6': jsonNodeDict[ffNodeMAC]['IPv6'],
                         'Segment': jsonNodeDict[ffNodeMAC]['Segment'],
                         'SegMode': 'auto',
@@ -349,7 +347,12 @@ class ffNodeInfo:
                     }
 
                     NodeCount += 1
-                    self.__AddGluonMACs(ffNodeMAC,None)
+
+                    if jsonNodeDict[ffNodeMAC]['MeshMACs'] == []:
+                        self.__AddGluonMACs(ffNodeMAC,None)
+                    else:
+                        for MeshMAC in jsonNodeDict[ffNodeMAC]['MeshMACs']:
+                            self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
                     if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
@@ -551,6 +554,7 @@ class ffNodeInfo:
         self.ffNodeDict[ffNodeMAC]['Name']        = NodeDict['nodeinfo']['hostname']
         self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
         self.ffNodeDict[ffNodeMAC]['Status']      = NODESTATE_OFFLINE
+        self.ffNodeDict[ffNodeMAC]['MeshMACs']    = []
         self.ffNodeDict[ffNodeMAC]['Clients']     = 0
         self.ffNodeDict[ffNodeMAC]['Latitude']    = None
         self.ffNodeDict[ffNodeMAC]['Longitude']   = None
@@ -642,7 +646,9 @@ class ffNodeInfo:
             if 'uptime' in NodeDict['statistics']:
                 self.ffNodeDict[ffNodeMAC]['Uptime'] = NodeDict['statistics']['uptime']
 
-        self.__AddGluonMACs(ffNodeMAC,None)
+        if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
+            self.__AddGluonMACs(ffNodeMAC,None)
+
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
         self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(self.ffNodeDict[ffNodeMAC]['Firmware'])
 
