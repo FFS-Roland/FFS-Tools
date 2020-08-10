@@ -968,15 +968,16 @@ class ffNodeInfo:
                                             if 'hostname' in ResponddDict['nodeinfo']:
                                                 NodeName = ResponddDict['nodeinfo']['hostname']
 
+                                                if NodeName is None:
+                                                    if ffNodeMAC in self.ffNodeDict:
+                                                        NodeName = self.ffNodeDict[ffNodeMAC]['Name']
+                                                    else:
+                                                        NodeName = '- ?? -'
+
                                             ResponddDict['statistics'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'statistics')
 
                                             if ResponddDict['statistics'] is not None:
                                                 ResponddDict['neighbours'] = self.__InfoFromRespondd(ffNodeMAC, 'bat%02d' % (ffSeg),'neighbours')
-
-                                        if ffNodeMAC in self.ffNodeDict and NodeName is None:
-                                            NodeName = self.ffNodeDict[ffNodeMAC]['Name']
-                                        else:
-                                            NodeName = '- ?? -'
 
                                         if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
                                             self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
@@ -997,7 +998,7 @@ class ffNodeInfo:
 
                                     RealNodeMAC = self.MAC2NodeIDDict[ffNodeMAC]
 
-                                    if RealNodeMAC != ffNodeMAC:
+                                    if RealNodeMAC != ffNodeMAC:  # actually ffNodeMAC is a Mesh-MAC of a Node ...
                                         if ffMeshMAC in self.MAC2NodeIDDict:
                                             BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
 
@@ -1018,7 +1019,7 @@ class ffNodeInfo:
                                                 print('   !!! ERROR in Database: %s / %s -> %s / %s\n' % (ffNodeMAC,ffMeshMAC,RealNodeMAC,BaseNodeMAC))
 
                                         else:
-                                            print('   !!! ERROR in Database: %s / %s -> %s\n' % (ffNodeMAC,ffMeshMAC,RealNodeMAC))
+                                            print('   !!! Unknown Mesh-MAC in Batman-TG: %s -> %s / %s\n' % (ffMeshMAC,ffNodeMAC,RealNodeMAC))
 
                                 else:  # Data of Client
                                     if ffNodeMAC not in ClientList:
@@ -1038,7 +1039,8 @@ class ffNodeInfo:
     #=========================================================================
     # public function "AddUplinkInfo"
     #
-    #   Add fastd-Infos for Nodes { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC' }
+    #   Add fastd-Infos for Nodes
+    #     FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','DnsSeg' }
     #
     #=========================================================================
     def AddUplinkInfos(self,FastdKeyDict):
@@ -1049,10 +1051,10 @@ class ffNodeInfo:
 
         for KeyFileName in FastdKeyDict:
             FastdKeyInfo = FastdKeyDict[KeyFileName]
-            ffNodeMAC = FastdKeyInfo['PeerMAC']
-            ffMeshMAC = FastdKeyInfo['VpnMAC']
+            ffNodeMAC = FastdKeyInfo['PeerMAC']  # is from Key-File, *not* live data!
+            ffMeshMAC = FastdKeyInfo['VpnMAC']   # MAC of fastd-Interface with Mesh-Traffic
 
-            if ffMeshMAC is not None:
+            if ffMeshMAC is not None:  # Node has VPN-Connection to Gateway
                 if ffMeshMAC in self.MAC2NodeIDDict:
                     if ffNodeMAC != self.MAC2NodeIDDict[ffMeshMAC]:
                         print('++ Node Info Mismatch: %s - %s / %s -> %s = \'%s\'' %
@@ -1074,25 +1076,6 @@ class ffNodeInfo:
                     fastdNodes += 1
                     self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
                     self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
-
-                    if FastdKeyInfo['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
-                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
-                    elif self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_SEGMENT_LIST:
-                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
-
-                    if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                        print('++ Node has active VPN-Connection: %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-
-                    if self.ffNodeDict[ffNodeMAC]['Segment'] != int(FastdKeyInfo['KeyDir'][3:]):
-                        if self.ffNodeDict[ffNodeMAC]['Segment'] is not None:
-                            print('!! Segment Mismatch Seg. %02d -> %s on Node %s = \'%s\'' % (
-                                self.ffNodeDict[ffNodeMAC]['Segment'],FastdKeyInfo['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-
-                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
-
-                elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:    # No active Connection to FF-Network
-                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(FastdKeyInfo['KeyDir'][3:])
 
             elif ffMeshMAC is not None and not MonitorMacTemplate.match(ffNodeMAC):
                 print('++ Unknown Node with VPN: %s - %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
@@ -1193,7 +1176,7 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = None
                 elif self.ffNodeDict[ffNodeMAC]['GluonType'] == NODETYPE_LEGACY:    # Firmware w/o Segment support
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = 0
-                elif GpsSegment is not None:
+                else:
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = GpsSegment
 
         print('... done.\n')
@@ -1225,14 +1208,29 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['DestSeg'] = CPE_TEMP_SEGMENT
                     self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix %02d' % (CPE_TEMP_SEGMENT)
 
+                if self.ffNodeDict[ffNodeMAC]['FastdGW'] is not None:   # Node has VPN-Connection to Gateway
+                    if self.ffNodeDict[ffNodeMAC]['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
+                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
+                        print('++ Node has Gluon with DNS-SegAssign: %s / %s = \'%s\'' % ( self.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                    elif self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_SEGMENT_LIST:
+                        self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_SEGMENT_LIST
+                        print('++ Node has newer Gluon as expected: %s / %s = \'%s\'' % ( self.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+
+                    if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
+                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                        print('++ Node has active VPN-Connection: %s / %s = \'%s\'' % (self.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+
                 if self.ffNodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     if self.ffNodeDict[ffNodeMAC]['KeyDir'] == '':
                         print('!! Uplink w/o Key: %s %s = \'%s\'' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                    elif self.ffNodeDict[ffNodeMAC]['Segment'] is None:
+                        print('!! Segment is None: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
                     elif self.ffNodeDict[ffNodeMAC]['Segment'] != int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:]):
-                        print('!! Segment <> KeyDir: %s %s = \'%s\': Seg.%02d <> %s' % (
-                            self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],
-                            self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['KeyDir']))
+                        print('!! Segment <> KeyDir: %s = \'%s\': Seg.%02d <> %s' % (
+                            ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Segment'],self.ffNodeDict[ffNodeMAC]['KeyDir']))
+                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
                 else:
                     for NeighbourMAC in self.ffNodeDict[ffNodeMAC]['Neighbours']:
                         if GwMacTemplate.match(NeighbourMAC):
@@ -1260,7 +1258,7 @@ class ffNodeInfo:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
                     elif self.ffNodeDict[ffNodeMAC]['Segment'] not in ValidSegmentList:
-                        print('>>> Bad Segment:   %s %s = \'%s\' in Seg.%02d' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment']))
+                        print('>>> Unknown Segment:   %s %s = \'%s\' in Seg.%02d' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Segment']))
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN    # ignore this Node Data
 
         print('... done.\n')
