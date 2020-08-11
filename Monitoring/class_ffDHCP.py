@@ -68,9 +68,8 @@ from scapy.all import (
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
-SNIFF_TIMEOUT = 1		# int: seconds to wait for a reply from server
+SNIFF_TIMEOUT = 10		# int: seconds to wait for reply from server
 ARP_RETRIES   = 3
-DHCP_RETRIES  = 10
 
 
 
@@ -82,10 +81,13 @@ DHCP_RETRIES  = 10
 #     is received.
 #
 #==============================================================================
-def sniffer_thread(is_matching):
+def sniffer_thread(is_matching,sniff_filter):
+
+#    print('    ... starting sniff() with filter = \"%s\" ...' % (sniff_filter))
 
     sniff(
         timeout=SNIFF_TIMEOUT,
+        filter=sniff_filter,
         stop_filter=is_matching,
         store=0
     )
@@ -172,19 +174,6 @@ class DHCPClient:
 
 
     #-------------------------------------------------------------
-    # private function "__send_request"
-    #
-    #     Transmit DHCPDICSOVER request
-    #
-    #-------------------------------------------------------------
-    def __send_request(self, srv_mac, srv_request):
-
-        sendp(Ether(dst=srv_mac) / srv_request, verbose=False)
-        return
-
-
-
-    #-------------------------------------------------------------
     # private function "__is_offer_type"
     #
     #     Checks that packet is a valid DHCP reply
@@ -237,26 +226,11 @@ class DHCPClient:
     #     Starts listening for packets in a new thread
     #
     #-------------------------------------------------------------
-    def __sniff_start(self):
+    def __sniff_start(self,sniff_filter):
 
-        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.is_matching_reply])
-#        print('    ... Starting sniffer ...')
+        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.is_matching_reply,sniff_filter])
         self.sniffer.start()
         time.sleep(0.1)
-        return
-
-
-    #-------------------------------------------------------------
-    # private function "__sniff_stop"
-    #
-    #     Waits for sniffer thread to finish
-    #
-    #-------------------------------------------------------------
-    def __sniff_stop(self):
-
-#        print('    ... waiting for sniff-result ...')
-        self.sniffer.join()
-#        print('    ... sniff_stop finished.\n')
         return
 
 
@@ -278,16 +252,19 @@ class DHCPClient:
         self.offered_gateway = None
         self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
 
-        Retries = DHCP_RETRIES
+        dhcp_request = self.__craft_discover_request()
+        srv_mac      = self.__get_mac_of_ip(srv_ip)
+        LoopCount    = 0
 
-        while self.offered_address is None and Retries > 0:
-            Retries -= 1
-            dhcp_request = self.__craft_discover_request()
-            srv_mac      = self.__get_mac_of_ip(srv_ip)
+        self.__sniff_start('udp and src host %s and port 67' % (srv_ip))
 
-            self.__sniff_start()
-            self.__send_request(srv_mac, dhcp_request)
-            self.__sniff_stop()
+        while self.sniffer.is_alive() and self.offered_address is None:
+            if LoopCount % 10 == 0:
+#                print('    ... sending DHCP-Request to %s ...' % (srv_mac))
+                sendp(Ether(dst=srv_mac) / dhcp_request, verbose=False)
+
+            LoopCount += 1
+            time.sleep(0.1)
 
         if self.offered_address is not None and self.offered_gateway != srv_ip:
             print('    !! Reply from wrong Gateway: IP = %s / GW = %s' % (self.offered_address,self.offered_gateway))
