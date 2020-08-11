@@ -122,7 +122,6 @@ class DHCPClient:
     def __craft_discover_request(self):
 
         mac = get_if_hwaddr(conf.iface)
-        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
 
         if isinstance(mac, bytes):
             hw = mac
@@ -277,6 +276,8 @@ class DHCPClient:
 
         self.offered_address = None
         self.offered_gateway = None
+        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
+
         Retries = DHCP_RETRIES
 
         while self.offered_address is None and Retries > 0:
