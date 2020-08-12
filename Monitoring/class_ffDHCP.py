@@ -14,6 +14,7 @@
 #  Requrements:                                                                           #
 #                                                                                         #
 #       scapy -> pip install scapy                                                        #
+#       tcpdump                                                                           #
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
@@ -81,14 +82,15 @@ ARP_RETRIES   = 3
 #     is received.
 #
 #==============================================================================
-def sniffer_thread(is_matching,sniff_filter):
+def sniffer_thread(check_packet,sniff_filter):
 
 #    print('    ... starting sniff() with filter = \"%s\" ...' % (sniff_filter))
 
     sniff(
         timeout=SNIFF_TIMEOUT,
         filter=sniff_filter,
-        stop_filter=is_matching,
+        prn=check_packet,
+        count=1,
         store=0
     )
 
@@ -203,20 +205,21 @@ class DHCPClient:
 
 
     #==============================================================================
-    # public fuction "is_matching_reply"
+    # public function "check_reply"
     #
     #     Called for each packet captured by sniffer.
     #
     #==============================================================================
-    def is_matching_reply(self, reply):
+    def check_reply(self, reply):
 
         if self.__is_offer_type(reply):
             self.offered_address = reply[BOOTP].yiaddr
             self.offered_gateway = reply[BOOTP].giaddr
             print('    %s from %s' % (self.offered_address, reply[BOOTP].giaddr))
-            return True
+        else:
+            print('    ... got invalid reply !!!')
 
-        return False
+        return
 
 
 
@@ -228,7 +231,7 @@ class DHCPClient:
     #-------------------------------------------------------------
     def __sniff_start(self,sniff_filter):
 
-        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.is_matching_reply,sniff_filter])
+        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.check_reply,sniff_filter])
         self.sniffer.start()
         time.sleep(0.1)
         return
@@ -236,9 +239,9 @@ class DHCPClient:
 
 
     #==============================================================================
-    # public function "LocationDataOK"
+    # public function "CheckDhcp"
     #
-    #     Check for available Location Data
+    #     Check DHCP-Server on Gateway
     #
     #==============================================================================
     def CheckDhcp(self, BatIF, srv_ip):
@@ -265,8 +268,5 @@ class DHCPClient:
 
             LoopCount += 1
             time.sleep(0.1)
-
-        if self.offered_address is not None and self.offered_gateway != srv_ip:
-            print('    !! Reply from wrong Gateway: IP = %s / GW = %s' % (self.offered_address,self.offered_gateway))
 
         return self.offered_address
