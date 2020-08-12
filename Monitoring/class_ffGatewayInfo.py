@@ -1071,12 +1071,13 @@ class ffGatewayInfo:
 
                             if DnsUpdate is not None:
                                 DnsUpdate.delete(DnsPeerID, 'AAAA')
-                            else:
-                                self.__alert('!! ERROR on updating DNS: '+PeerDnsName+' -> '+PeerDnsIPv6)
 
                     else:
-                        print('++ Unknown or old DNS Entry: '+DnsPeerID+' = '+IPv6)
+                        print('++ Unknown / old DNS Entry will be deleted: '+DnsPeerID+' = '+IPv6)
                         isOK = False
+
+                        if DnsUpdate is not None:
+                            DnsUpdate.delete(DnsPeerID, 'AAAA')
 
                 elif DnsPeerID != '@' and DnsPeerID != '*':
                     self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
@@ -1105,15 +1106,15 @@ class ffGatewayInfo:
                         DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                         print('>>> Updating Peer in DNS:',PeerDnsName,'->',PeerDnsIPv6)
 
-                else:
-                    self.__alert('!! ERROR on updating DNS: '+PeerDnsName+' -> '+PeerDnsIPv6)
-
                 isOK = False
 
         if DnsUpdate is not None:
             if len(DnsUpdate.index) > 1:
                 dns.query.tcp(DnsUpdate,self.__DnsServerIP)
                 print('... Update launched on DNS-Server',self.__DnsServerIP)
+        elif not isOK:
+            self.__alert('!! ERROR: DNS cannot be updated !!')
+            self.AnalyseOnly = True
 
         return isOK
 
