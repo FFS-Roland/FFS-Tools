@@ -450,7 +450,7 @@ class ffNodeInfo:
 
         if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
             (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
-            print('+++ Missing node_id!',NodeDict)
+            print('    +++ Missing node_id!',NodeDict)
             return False
 
         ffNodeID = NodeDict['nodeinfo']['node_id'].strip().lower()
@@ -865,7 +865,7 @@ class ffNodeInfo:
                 time.sleep(2)
 
         if NodeJsonDict is None:
-            print('++ Error on respondd!')
+            print('    +++ Error on respondd!')
 
         return NodeJsonDict
 
@@ -941,14 +941,13 @@ class ffNodeInfo:
 
                                     if ffNodeMAC not in NodeList:
                                         NodeList.append(ffNodeMAC)
+                                        self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                        self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
-                                    self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
-
-                                    if self.ffNodeDict[ffNodeMAC]['Source'] != 'respondd':
-                                        if not self.__IsOnline(ffNodeMAC):
-                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                            print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        if self.ffNodeDict[ffNodeMAC]['Source'] != 'respondd':
+                                            if not self.__IsOnline(ffNodeMAC):
+                                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                                print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                         if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
                                             print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
@@ -956,11 +955,9 @@ class ffNodeInfo:
                                 elif ffMeshMAC in BatmanMacList:
                                     #---------- Node without current data available ----------
 
-                                    if ffNodeMAC not in NodeList:
-                                        NodeList.append(ffNodeMAC)
-
-                                    if ffTQ >= BatmanMinTQ and BatctlInfo[2] == '0':
+                                    if ffNodeMAC not in NodeList and ffTQ >= BatmanMinTQ:
                                         print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
+                                        NodeList.append(ffNodeMAC)
                                         NodeName = None
                                         ResponddDict = { 'lastseen':CurrentTime, 'nodeinfo':None, 'statistics':None, 'neighbours':None }
 
@@ -1030,6 +1027,7 @@ class ffNodeInfo:
                 NodeCount = len(NodeList)
                 ClientCount = len(ClientList)
                 print('      Nodes = %d / Clients = %d' % (NodeCount,ClientCount))
+
                 TotalNodes   += NodeCount
                 TotalClients += ClientCount
 
