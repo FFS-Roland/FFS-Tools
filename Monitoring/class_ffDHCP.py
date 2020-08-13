@@ -75,31 +75,6 @@ ARP_RETRIES   = 3
 
 
 
-#==============================================================================
-# "sniffer_thread"
-#
-#     Starts scapy sniffer and stops when a timeout is reached or a valid packet
-#     is received.
-#
-#==============================================================================
-def sniffer_thread(check_packet,sniff_filter):
-
-#    print('    ... starting sniff() with filter = \"%s\" ...' % (sniff_filter))
-
-    sniff(
-        timeout=SNIFF_TIMEOUT,
-        filter=sniff_filter,
-        prn=check_packet,
-        count=1,
-        store=0
-    )
-
-#    print('    ... sniff() returned.')
-    return
-
-
-
-
 
 class DHCPClient:
     #==========================================================================
@@ -107,11 +82,50 @@ class DHCPClient:
     #==========================================================================
     def __init__(self):
 
-        self.xid = None
+        self.xid = 0
         self.sniffer = None
-        self.offered_address = None
-        self.offered_gateway = None
+        self.reply_packet = None
         return
+
+
+
+    #==============================================================================
+    # thread "sniffer_thread"
+    #
+    #     Starts scapy sniffer and stops when a timeout is reached or a valid packet
+    #     is received.
+    #
+    #==============================================================================
+    def sniffer_thread(self,sniff_interface,sniff_filter):
+
+#        print('\n    ... starting sniff()on %s with filter = \"%s\" ...' % (sniff_interface,sniff_filter))
+
+        sniff(
+            timeout=SNIFF_TIMEOUT,
+            iface=sniff_interface,
+            filter=sniff_filter,
+            prn=self.process_packet,
+            count=1,
+            store=0
+        )
+
+#        print('    ... sniff() returned.')
+        return
+
+
+
+    #==============================================================================
+    # public function "process_packet"
+    #
+    #     Called for packet captured by sniffer.
+    #
+    #==============================================================================
+    def process_packet(self, packet):
+
+        self.reply_packet = packet
+#        print('    ... got packet.')
+        return
+
 
 
 
@@ -123,9 +137,11 @@ class DHCPClient:
     #     <  scapy.layers.inet.IP: DHCPDISCOVER packet
     #
     #-------------------------------------------------------------
-    def __craft_discover_request(self):
+    def __craft_discover_request(self,dhcp_interface):
 
-        mac = get_if_hwaddr(conf.iface)
+        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
+        conf.iface = dhcp_interface
+        mac = get_if_hwaddr(dhcp_interface)
 
         if isinstance(mac, bytes):
             hw = mac
@@ -150,9 +166,9 @@ class DHCPClient:
     #     Transmit ARP request
     #
     #-------------------------------------------------------------
-    def __get_mac_of_ip(self, srv_ip):
+    def __get_mac_of_ip(self,my_iface,srv_ip):
         srv_mac = 'FF:FF:FF:FF:FF:FF'
-        my_ip = get_if_addr(conf.iface)
+        my_ip = get_if_addr(my_iface)
         reply = None
         Retries = ARP_RETRIES
 
@@ -176,92 +192,81 @@ class DHCPClient:
 
 
     #-------------------------------------------------------------
-    # private function "__is_offer_type"
-    #
-    #     Checks that packet is a valid DHCP reply
-    #
-    #-------------------------------------------------------------
-    def __is_offer_type(self, packet):
-
-        if not packet.haslayer(BOOTP):
-            return False
-
-        if packet[BOOTP].op != 2:   # BOOTREPLY
-            return False
-
-        if packet[BOOTP].xid != self.xid:
-            return False
-
-        if not packet.haslayer(DHCP):
-            return False
-
-        req_type = [x[1] for x in packet[DHCP].options if x[0] == 'message-type'][0]
-
-        if req_type in [2]:
-            return True
-
-        return False
-
-
-
-    #==============================================================================
-    # public function "check_reply"
-    #
-    #     Called for each packet captured by sniffer.
-    #
-    #==============================================================================
-    def check_reply(self, reply):
-
-        if self.__is_offer_type(reply):
-            self.offered_address = reply[BOOTP].yiaddr
-            self.offered_gateway = reply[BOOTP].giaddr
-            print('    %s from %s' % (self.offered_address, reply[BOOTP].giaddr))
-        else:
-            print('    ... got invalid reply !!!')
-
-        return
-
-
-
-    #-------------------------------------------------------------
     # private function "__sniff_start"
     #
     #     Starts listening for packets in a new thread
     #
     #-------------------------------------------------------------
-    def __sniff_start(self,sniff_filter):
+    def __sniff_start(self,sniff_interface,srv_ip):
 
-        self.sniffer = threading.Thread(target=sniffer_thread,args=[self.check_reply,sniff_filter])
+        conf.sniff_promisc = False
+        sniff_filter = 'udp and src host %s and port 67' % (srv_ip)
+        self.reply_packet = None
+
+        self.sniffer = threading.Thread(target=self.sniffer_thread,args=[sniff_interface,sniff_filter])
         self.sniffer.start()
         time.sleep(0.1)
         return
 
 
 
+    #-------------------------------------------------------------
+    # private function "__is_offer_type"
+    #
+    #     Checks that packet is a valid DHCP_OFFER
+    #
+    #-------------------------------------------------------------
+    def __is_offer_type(self,packet):
+
+        if packet is None:
+#            print('    ... got no reply.')
+            return False
+
+        if not packet.haslayer(BOOTP):
+            print('    ... is not BOOTP !!')
+            return False
+
+        if packet[BOOTP].op != 2:   # BOOTREPLY
+            print('    ... is not BOOTREPLY !!')
+            return False
+
+        if packet[BOOTP].xid != self.xid:
+            print('    ... has wrong xid: %d <> %d !!' % (packet[BOOTP].xid,self.xid))
+            return False
+
+        if not packet.haslayer(DHCP):
+            print('    ... is not DHCP !!')
+            return False
+
+#        print(packet[DHCP].options)
+
+        for x in packet[DHCP].options:
+            if x == ('message-type',2):
+                return True
+
+        print('    ... invalid DHCP packet !!')
+        return False
+
+
+
     #==============================================================================
     # public function "CheckDhcp"
     #
-    #     Check DHCP-Server on Gateway
+    #     Check DHCP-Server on srv_ip via dhcp_iface
     #
     #==============================================================================
-    def CheckDhcp(self, BatIF, srv_ip):
+    def CheckDhcp(self, dhcp_iface, srv_ip):
 
-#        print('Starting DHCP-Check in IF = %s to Server = %s...' % (BatIF, srv_ip))
+#        print('Starting DHCP-Check on IF = %s to Server = %s...' % (dhcp_iface, srv_ip))
 
-        conf.iface = BatIF
-        conf.sniff_promisc = False
+        offered_address = None
+        dhcp_request    = self.__craft_discover_request(dhcp_iface)
+        srv_mac         = self.__get_mac_of_ip(dhcp_iface,srv_ip)
+        LoopCount       = 0
 
-        self.offered_address = None
-        self.offered_gateway = None
-        self.xid = randint(0, (2 ** 32) - 1)  # BOOTP: 4 bytes
+        self.__sniff_start(dhcp_iface,srv_ip)
 
-        dhcp_request = self.__craft_discover_request()
-        srv_mac      = self.__get_mac_of_ip(srv_ip)
-        LoopCount    = 0
-
-        self.__sniff_start('udp and src host %s and port 67' % (srv_ip))
-
-        while self.sniffer.is_alive() and self.offered_address is None:
+        while self.sniffer.is_alive() and self.reply_packet is None:
             if LoopCount % 10 == 0:
 #                print('    ... sending DHCP-Request to %s ...' % (srv_mac))
                 sendp(Ether(dst=srv_mac) / dhcp_request, verbose=False)
@@ -269,4 +274,9 @@ class DHCPClient:
             LoopCount += 1
             time.sleep(0.1)
 
-        return self.offered_address
+        if self.__is_offer_type(self.reply_packet):
+            offered_address = self.reply_packet[BOOTP].yiaddr
+            offered_gateway = self.reply_packet[BOOTP].giaddr
+            print('    %s from %s' % (offered_address, offered_gateway))
+
+        return offered_address
