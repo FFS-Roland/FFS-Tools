@@ -606,19 +606,6 @@ class ffNodeInfo:
         if (CurrentTime - LastSeen) <= MaxOfflineTime:
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
-            if NodeDict['neighbours'] is not None:
-                if 'batadv' in NodeDict['neighbours']:
-                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
-
-                    for MeshMAC in NodeDict['neighbours']['batadv']:
-                        if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
-                            for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
-                                if MacAdrTemplate.match(ffNeighbour):
-                                    if GwMacTemplate.match(ffNeighbour):
-                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                                    elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
-                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
-
             if 'addresses' in NodeDict['nodeinfo']['network']:
                 for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
                     if ffsIPv6Template.match(NodeAddress):
@@ -642,6 +629,21 @@ class ffNodeInfo:
                                 if GWpeers[Uplink] is not None:
                                     if 'established' in GWpeers[Uplink]:
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+
+            if NodeDict['neighbours'] is not None:
+                if 'batadv' in NodeDict['neighbours']:
+                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
+
+                    for MeshMAC in NodeDict['neighbours']['batadv']:
+                        if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
+                            for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
+                                if MacAdrTemplate.match(ffNeighbour):
+                                    if GwMacTemplate.match(ffNeighbour):
+                                        if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
+                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \"%s\"' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                                    elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
+                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
             if 'uptime' in NodeDict['statistics']:
                 self.ffNodeDict[ffNodeMAC]['Uptime'] = NodeDict['statistics']['uptime']
@@ -1052,14 +1054,26 @@ class ffNodeInfo:
         for KeyFileName in FastdKeyDict:
             FastdKeyInfo = FastdKeyDict[KeyFileName]
             ffNodeMAC = FastdKeyInfo['PeerMAC']  # is from Key-File, *not* live data!
-            ffMeshMAC = FastdKeyInfo['VpnMAC']   # MAC of fastd-Interface with Mesh-Traffic
+            ffVpnMAC = FastdKeyInfo['VpnMAC']    # MAC of fastd-Interface with Mesh-Traffic
 
-            if ffMeshMAC is not None:  # Node has VPN-Connection to Gateway
-                if ffMeshMAC in self.MAC2NodeIDDict:
-                    if ffNodeMAC != self.MAC2NodeIDDict[ffMeshMAC]:
+            if ffVpnMAC is not None:  # Node has VPN-Connection to Gateway
+                if MonitorMacTemplate.match(ffVpnMAC):
+                    ffVpnMAC = None
+                    ffNodeMAC = None
+                elif ffVpnMAC in self.MAC2NodeIDDict:
+                    if ffNodeMAC != self.MAC2NodeIDDict[ffVpnMAC]:
                         print('++ Node Info Mismatch: %s - %s / %s -> %s = \'%s\'' %
-                             (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,self.MAC2NodeIDDict[ffMeshMAC],self.ffNodeDict[self.MAC2NodeIDDict[ffMeshMAC]]['Name']))
-                        ffNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
+                             (FastdKeyInfo['KeyDir'],ffNodeMAC,ffVpnMAC,self.MAC2NodeIDDict[ffVpnMAC],self.ffNodeDict[self.MAC2NodeIDDict[ffVpnMAC]]['Name']))
+                        ffNodeMAC = self.MAC2NodeIDDict[ffVpnMAC]
+                else:
+                    GluonMacList = self.__GenerateGluonMACs(ffNodeMAC)
+
+                    if ffVpnMAC in GluonMacList:
+                        print('++ Unknown VPN-MAC (Gluon): %s / %s -> %s / %s = \'%s\' -> %s' %
+                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],KeyFileName,FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
+                    else:
+                        print('++ Unknown VPN-MAC (Non-Gluon): %s / %s -> %s / %s = \'%s\' -> %s' %
+                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],KeyFileName,FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
 
             if ffNodeMAC in self.ffNodeDict:
                 self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
@@ -1072,13 +1086,10 @@ class ffNodeInfo:
                     print('++ Hostname Mismatch:  %s = \'%s\' <- \'%s\'' % (KeyFileName,self.ffNodeDict[ffNodeMAC]['Name'],FastdKeyInfo['PeerName']))
                     FastdKeyInfo['PeerName'] = self.ffNodeDict[ffNodeMAC]['Name']
 
-                if ffMeshMAC is not None:   # Node has VPN-Connection to Gateway ...
+                if ffVpnMAC is not None:   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
-                    self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                    self.__AddGluonMACs(ffNodeMAC,ffVpnMAC)
                     self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
-
-            elif ffMeshMAC is not None and not MonitorMacTemplate.match(ffNodeMAC):
-                print('++ Unknown Node with VPN: %s - %s / %s = \'%s\'' % (FastdKeyInfo['KeyDir'],ffNodeMAC,ffMeshMAC,FastdKeyInfo['PeerName']))
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
