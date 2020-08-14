@@ -117,6 +117,8 @@ NODETYPE_SEGMENT_LIST  = 2
 NODETYPE_DNS_SEGASSIGN = 3
 NODETYPE_MTU_1340      = 4
 
+GLUON_MARKER           = [ '?', '%', '$', '$', ' ' ]    # Marker for Gluon-Type in Lists
+
 NODESTATE_UNKNOWN      = '?'
 NODESTATE_OFFLINE      = '#'
 NODESTATE_ONLINE_MESH  = ' '
@@ -443,13 +445,9 @@ class ffNodeInfo:
             ('nodeinfo' not in NodeDict) or
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
+            print('+++ Invalid Record!',NodeDict)
 
-            if DateFormat is None:
-                print('+++ Invalid Record!',NodeDict)
-            return False
-
-        if ((NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']) or
-            (NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics'])):
+        if NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']:
             print('    +++ Missing node_id!',NodeDict)
             return False
 
@@ -461,10 +459,16 @@ class ffNodeInfo:
             LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
 
         if (CurrentTime - LastSeen) > MaxInactiveTime:
-            if DateFormat is None:
-                print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
+#            print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
             return False    # Data is obsolete / too old
 
+        if GwIdTemplate.match(ffNodeID):
+            print('    >> Data of Gateway:',ffNodeID)
+            return False
+
+        if NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics']:
+            print('    +++ Missing node_id of statistics!',NodeDict['statistics'])
+            return False
 
         if NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
             print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
@@ -545,8 +549,8 @@ class ffNodeInfo:
                 'Source': None
             }
 
-#        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
-        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online'] and self.ffNodeDict[ffNodeMAC]['Source'] != 'DB':
+        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
+#        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online'] and self.ffNodeDict[ffNodeMAC]['Source'] != 'DB':
             return False    # Newer Node-Info already existing ...
 
 
