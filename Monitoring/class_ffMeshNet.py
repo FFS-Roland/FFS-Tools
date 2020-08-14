@@ -56,12 +56,13 @@ from class_ffGatewayInfo import *
 
 StatFileName   = 'SegStatistics.json'
 
-MaxStatisticsData  = 12 * 24 * 7    # 1 Week wit Data all 5 Minutes
+MaxStatisticsData  = 12 * 24 * 7    # 1 Week with Data all 5 Minutes
 
 NODEWEIGHT_OFFLINE     = 1
 NODEWEIGHT_MESH_ONLY   = 3
 NODEWEIGHT_UPLINK      = 1000
 NODEWEIGHT_SEGMENT_FIX = 1000000
+
 
 
 
@@ -81,7 +82,6 @@ class ffMeshNet:
         self.__MAC2NodeIDDict = NodeInfos.MAC2NodeIDDict
 
         self.__MeshCloudDict  = {}      # Dictionary of Mesh-Clouds with List of Member-Nodes
-        self.__SegmentDict    = {}      # Segment Data: { 'Nodes','Clients','Uplinks' }
         self.__NodeMoveDict   = {}      # Git Moves of Nodes from one Segment to another
         return
 
@@ -431,42 +431,14 @@ class ffMeshNet:
 
 
     #-----------------------------------------------------------------------
-    # private function "__CalcSegmentStatistics"
+    # private function "__WriteMeshClouds"
     #
     #
     #-----------------------------------------------------------------------
-    def __CalcSegmentStatistics(self):
+    def __WriteMeshClouds(self,MeshCloudFile):
 
-        for ffNodeMAC in self.__NodeDict.keys():
-            if self.__NodeDict[ffNodeMAC]['Status'] in [ NODESTATE_ONLINE_MESH, NODESTATE_ONLINE_VPN ]:
-                ffSeg = self.__NodeDict[ffNodeMAC]['Segment']
-
-                if ffSeg not in self.__SegmentDict:
-                    self.__SegmentDict[ffSeg] = { 'Nodes':0, 'Clients':0, 'Uplinks':0 }
-
-                self.__SegmentDict[ffSeg]['Nodes'] += 1
-                self.__SegmentDict[ffSeg]['Clients'] += self.__NodeDict[ffNodeMAC]['Clients']
-
-                if self.__NodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
-                    self.__SegmentDict[ffSeg]['Uplinks'] += 1
-
-        return
-
-
-    #==============================================================================
-    # public function "WriteMeshCloudList"
-    #
-    #   Write out Mesh Cloud List
-    #==============================================================================
-    def WriteMeshCloudList(self,FileName):
-
-        print('Writing out Mesh Cloud List ...')
-
-        MeshCloudFile = open(FileName, mode='w')
-        MeshCloudFile.write('FFS-Mesh-Clouds on %s\n' % datetime.datetime.now())
-
-        RegionDict = {}
-        GluonMarker = [ '?', '%', '$', '$', ' ' ]
+        print('\nWriting out Nodes in Mesh Clouds ...')
+        MeshCloudFile.write('FF-Mesh-Clouds on %s\n' % datetime.datetime.now())
         TotalMeshingNodes = 0
 
         for CloudID in sorted(self.__MeshCloudDict):
@@ -474,7 +446,7 @@ class ffMeshNet:
             TotalNodes    = 0
             TotalClients  = 0
             TotalUplinks  = 0
-            OldGluon      = 0
+
             CurrentSeg    = self.__MeshCloudDict[CloudID]['CloudSegment']
             CurrentVPN    = None
             CurrentRegion = None
@@ -526,7 +498,7 @@ class ffMeshNet:
                     CurrentError = '*'
 
                 if CurrentError == ' ':
-                    CurrentError = GluonMarker[self.__NodeDict[ffnb]['GluonType']]
+                    CurrentError = GLUON_MARKER[self.__NodeDict[ffnb]['GluonType']]
 
                 MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'], Segment,
                                                                                                 self.__NodeDict[ffnb]['Clients'], ffnb, self.__NodeDict[ffnb]['KeyDir'],
@@ -541,9 +513,6 @@ class ffMeshNet:
                 if self.__NodeDict[ffnb]['Status'] == NODESTATE_ONLINE_VPN:
                     TotalUplinks += 1
 
-                if self.__NodeDict[ffnb]['GluonType'] < NODETYPE_MTU_1340:
-                    OldGluon += 1
-
             MeshCloudFile.write('\n          Total Online-Nodes / Clients / Uplinks = %3d / %3d / %3d   (Seg. %02d)\n' % (TotalNodes,TotalClients,TotalUplinks,CurrentSeg))
 
             for ffnb in self.__MeshCloudDict[CloudID]['CloudMembers']:
@@ -551,21 +520,20 @@ class ffMeshNet:
                 self.__NodeDict[ffnb]['Region']  = CurrentRegion
                 self.__NodeDict[ffnb]['ZIP']     = CurrentZIP
 
-            if CurrentRegion is None:
-                CurrentRegion = '***'
-
-            if CurrentRegion not in RegionDict:
-                RegionDict[CurrentRegion] = { 'Nodes':TotalNodes, 'Clients':TotalClients, 'OldGluon':OldGluon, 'Segment':CurrentSeg }
-            else:
-                RegionDict[CurrentRegion]['Nodes']    += TotalNodes
-                RegionDict[CurrentRegion]['Clients']  += TotalClients
-                RegionDict[CurrentRegion]['OldGluon'] += OldGluon
-
         print('\nSum: %d Clouds with %d Nodes\n' % (len(self.__MeshCloudDict),TotalMeshingNodes))
         MeshCloudFile.write('\nSum: %d Clouds with %d Nodes\n' % (len(self.__MeshCloudDict),TotalMeshingNodes))
+        return
+
+
+
+    #-----------------------------------------------------------------------
+    # private function "__WriteSingleNodes"
+    #
+    #
+    #-----------------------------------------------------------------------
+    def __WriteSingleNodes(self,MeshCloudFile):
 
         print('\nWriting out Single Nodes ...')
-
         MeshCloudFile.write('\n\n########################################################################\n\n')
         MeshCloudFile.write('Single Nodes:\n\n')
 
@@ -591,33 +559,71 @@ class ffMeshNet:
                     Segment = self.__NodeDict[ffnb]['Segment']
 
                 if CurrentError == ' ':
-                    CurrentError = GluonMarker[self.__NodeDict[ffnb]['GluonType']]
+                    CurrentError = GLUON_MARKER[self.__NodeDict[ffnb]['GluonType']]
 
                 MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'],
                                                                                                 Segment,self.__NodeDict[ffnb]['Clients'], ffnb,
                                                                                                 self.__NodeDict[ffnb]['KeyDir'], self.__NodeDict[ffnb]['KeyFile'],
                                                                                                 self.__NodeDict[ffnb]['Name'], self.__NodeDict[ffnb]['DestSeg'],
                                                                                                 self.__NodeDict[ffnb]['Region'], self.__NodeDict[ffnb]['Uptime']))
-                TotalNodes   += 1
-                TotalClients += self.__NodeDict[ffnb]['Clients']
-
-                Region = self.__NodeDict[ffnb]['Region']
-
-                if Region not in RegionDict:
-                    RegionDict[Region] = { 'Nodes':1, 'Clients':self.__NodeDict[ffnb]['Clients'], 'OldGluon':0, 'Segment':self.__NodeDict[ffnb]['Segment'] }
-                else:
-                    RegionDict[Region]['Nodes']   += 1
-                    RegionDict[Region]['Clients'] += self.__NodeDict[ffnb]['Clients']
-
-                if self.__NodeDict[ffnb]['GluonType'] < NODETYPE_MTU_1340:
-                    RegionDict[Region]['OldGluon'] += 1
+        return
 
 
-        print('\nCalculating Segment Statistics ...')
-        self.__CalcSegmentStatistics()
+
+    #-----------------------------------------------------------------------
+    # private function "__CalculateStatistics"
+    #
+    #
+    #-----------------------------------------------------------------------
+    def __CalculateStatistics(self,SegmentDict,RegionDict):
+
+        for ffNodeMAC in self.__NodeDict.keys():
+            if self.__NodeDict[ffNodeMAC]['Status'] in [ NODESTATE_ONLINE_MESH, NODESTATE_ONLINE_VPN ]:
+                ffSegment = self.__NodeDict[ffNodeMAC]['Segment']
+                ffRegion  = self.__NodeDict[ffNodeMAC]['Region']
+
+                if ffSegment not in SegmentDict:
+                    SegmentDict[ffSegment] = { 'Nodes':0, 'Clients':0, 'Uplinks':0, 'BlindLoad':0 }
+
+                SegmentDict[ffSegment]['Nodes'] += 1
+                SegmentDict[ffSegment]['Clients'] += self.__NodeDict[ffNodeMAC]['Clients']
+
+                if self.__NodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
+                    SegmentDict[ffSegment]['Uplinks'] += 1
+
+                ffRegion  = self.__NodeDict[ffNodeMAC]['Region']
+
+                if ffRegion is None or ffRegion == '??':
+                    SegmentDict[ffSegment]['BlindLoad'] += 1 + self.__NodeDict[ffNodeMAC]['Clients']
+                    ffRegion = '-- undefined --'
+                    ffSegment = 0
+
+                if ffRegion not in RegionDict:
+                    RegionDict[ffRegion] = { 'Nodes':0, 'Clients':0, 'OldGluon':0, 'Segment':ffSegment }
+
+                RegionDict[ffRegion]['Nodes']    += 1
+                RegionDict[ffRegion]['Clients']  += self.__NodeDict[ffNodeMAC]['Clients']
+
+                if self.__NodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MTU_1340:
+                    RegionDict[ffRegion]['OldGluon'] += 1
+
+        return
+
+
+
+    #-----------------------------------------------------------------------
+    # private function "__WriteStatistics"
+    #
+    #
+    #-----------------------------------------------------------------------
+    def __WriteStatistics(self,MeshCloudFile):
+
+        SegmentDict = {}
+        RegionDict  = {}
+
+        self.__CalculateStatistics(SegmentDict,RegionDict)
 
         print('\nWrite out Statistics ...')
-
         MeshCloudFile.write('\n\n########################################################################\n\n')
         MeshCloudFile.write('Online-Nodes      / Clients / Sum:\n\n')
 
@@ -625,11 +631,11 @@ class ffMeshNet:
         TotalClients = 0
         TotalUplinks = 0
 
-        for ffSeg in sorted(self.__SegmentDict):
-            MeshCloudFile.write('Segment %02d: %5d / %5d / %5d\n' % (ffSeg, self.__SegmentDict[ffSeg]['Nodes'], self.__SegmentDict[ffSeg]['Clients'], self.__SegmentDict[ffSeg]['Nodes']+self.__SegmentDict[ffSeg]['Clients']))
-            TotalNodes   += self.__SegmentDict[ffSeg]['Nodes']
-            TotalClients += self.__SegmentDict[ffSeg]['Clients']
-#            TotalUplinks += self.__SegmentDict[ffSeg]['Uplinks']
+        for ffSeg in sorted(SegmentDict):
+            MeshCloudFile.write('Segment %02d: %5d / %5d / %5d / (%d)\n' % (ffSeg, SegmentDict[ffSeg]['Nodes'], SegmentDict[ffSeg]['Clients'], SegmentDict[ffSeg]['Nodes']+SegmentDict[ffSeg]['Clients'],SegmentDict[ffSeg]['BlindLoad']))
+            TotalNodes   += SegmentDict[ffSeg]['Nodes']
+            TotalClients += SegmentDict[ffSeg]['Clients']
+#            TotalUplinks += SegmentDict[ffSeg]['Uplinks']
 
 
         MeshCloudFile.write('\n------------------------------------------------------------------------\n')
@@ -649,6 +655,23 @@ class ffMeshNet:
 
         MeshCloudFile.write('\n------------------------------------------------------------------------\n')
         MeshCloudFile.write('Totals:     %5d / %5d / %5d\n' % (TotalNodes, TotalClients, TotalNodes+TotalClients))
+        return
+
+
+
+    #==============================================================================
+    # public function "WriteMeshCloudList"
+    #
+    #   Write out Mesh Cloud List
+    #==============================================================================
+    def WriteMeshCloudList(self,FileName):
+
+        print('Writing out Mesh Cloud List ...')
+        MeshCloudFile = open(FileName, mode='w')
+
+        self.__WriteMeshClouds(MeshCloudFile)
+        self.__WriteSingleNodes(MeshCloudFile)
+        self.__WriteStatistics(MeshCloudFile)
 
         MeshCloudFile.close()
         print()
