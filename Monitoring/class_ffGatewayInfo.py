@@ -607,7 +607,7 @@ class ffGatewayInfo:
                 print('... Segment %02d' % (Segment))
 
                 for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                    if len(GwName) == 7 and GwName not in GwIgnoreList:
+                    if GwName not in GwIgnoreList:
                         InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 #                        InternalGwIPv6 = 'fd21:b4dc:4b%02d::a38:%d' % ( Segment, int(GwName[2:4])*100 + int(GwName[6:8]) )
 
@@ -644,6 +644,7 @@ class ffGatewayInfo:
     def CheckGatewayDhcpServer(self):
 
         print('\nChecking DHCP-Server on Gateways ...')
+        CheckDict = {}
 
         ffDhcpClient = DHCPClient()
 
@@ -651,13 +652,23 @@ class ffGatewayInfo:
             print('... Segment %02d' % (Segment))
 
             for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
-                if len(GwName) == 7 and GwName not in GwIgnoreList:
+                if GwName not in GwIgnoreList:
+                    if GwName not in CheckDict:
+                        CheckDict[GwName] = 0
+
                     InternalGwIPv4 = '10.%d.%d.%d' % ( 190+int((Segment-1)/32), ((Segment-1)*8)%256, int(GwName[2:4])*10 + int(GwName[6:8]) )
 
                     DhcpResult = ffDhcpClient.CheckDhcp('bat%02d' % (Segment), InternalGwIPv4)
 
                     if DhcpResult is None:
-                        self.__alert('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+#                        self.__alert('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                        print('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                    else:
+                        CheckDict[GwName] += 1
+
+        for GwName in CheckDict:
+            if CheckDict[GwName] == 0:
+                self.__alert('!!! Problem with DHCP-Server on %s !' % (GwName))
 
         print('... done.\n')
         return
