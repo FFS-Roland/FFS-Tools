@@ -317,52 +317,50 @@ class ffNodeInfo:
 
         else:
             for ffNodeMAC in jsonNodeDict:
-                if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) <= MaxInactiveTime:
+                self.ffNodeDict[ffNodeMAC] = {
+                    'Name': jsonNodeDict[ffNodeMAC]['Name'],
+                    'Hardware': jsonNodeDict[ffNodeMAC]['Hardware'],
+                    'Status': jsonNodeDict[ffNodeMAC]['Status'],
+                    'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
+                    'Uptime': 0.0,
+                    'Clients': 0,
+                    'Latitude': jsonNodeDict[ffNodeMAC]['Latitude'],
+                    'Longitude': jsonNodeDict[ffNodeMAC]['Longitude'],
+                    'ZIP': jsonNodeDict[ffNodeMAC]['ZIP'],
+                    'Region': '??',
+                    'DestSeg': None,
+                    'Firmware': '?.?+????-??-??',
+                    'GluonType': jsonNodeDict[ffNodeMAC]['GluonType'],
+                    'MeshMACs': jsonNodeDict[ffNodeMAC]['MeshMACs'],
+                    'IPv6': jsonNodeDict[ffNodeMAC]['IPv6'],
+                    'Segment': jsonNodeDict[ffNodeMAC]['Segment'],
+                    'SegMode': 'auto',
+                    'KeyDir': '',
+                    'KeyFile': '',
+                    'FastdKey': '',
+                    'FastdGW': None,
+                    'InCloud': None,
+                    'Neighbours': [],
+                    'AutoUpdate': jsonNodeDict[ffNodeMAC]['AutoUpdate'],
+                    'Owner': jsonNodeDict[ffNodeMAC]['Owner'],
+                    'Source': 'DB'
+                }
 
-                    self.ffNodeDict[ffNodeMAC] = {
-                        'Name': jsonNodeDict[ffNodeMAC]['Name'],
-                        'Hardware': jsonNodeDict[ffNodeMAC]['Hardware'],
-                        'Status': jsonNodeDict[ffNodeMAC]['Status'],
-                        'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
-                        'Uptime': 0.0,
-                        'Clients': 0,
-                        'Latitude': jsonNodeDict[ffNodeMAC]['Latitude'],
-                        'Longitude': jsonNodeDict[ffNodeMAC]['Longitude'],
-                        'ZIP': jsonNodeDict[ffNodeMAC]['ZIP'],
-                        'Region': '??',
-                        'DestSeg': None,
-                        'Firmware': '?.?+????-??-??',
-                        'GluonType': jsonNodeDict[ffNodeMAC]['GluonType'],
-                        'MeshMACs': jsonNodeDict[ffNodeMAC]['MeshMACs'],
-                        'IPv6': jsonNodeDict[ffNodeMAC]['IPv6'],
-                        'Segment': jsonNodeDict[ffNodeMAC]['Segment'],
-                        'SegMode': 'auto',
-                        'KeyDir': '',
-                        'KeyFile': '',
-                        'FastdKey': '',
-                        'FastdGW': None,
-                        'InCloud': None,
-                        'Neighbours': [],
-                        'AutoUpdate': None,
-                        'Owner': jsonNodeDict[ffNodeMAC]['Owner'],
-                        'Source': 'DB'
-                    }
+                NodeCount += 1
 
-                    NodeCount += 1
+                if jsonNodeDict[ffNodeMAC]['MeshMACs'] == []:
+                    self.__AddGluonMACs(ffNodeMAC,None)
+                else:
+                    for MeshMAC in jsonNodeDict[ffNodeMAC]['MeshMACs']:
+                        self.__AddGluonMACs(ffNodeMAC,MeshMAC)
 
-                    if jsonNodeDict[ffNodeMAC]['MeshMACs'] == []:
-                        self.__AddGluonMACs(ffNodeMAC,None)
+                if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
+                    if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxInactiveTime:
+                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
                     else:
-                        for MeshMAC in jsonNodeDict[ffNodeMAC]['MeshMACs']:
-                            self.__AddGluonMACs(ffNodeMAC,MeshMAC)
-
-                    if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
-                    else:
-                        self.ffNodeDict[ffNodeMAC]['Neighbours'] = jsonNodeDict[ffNodeMAC]['Neighbours']
-
-                    if 'AutoUpdate' in jsonNodeDict[ffNodeMAC]:
-                        self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = jsonNodeDict[ffNodeMAC]['AutoUpdate']
+                else:
+                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = jsonNodeDict[ffNodeMAC]['Neighbours']
 
         print('... %d Nodes done.\n' % (NodeCount))
         return NodeCount
@@ -457,10 +455,6 @@ class ffNodeInfo:
             LastSeen = NodeDict['lastseen']
         else:
             LastSeen = int(calendar.timegm(time.strptime(NodeDict['lastseen'], DateFormat)))
-
-        if (CurrentTime - LastSeen) > MaxInactiveTime:
-#            print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
-            return False    # Data is obsolete / too old
 
         if GwIdTemplate.match(ffNodeID):
             print('    >> Data of Gateway:',ffNodeID)
@@ -557,7 +551,6 @@ class ffNodeInfo:
         #---------- Current Data of Node will be used ----------
         self.ffNodeDict[ffNodeMAC]['Name']        = NodeDict['nodeinfo']['hostname']
         self.ffNodeDict[ffNodeMAC]['last_online'] = LastSeen
-        self.ffNodeDict[ffNodeMAC]['Status']      = NODESTATE_OFFLINE
         self.ffNodeDict[ffNodeMAC]['MeshMACs']    = []
         self.ffNodeDict[ffNodeMAC]['Clients']     = 0
         self.ffNodeDict[ffNodeMAC]['Latitude']    = None
@@ -607,6 +600,12 @@ class ffNodeInfo:
             else:
                 self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '---'
 
+
+        if (CurrentTime - LastSeen) > MaxInactiveTime:
+#            print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
+            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
+            return False    # Data is obsolete / too old
+
         if (CurrentTime - LastSeen) <= MaxOfflineTime:
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
 
@@ -651,6 +650,10 @@ class ffNodeInfo:
 
             if 'uptime' in NodeDict['statistics']:
                 self.ffNodeDict[ffNodeMAC]['Uptime'] = NodeDict['statistics']['uptime']
+
+        else:
+            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
+
 
         if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
             self.__AddGluonMACs(ffNodeMAC,None)
