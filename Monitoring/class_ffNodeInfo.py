@@ -84,7 +84,9 @@ MinNodesCount      = 1000           # Minimum number of Nodes
 
 FreifunkNodeDomain = 'nodes.freifunk-stuttgart.de'
 
-NodeDictName   = 'NodeDict.json'      # Node Database
+NodeDbName     = 'NodeDict.json'      # Node Database
+NodeBackupName = 'NodeBackupDB.json'  # Backup of Node Database
+
 MacDictName    = 'MacDict.json'       # MAC Translation Dictionary
 Region2ZipName = 'Region2ZIP.json'    # Regions with ZIP Codes of Baden-Wuerttemberg
 Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
@@ -296,77 +298,6 @@ class ffNodeInfo:
 
 
 
-    #-------------------------------------------------------------
-    # private function "__LoadNodeDict"
-    #
-    #   Load ffNodeDict
-    #-------------------------------------------------------------
-    def __LoadNodeDict(self):
-
-        print('Loading',NodeDictName,'...')
-        CurrentTime = int(time.time())
-        NodeCount = 0
-
-        try:
-            JsonFile = open(os.path.join(self.__DatabasePath,NodeDictName), mode='r')
-            jsonNodeDict = json.load(JsonFile)
-            JsonFile.close()
-
-        except:
-            print('\n!! Error on Reading %s !!\n' % (NodeDictName))
-
-        else:
-            for ffNodeMAC in jsonNodeDict:
-                self.ffNodeDict[ffNodeMAC] = {
-                    'Name': jsonNodeDict[ffNodeMAC]['Name'],
-                    'Hardware': jsonNodeDict[ffNodeMAC]['Hardware'],
-                    'Status': jsonNodeDict[ffNodeMAC]['Status'],
-                    'last_online': jsonNodeDict[ffNodeMAC]['last_online'],
-                    'Uptime': 0.0,
-                    'Clients': 0,
-                    'Latitude': jsonNodeDict[ffNodeMAC]['Latitude'],
-                    'Longitude': jsonNodeDict[ffNodeMAC]['Longitude'],
-                    'ZIP': jsonNodeDict[ffNodeMAC]['ZIP'],
-                    'Region': '??',
-                    'DestSeg': None,
-                    'Firmware': '?.?+????-??-??',
-                    'GluonType': jsonNodeDict[ffNodeMAC]['GluonType'],
-                    'MeshMACs': jsonNodeDict[ffNodeMAC]['MeshMACs'],
-                    'IPv6': jsonNodeDict[ffNodeMAC]['IPv6'],
-                    'Segment': jsonNodeDict[ffNodeMAC]['Segment'],
-                    'SegMode': 'auto',
-                    'KeyDir': '',
-                    'KeyFile': '',
-                    'FastdKey': '',
-                    'FastdGW': None,
-                    'InCloud': None,
-                    'Neighbours': [],
-                    'AutoUpdate': jsonNodeDict[ffNodeMAC]['AutoUpdate'],
-                    'Owner': jsonNodeDict[ffNodeMAC]['Owner'],
-                    'Source': 'DB'
-                }
-
-                NodeCount += 1
-
-                if jsonNodeDict[ffNodeMAC]['MeshMACs'] == []:
-                    self.__AddGluonMACs(ffNodeMAC,None)
-                else:
-                    for MeshMAC in jsonNodeDict[ffNodeMAC]['MeshMACs']:
-                        self.__AddGluonMACs(ffNodeMAC,MeshMAC)
-
-                if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
-                    if (CurrentTime - jsonNodeDict[ffNodeMAC]['last_online']) > MaxInactiveTime:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
-                    else:
-                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
-                else:
-                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = jsonNodeDict[ffNodeMAC]['Neighbours']
-
-        print('... %d Nodes done.\n' % (NodeCount))
-        return NodeCount
-
-
-
     #=========================================================================
     # public function "WriteNodeDict"
     #
@@ -374,12 +305,76 @@ class ffNodeInfo:
     #=========================================================================
     def WriteNodeDict(self):
 
-        print('Writing',NodeDictName,'...')
-        JsonFile = open(os.path.join(self.__DatabasePath,NodeDictName), mode='w+')
+        print('Writing',NodeDbName,'...')
+        JsonFile = open(os.path.join(self.__DatabasePath,NodeDbName), mode='w+')
         json.dump(self.ffNodeDict,JsonFile)
         JsonFile.close()
 
         print('... done.\n')
+        return
+
+
+
+    #-------------------------------------------------------------
+    # private function "__LoadNodeDict"
+    #
+    #   Load ffNodeDict
+    #-------------------------------------------------------------
+    def __LoadNodeDict(self):
+
+        try:
+            print('Loading',NodeDbName,'...')
+            JsonFile = open(os.path.join(self.__DatabasePath,NodeDbName), mode='r')
+            self.ffNodeDict = json.load(JsonFile)
+            JsonFile.close()
+        except:
+            print('\n!! Error on Reading %s !!\n' % (NodeDbName))
+            self.ffNodeDict = {}
+
+        NodeCount = len(self.ffNodeDict)
+
+        if NodeCount >= MinNodesCount:
+            JsonFile = open(os.path.join(self.__DatabasePath,NodeBackupName), mode='w+')
+            json.dump(self.ffNodeDict,JsonFile)
+            JsonFile.close()
+        else:
+            try:
+                print('Loading',NodeBackupName,'...')
+                JsonFile = open(os.path.join(self.__DatabasePath,NodeBackupName), mode='r')
+                self.ffNodeDict = json.load(JsonFile)
+                JsonFile.close()
+            except:
+                print('\n!! Error on Reading %s !!\n' % (NodeBackupName))
+                self.ffNodeDict = {}
+            else:
+                if len(self.ffNodeDict) > NodeCount:
+                    self.WriteNodeDict()
+
+        NodeCount = len(self.ffNodeDict)
+        CurrentTime = int(time.time())
+
+        for ffNodeMAC in  self.ffNodeDict:
+            self.ffNodeDict[ffNodeMAC]['Source'] = 'DB'
+            self.ffNodeDict[ffNodeMAC]['Uptime'] = 0.0
+            self.ffNodeDict[ffNodeMAC]['Clients'] = 0
+            self.ffNodeDict[ffNodeMAC]['FastdGW'] = None
+            self.ffNodeDict[ffNodeMAC]['InCloud'] = None
+
+            if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
+                self.__AddGluonMACs(ffNodeMAC,None)
+            else:
+                for MeshMAC in self.ffNodeDict[ffNodeMAC]['MeshMACs']:
+                    self.__AddGluonMACs(ffNodeMAC,MeshMAC)
+
+            if (CurrentTime - self.ffNodeDict[ffNodeMAC]['last_online']) > MaxOfflineTime:
+                self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
+
+                if (CurrentTime - self.ffNodeDict[ffNodeMAC]['last_online']) > MaxInactiveTime:
+                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
+                else:
+                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
+
+        print('... %d Nodes done.\n' % (NodeCount))
         return
 
 
@@ -1095,6 +1090,10 @@ class ffNodeInfo:
                     fastdNodes += 1
                     self.__AddGluonMACs(ffNodeMAC,ffVpnMAC)
                     self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
+
+                    if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
+                        print('++ Node has VPN-Connection: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
         return
