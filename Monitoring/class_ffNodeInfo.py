@@ -262,14 +262,16 @@ class ffNodeInfo:
 
         for BatmanMAC in GluonMacList:
             if BatmanMAC in self.MAC2NodeIDDict:
-                if self.MAC2NodeIDDict[BatmanMAC] != MainMAC:
-                    print('!!! MAC-Collision:  %s -> %s = \'%s\'' % (BatmanMAC,MainMAC,self.ffNodeDict[MainMAC]['Name']))
-                    print('    Curr. stored:   %s = \'%s\'' % (self.MAC2NodeIDDict[BatmanMAC],self.ffNodeDict[self.MAC2NodeIDDict[BatmanMAC]]['Name']))
+                StoredNodeMAC = self.MAC2NodeIDDict[BatmanMAC]
 
-                    if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[self.MAC2NodeIDDict[BatmanMAC]]['last_online']:
-                        BadMAC = self.MAC2NodeIDDict[BatmanMAC]
+                if StoredNodeMAC != MainMAC:
+                    print('!!! MAC-Collision:  %s -> %s = \'%s\' (%d)' % (BatmanMAC,MainMAC,self.ffNodeDict[MainMAC]['Name'],self.ffNodeDict[MainMAC]['last_online']))
+                    print('    Curr. stored:   %s = \'%s\' (%d)' % (StoredNodeMAC,self.ffNodeDict[StoredNodeMAC]['Name'],self.ffNodeDict[StoredNodeMAC]['last_online']))
+
+                    if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[StoredNodeMAC]['last_online']:
+                        BadMAC = StoredNodeMAC
                         self.MAC2NodeIDDict[BatmanMAC] = MainMAC
-                        print('    >> Removing:    %s = \'%s\'\n' % (BadMAC,self.ffNodeDict[BadMAC]['Name']))
+                        print('    >> Removing:    %s = \'%s\' (%d)' % (BadMAC,self.ffNodeDict[BadMAC]['Name'],self.ffNodeDict[BadMAC]['last_online']))
                         BadItemsList = []
 
                         for MAC in self.MAC2NodeIDDict:
@@ -278,12 +280,14 @@ class ffNodeInfo:
 
                         for MAC in BadItemsList:
                             del self.MAC2NodeIDDict[MAC]
+
+                        StoredNodeMAC = self.MAC2NodeIDDict[BatmanMAC]
+                        print('    >> Now stored:  %s = \'%s\' (%d)\n' % (StoredNodeMAC,self.ffNodeDict[StoredNodeMAC]['Name'],self.ffNodeDict[StoredNodeMAC]['last_online']))
                     else:
                         BadMAC = MainMAC
                         del self.MAC2NodeIDDict[BadMAC]
-                        print('    Bad Node:       %s = \'%s\'\n' % (BadMAC,self.ffNodeDict[BadMAC]['Name']))
+                        print('    Bad Node:       %s = \'%s\' (%d)\n' % (BadMAC,self.ffNodeDict[BadMAC]['Name'],self.ffNodeDict[BadMAC]['last_online']))
 
-                    self.ffNodeDict[BadMAC]['last_online'] = 0
                     self.ffNodeDict[BadMAC]['Status'] = NODESTATE_UNKNOWN
 
                     if BadMAC == MainMAC:  break
@@ -361,6 +365,7 @@ class ffNodeInfo:
             self.ffNodeDict[ffNodeMAC]['InCloud'] = None
 
             if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
+                print('++ Node has no Mesh-IF: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                 self.__AddGluonMACs(ffNodeMAC,None)
             else:
                 for MeshMAC in self.ffNodeDict[ffNodeMAC]['MeshMACs']:
@@ -538,8 +543,8 @@ class ffNodeInfo:
                 'Source': None
             }
 
-        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
-#        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online'] and self.ffNodeDict[ffNodeMAC]['Source'] != 'DB':
+#        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
+        if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online'] and self.ffNodeDict[ffNodeMAC]['Source'] != 'DB':
             return False    # Newer Node-Info already existing ...
 
 
@@ -651,6 +656,7 @@ class ffNodeInfo:
 
 
         if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
+            print('++ Node has no Mesh-IF: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
             self.__AddGluonMACs(ffNodeMAC,None)
 
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
@@ -933,7 +939,8 @@ class ffNodeInfo:
                             ffTQ      = int(BatctlInfo[6])
 
                             if (MacAdrTemplate.match(ffNodeMAC) and not McastMacTemplate.match(ffNodeMAC) and not GwMacTemplate.match(ffNodeMAC) and
-                                MacAdrTemplate.match(ffMeshMAC) and not McastMacTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC)):
+                                MacAdrTemplate.match(ffMeshMAC) and not McastMacTemplate.match(ffMeshMAC) and not GwMacTemplate.match(ffMeshMAC) and
+                                ffNodeMAC not in NodeList):
 
                                 BatmanMacList = self.__GenerateGluonMACs(ffNodeMAC)
 
@@ -941,23 +948,22 @@ class ffNodeInfo:
                                     (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):
                                     #---------- Current data of Node already available ----------
 
-                                    if ffNodeMAC not in NodeList:
-                                        NodeList.append(ffNodeMAC)
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                    NodeList.append(ffNodeMAC)
+                                    self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+
+                                    if not self.__IsOnline(ffNodeMAC):
+                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                        print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+
+                                    if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
+                                        print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                    else:
                                         self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
-                                        if self.ffNodeDict[ffNodeMAC]['Source'] != 'respondd':
-                                            if not self.__IsOnline(ffNodeMAC):
-                                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                                print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-
-                                        if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
-                                            print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-
-                                elif ffMeshMAC in BatmanMacList:
+                                elif ffMeshMAC in BatmanMacList or ffNodeMAC in self.ffNodeDict:
                                     #---------- Node without current data available ----------
 
-                                    if ffNodeMAC not in NodeList and ffTQ >= BatmanMinTQ:
+                                    if ffTQ >= BatmanMinTQ:
                                         print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
                                         NodeList.append(ffNodeMAC)
                                         NodeName = None
@@ -986,13 +992,13 @@ class ffNodeInfo:
                                         else:
                                             print('       ... Node ignored: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
-                                    if ffNodeMAC in self.ffNodeDict:
-                                        self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                        self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                                            if ffNodeMAC in self.ffNodeDict:
+                                                self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                                self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
-                                        if not self.__IsOnline(ffNodeMAC):
-                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                            print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                                if not self.__IsOnline(ffNodeMAC):
+                                                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                                    print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                 elif ffNodeMAC in self.MAC2NodeIDDict:
                                     #---------- Check for Mesh-MAC in Client-Net ----------
