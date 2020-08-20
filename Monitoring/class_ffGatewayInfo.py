@@ -664,7 +664,7 @@ class ffGatewayInfo:
                     if DhcpResult is None:
 #                        self.__alert('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
                         print('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
-                        CheckDict[GwName] -= 1
+                        CheckDict[GwName] -= 4
                     else:
                         CheckDict[GwName] += 1
                         DhcpSegCount += 1
@@ -673,7 +673,7 @@ class ffGatewayInfo:
                 self.__alert('!!! No DHCP-Server available in Seg.%02d !' % (Segment))
 
         for GwName in CheckDict:
-            if CheckDict[GwName] <= 0:
+            if CheckDict[GwName] < 0:
                 self.__alert('!!! Problem with DHCP-Server on %s !' % (GwName))
 
         print('... done.\n')
