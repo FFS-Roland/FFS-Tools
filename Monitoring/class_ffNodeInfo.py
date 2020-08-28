@@ -444,6 +444,7 @@ class ffNodeInfo:
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
             print('+++ Invalid Record!',NodeDict)
+            return False
 
         if NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']:
             print('    +++ Missing node_id!',NodeDict)
