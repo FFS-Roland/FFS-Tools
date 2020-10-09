@@ -79,14 +79,4 @@ else
 fi
 
 echo "---------------------------------------" >> $LOGFILE
-ping -c 3 -W 2 94.186.150.37
-#ping -c 3 -W 2 85.236.195.99
-
-if [ $? -eq 0 ]; then
-  echo "mon2 pinged successfully." >> $LOGFILE
-else
-  echo "!! ERROR: mon2 cannot be pinged!" >> $LOGFILE
-fi
-
-echo "---------------------------------------" >> $LOGFILE
 date >> $LOGFILE
