@@ -50,7 +50,7 @@ import argparse
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
-SegIgnoreList = ['11','19','21','22']    # Single Nodes (Schools)
+SegIgnoreList = ['11','19','21','22']    # e.g. Single Nodes (Schools)
 
 
 
@@ -239,7 +239,7 @@ for Segment in LoadDict['Segments']:
     elif LoadDict['Segments'][Segment] > StatisticsDict['Segments'][Segment]:
         StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 3 + LoadDict['Segments'][Segment]) / 4 + 0.5)
     else:
-        StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 143 + LoadDict['Segments'][Segment]) / 144 + 0.5)
+        StatisticsDict['Segments'][Segment] = int((StatisticsDict['Segments'][Segment] * 431 + LoadDict['Segments'][Segment]) / 432 + 0.5)
 
 print('Total Segment Load =',TotalLoad)
 
@@ -254,7 +254,7 @@ for Region in LoadDict['Regions']:
     elif LoadDict['Regions'][Region] > StatisticsDict['Regions'][Region]:
         StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 3 + LoadDict['Regions'][Region]) / 4 + 0.5)
     else:
-        StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 143 + LoadDict['Regions'][Region]) / 144 + 0.5)
+        StatisticsDict['Regions'][Region] = int((StatisticsDict['Regions'][Region] * 431 + LoadDict['Regions'][Region]) / 432 + 0.5)
 
 print('Total Region Load  =',TotalLoad)
 
@@ -270,7 +270,7 @@ for ZipCode in LoadDict['ZipAreas']:
     elif LoadDict['ZipAreas'][ZipCode] > StatisticsDict['ZipAreas'][ZipCode]:
         StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 3 + LoadDict['ZipAreas'][ZipCode]) / 4 + 0.5)
     else:
-        StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 143 + LoadDict['ZipAreas'][ZipCode]) / 144 + 0.5)
+        StatisticsDict['ZipAreas'][ZipCode] = int((StatisticsDict['ZipAreas'][ZipCode] * 431 + LoadDict['ZipAreas'][ZipCode]) / 432 + 0.5)
 
 print('Total ZipArea Load =',TotalLoad)
 
