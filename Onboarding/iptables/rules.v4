@@ -1,0 +1,34 @@
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+#--- special communication control (ICMP)
+-A INPUT -p icmp --icmp-type 8 -j ACCEPT
+-A INPUT -p icmp --icmp-type destination-unreachable -j ACCEPT
+-A INPUT -p icmp --icmp-type time-exceeded -j ACCEPT
+-A INPUT -p icmp --icmp-type parameter-problem -j ACCEPT
+-A OUTPUT -p icmp -j ACCEPT
+
+#--- loopback interface
+-A INPUT -i lo -j ACCEPT
+-A OUTPUT -o lo -j ACCEPT
+
+#--- drop invalid connections
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+-A OUTPUT -m conntrack --ctstate INVALID -j DROP
+
+#--- allow reply to already existing connections
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+#--- inbound services
+-A INPUT -i ens18 -p tcp -m tcp --dport 22 -m conntrack --ctstate NEW -j ACCEPT
+-A INPUT -i ens18 -p tcp -m tcp --dport 22244 -m conntrack --ctstate NEW -j ACCEPT
+-A INPUT -i ens18 -p udp -m udp --dport 10139 -m conntrack --ctstate NEW -j ACCEPT
+-A INPUT -i ens18 -p udp -m udp --dport 10299 -m conntrack --ctstate NEW -j ACCEPT
+
+#--- outbound services
+-A OUTPUT -m conntrack --ctstate NEW -j ACCEPT
+
+COMMIT

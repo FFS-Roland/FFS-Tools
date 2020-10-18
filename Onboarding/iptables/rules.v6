@@ -1,0 +1,37 @@
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+#--- IPv6 Communication Basics (ICMPv6)
+-A INPUT -p icmpv6 --icmpv6-type echo-request -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type destination-unreachable -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type packet-too-big -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type time-exceeded -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type parameter-problem -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type router-advertisement -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type neighbor-solicitation -m hl --hl-eq 255 -j ACCEPT
+-A INPUT -p icmpv6 --icmpv6-type neighbor-advertisement -m hl --hl-eq 255 -j ACCEPT
+-A OUTPUT -p icmpv6 -j ACCEPT
+
+#--- loopback interface
+-A INPUT -i lo -j ACCEPT
+-A OUTPUT -o lo -j ACCEPT
+
+#--- drop invalid connections
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+-A OUTPUT -m conntrack --ctstate INVALID -j DROP
+
+#--- allow reply to already existing connections
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+#--- inbound services
+-A INPUT -i ens18 -p tcp --dport 22244 -m conntrack --ctstate NEW -j ACCEPT
+-A INPUT -i ens18 -p udp --dport 10139 -m conntrack --ctstate NEW -j ACCEPT
+-A INPUT -i ens18 -p udp --dport 10299 -m conntrack --ctstate NEW -j ACCEPT
+
+#--- outbound services
+-A OUTPUT -m conntrack --ctstate NEW -j ACCEPT
+
+COMMIT

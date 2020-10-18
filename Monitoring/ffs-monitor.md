@@ -17,6 +17,7 @@ apt install mc
 apt install fastd
 apt install batctl
 apt install python3-pip
+apt install iptables-persistent 
 
 pip3 install gitpython
 pip3 install dnspython
