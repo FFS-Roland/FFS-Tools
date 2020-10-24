@@ -79,6 +79,7 @@ MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
 BatmanTimeout      = 10             # 10 Seconds
 BatmanMinTQ        =  5             # Minimum Batman TQ for respondd Request
+BatmanMaxSegment   = 64             # Highest Segment Number for regular Batman Traffic
 
 MinNodesCount      = 1000           # Minimum number of Nodes
 
@@ -915,8 +916,9 @@ class ffNodeInfo:
 
         for BatIF in sorted(BatmanInterfaceList):
             ffSeg = int(BatIF[3:])
-            print('... Segment %02d ...' % (ffSeg))
+            if ffSeg > BatmanMaxSegment:  continue
 
+            print('... Segment %02d ...' % (ffSeg))
             BatctlCmd = ('/usr/sbin/batctl -m %s tg' % (BatIF)).split()    # batman translation table ...
 
             try:
