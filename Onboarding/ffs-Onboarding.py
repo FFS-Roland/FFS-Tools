@@ -163,7 +163,7 @@ def LoadGitInfo(GitPath):
             for KeyFilePath in KeyFileList:
                 ffNodeSeg = int(os.path.dirname(KeyFilePath).split("/")[-2][3:])
 
-                if (ffNodeSeg > 0) and (ffNodeSeg < 99):
+                if ffNodeSeg > 0 and ffNodeSeg < 99:
                     ffNodeID  = os.path.basename(KeyFilePath)[4:]
 
                     with open(KeyFilePath,'r') as KeyFile:
@@ -300,7 +300,7 @@ def ActivateBatman(BatmanIF,FastdIF):
     else:
         print('... Batman Interface',BatmanIF,'is up ...',BatctlResult.stdout.decode('utf-8'))
 
-        while(Retries > 0):
+        while Retries > 0:
             Retries -= 1
             time.sleep(2)
             NeighborMAC = None
@@ -403,50 +403,6 @@ def __GenerateGluonMACs(MainMAC):
 
 
 #-----------------------------------------------------------------------
-# function "__GenerateOldGluonMACs(MainMAC)"
-#
-#   Get all related MACs based on Primary MAC for Gluon <= 2016.1.x
-#
-# reference = Gluon Source:
-#
-#   /package/gluon-core/files/usr/lib/lua/gluon/util.lua
-#
-# function generate_mac(f, i)
-# -- (1, 0): WAN (for mesh-on-WAN)
-# -- (1, 1): LAN (for mesh-on-LAN)
-# -- (2, n): client interface for the n'th radio
-# -- (3, n): adhoc interface for n'th radio
-# -- (4, 0): mesh VPN
-# -- (5, n): mesh interface for n'th radio (802.11s)
-#
-#  m1 = nixio.bit.bor(tonumber(m1, 16), 0x02)
-#  m2 = (tonumber(m2, 16)+f) % 0x100
-#  m3 = (tonumber(m3, 16)+i) % 0x100
-#-----------------------------------------------------------------------
-def __GenerateOldGluonMACs(MainMAC):
-
-    MacRanges = { 1:1, 2:2, 3:2, 4:0, 5:2 }
-
-    m1Main = int(MainMAC[0:2],16)
-    m2Main = int(MainMAC[3:5],16)
-    m3Main = int(MainMAC[6:8],16)
-
-    m1New = hex(m1Main | 0x02)[2:].zfill(2)
-
-    GluonMacList = []
-
-    for f in MacRanges:
-        for i in range(MacRanges[f]+1):
-            m2New = hex((m2Main + f) % 0x100)[2:].zfill(2)
-            m3New = hex((m3Main + i) % 0x100)[2:].zfill(2)
-
-            GluonMacList.append(m1New + ':' + m2New + ':' + m3New + ':' + MainMAC[9:])
-
-    return GluonMacList
-
-
-
-#-----------------------------------------------------------------------
 # function "__getNodeMACviaBatman"
 #
 #    -> NodeMAC
@@ -471,7 +427,8 @@ def __getNodeMACviaBatman(BatmanIF):
             BatMeshMAC = BatctlInfo[5]
 
             if BatMeshMAC[:1] == BatNodeMAC[:1] and BatMeshMAC[9:] == BatNodeMAC[9:]:  # old Gluon MAC schema
-                BatmanMacList = __GenerateOldGluonMACs(BatNodeMAC)
+                print('!! Node with old Gluon MAC schema will not be registered !!')
+                BatmanMacList = []
             else:  # new Gluon MAC schema
                 BatmanMacList = __GenerateGluonMACs(BatNodeMAC)
 
@@ -637,7 +594,7 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
         print('+++ corrupted Node Info!')
         NodeInfoDict = None
     else:
-        print('... Node Info is consistent.')
+        print('... Node Info is consistent.\n')
 
     return NodeInfoDict
 
@@ -736,7 +693,7 @@ def __SetupZipAreaData(GitPath):
         print('!! ERROR on registering ZIP-Areas:',len(ZipFileDict),'\n')
         ZipFileDict = None
     else:
-        print('... ZIP-Areas registered:',len(ZipFileDict),'\n')
+        print('... ZIP-Areas registered: %d' % (len(ZipFileDict)))
 
     return ZipFileDict
 
@@ -843,15 +800,23 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
 
     print('Get Segment from Position ...',Location)
 
-    ZipAreaDict = __SetupZipAreaData(GitPath)
-    ZipGridDict = __SetupZipGridData(DatabasePath)
+    ZipAreaDict = None
+    ZipGridDict = None
+    GpsSegment  = None
+    ZipSegment  = None
 
-    GpsSegment = None
-    ZipSegment = None
-
-    if ZipAreaDict is None or ZipGridDict is None:
-        print('!! No Region Data available !!!')
+    if Location is None:
+        print('... No Location available.')
     else:
+#        print('*** Location =',Location)
+        ZipAreaDict = __SetupZipAreaData(GitPath)
+        ZipGridDict = __SetupZipGridData(DatabasePath)
+
+        if ZipAreaDict is None or ZipGridDict is None:
+            print('!! No Region Data available !!!')
+            Location = None
+
+    if Location is not None:
         if 'longitude' in Location and 'latitude' in Location:
             lon = Location['longitude']
             lat = Location['latitude']
@@ -895,31 +860,6 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
             print('>>> GpsSegment =',GpsSegment)
 
     return GpsSegment
-
-
-
-#-----------------------------------------------------------------------
-# function "GetSegment4Node"
-#
-#-----------------------------------------------------------------------
-def GetSegment4Node(NodeInfo,GitPath,DatabasePath):
-
-    NodeSegment = None
-
-    if NodeInfo['Location'] is None:
-        print('... no Location available ...')
-    else:
-        NodeSegment = GetGeoSegment(NodeInfo['Location'],GitPath,DatabasePath)
-#        print('*** Location =',NodeInfo['Location'])
-
-    if NodeSegment is None:
-        NodeSegment = DEFAULT_SEGMENT
-        print('... setting default Segment =',DEFAULT_SEGMENT)
-    elif NodeInfo['NodeType'] == NODETYPE_SEGMENT_LIST and NodeSegment > 8:
-        NodeSegment = DEFAULT_SEGMENT
-        print('... replacing with default Segment =',DEFAULT_SEGMENT)
-
-    return NodeSegment
 
 
 
@@ -981,28 +921,50 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
     ErrorCode  = 0
 
 
-    #----- Analyse Situation -----
+    #========== Analyse Situation ==========
     NodeID     = NodeInfo['NodeID']
     NewSegment = NodeInfo['Segment']
 
-    if NodeID in GitInfo['NodeID']:
+    if PeerKey in GitInfo['Key']:
+        if GitInfo['Key'][PeerKey] != NodeID:
+            print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
+            return 0
+
+    if NodeID in GitInfo['NodeID']:    # Node is known in Git ...
         GitKey      = GitInfo['NodeID'][NodeID]['Key']
         GitSegment  = GitInfo['NodeID'][NodeID]['Segment']
         GitFixSeg   = GitInfo['NodeID'][NodeID]['fixed']
         GitNodeName = GitInfo['NodeID'][NodeID]['Hostname']
 
-        print('*** NodeID in GitInfo:',GitSegment,'/',NodeID)
+        print('*** NodeID already in Git: vpn%02d / %s' % (GitSegment,NodeID))
 
-        if (PeerKey == GitKey) and (NewSegment == GitSegment):
+        if GitFixSeg is not None:
+            if PeerKey != GitKey and NodeInfo['Hostname'].lower() != GitNodeName.lower():
+                GitFixSeg = None
+            elif GitFixSeg.lower()[:3] == 'fix':
+                NewSegment = GitSegment
+                print('... fix Segment = %02d ...' % (GitSegment))
+            elif GitFixSeg.lower()[:3] == 'man' and NewSegment is None:
+                NewSegment = GitSegment
+                print('... manually set Segment = %02d ...' % (GitSegment))
+
+        if NewSegment is None:    # no specific segment required
+            NewSegment = GetGeoSegment(NodeInfo['Location'], GitPath, DatabasePath)
+
+            if NewSegment is None:    # no segment specified
+                NewSegment = GitSegment
+                print('... keeping current Segment = %02d ...' % (GitSegment))
+
+            if NodeInfo['NodeType'] < NODETYPE_DNS_SEGASSIGN and NewSegment > 8:
+                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment,DEFAULT_SEGMENT))
+                NewSegment = DEFAULT_SEGMENT
+
+        if PeerKey == GitKey and NewSegment == GitSegment:
             print('++ Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment,NodeID,GitKey[:12]))
             return 0
 
         if PeerKey != GitKey:
             Action = 'NEW_KEY'
-
-            if PeerKey in GitInfo['Key']:
-                print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
-                return 0
 
         if NewSegment != GitSegment:
             if Action is None:
@@ -1010,8 +972,8 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
             else:
                 Action = 'NEW_KEY + NEW_SEGMENT'
 
-    else:  # NodeID is not in Git
-        print('*** NodeID not in GitInfo:',NodeID)
+    else:  # NodeID is not in Git ...
+        print('*** NodeID not in Git: %s' % (NodeID))
         Action = 'NEW_NODE'
 
         GitKey      = None
@@ -1019,25 +981,26 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
         GitFixSeg   = None
         GitNodeName = None
 
-        if PeerKey in GitInfo['Key']:
-            print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
-            return 0
+        if NewSegment is None:    # no specific segment required
+            NewSegment = GetGeoSegment(NodeInfo['Location'], GitPath, DatabasePath)
 
-        if NodeInfo['NodeType'] != NODETYPE_MTU_1340:
-            print('!! Deprecated Firmware !!\n')
+            if NewSegment is None:    # no segment specified
+                NewSegment = DEFAULT_SEGMENT
+                print('... setting default Segment = %02d ...' % (DEFAULT_SEGMENT))
+            elif NodeInfo['NodeType'] < NODETYPE_DNS_SEGASSIGN and NewSegment > 8:
+                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment,DEFAULT_SEGMENT))
+                NewSegment = DEFAULT_SEGMENT
+        else:
+            print('>>> Node is meshing in segment %02d.' % (NewSegment))
 
-            if not NodeInfo['Updater']:
-                print('++ Node will not be registered due to disabled Autoupdater!')
-                return 0
 
-
-    #----- Actions depending of Situation -----
+    #========== Actions depending of Situation ==========
     NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment,NodeInfo['NodeID'])
     NewPeerDnsName = 'ffs-%s-%s' % (NodeID,PeerKey[:12])
     NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NewSegment)
 
-    print('\n>>> Action:',Action)
-    print('>>> New Peer Data:', NewPeerDnsName,'=', NewPeerFile,'->',NewPeerDnsIPv6)
+    print('\n>>> Action = %s' % (Action))
+    print('>>> New Peer Data: %s = %s -> %s' % (NewPeerDnsName,NewPeerFile,NewPeerDnsIPv6))
 
     try:
         #----- Synchronizing Git Acccess -----
@@ -1078,7 +1041,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
             else:    # existing Node
                 OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,NodeID)
                 OldPeerDnsName = 'ffs-%s-%s' % (NodeID,GitKey[:12])
-                print('>>> Existing Peer Data:', OldPeerDnsName,'=',OldPeerFile)
+                print('>>> Existing Peer Data: %s = %s' %(OldPeerDnsName,OldPeerFile))
 
                 if os.path.exists(os.path.join(GitPath,OldPeerFile)):
                     if NewSegment != GitSegment:
@@ -1087,9 +1050,6 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                         print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment,NodeInfo['MAC'],NodeInfo['Hostname']))
 
                     if PeerKey != GitKey:
-                        if NodeInfo['Hostname'] != GitNodeName:
-                            GitFixSeg = None
-
                         WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                         print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
 
@@ -1243,24 +1203,17 @@ else:
                     print('++ Node information not available or inconsistent!')
                 elif BadNameTemplate.match(NodeInfoDict['Hostname']):
                     print('!!! Invalid Hostname: %s' % (NodeInfoDict['Hostname']))
-                elif (NodeInfoDict['NodeType'] == NODETYPE_LEGACY) or (NodeInfoDict['Segment'] == 0):
+                elif NodeInfoDict['NodeType'] == NODETYPE_LEGACY or NodeInfoDict['Segment'] == 0:
                     print('!!! Legacy Node is not supported: %s\n' % (NodeInfoDict['Hostname']))
+                elif NodeInfoDict['NodeType'] < NODETYPE_MTU_1340 and not NodeInfoDict['Updater']:
+                    print('!!! Node with old Firmware will not be registered if Autoupdater is disabled!')
                 else:
                     if (NodeInfoDict['Hardware'].lower().startswith('tp-link cpe') and
                         (NodeInfoDict['NodeType'] < NODETYPE_MTU_1340 or NodeInfoDict['GluonVer'][:14] < '1.4+2018-06-24')):
                         print('!! TP-Link CPE with outdated Firmware found: %s!!' % (NodeInfoDict['Hostname']))
-                        TargetSegment = CPE_TEMP_SEGMENT
+                        NodeInfoDict['Segment'] = CPE_TEMP_SEGMENT
                     elif NodeInfoDict['Segment'] is None:
-                        TargetSegment = getBatmanSegment(args.BATIF)    # meshing segment from "batctl gwl" (batman gateway list)
-                    else:
-                        TargetSegment = NodeInfoDict['Segment']
-
-                    if TargetSegment is None:    # no specific segment required
-                        TargetSegment = GetSegment4Node(NodeInfoDict, args.GITREPO, args.DATAPATH)
-                    else:
-                        print('>>> Node is meshing in segment %02d.' % (TargetSegment))
-
-                    NodeInfoDict['Segment'] = TargetSegment    # where the node should be registered
+                        NodeInfoDict['Segment'] = getBatmanSegment(args.BATIF)    # meshing segment from "batctl gwl" (batman gateway list)
 
                     RetCode = RegisterNode(PeerKey, NodeInfoDict, GitDataDict, args.GITREPO, args.DATAPATH, AccountsDict)
 
