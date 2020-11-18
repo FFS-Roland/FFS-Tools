@@ -944,9 +944,12 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
             elif GitFixSeg.lower()[:3] == 'fix':
                 NewSegment = GitSegment
                 print('... fix Segment = %02d ...' % (GitSegment))
-            elif GitFixSeg.lower()[:3] == 'man' and NewSegment is None:
+            elif NewSegment is None and GitFixSeg.lower()[:3] == 'man':
                 NewSegment = GitSegment
                 print('... manually set Segment = %02d ...' % (GitSegment))
+            elif NewSegment is None and GitFixSeg.lower()[:3] == 'mob':
+                NodeInfo['Location'] = None
+                print('... mobile Node without specific Segment ...')
 
         if NewSegment is None:    # no specific segment required
             NewSegment = GetGeoSegment(NodeInfo['Location'], GitPath, DatabasePath)
@@ -1050,9 +1053,9 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                         print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment,NodeInfo['MAC'],NodeInfo['Hostname']))
 
                     if PeerKey != GitKey:
-                        WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                         print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
 
+                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                     GitIndex.add([NewPeerFile])
                     NeedCommit = True
 
