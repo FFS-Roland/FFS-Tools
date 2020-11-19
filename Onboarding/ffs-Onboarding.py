@@ -407,7 +407,7 @@ def __GenerateGluonMACs(MainMAC):
 #
 #    -> NodeMAC
 #-----------------------------------------------------------------------
-def __getNodeMACviaBatman(BatmanIF):
+def __getNodeMACviaBatman(BatmanIF,FastdMAC):
 
     print('Find Node MAC via Batman TG ...')
     NodeMAC = None
@@ -426,20 +426,17 @@ def __getNodeMACviaBatman(BatmanIF):
             BatNodeMAC = BatctlInfo[1]
             BatMeshMAC = BatctlInfo[5]
 
-            if BatMeshMAC[:1] == BatNodeMAC[:1] and BatMeshMAC[9:] == BatNodeMAC[9:]:  # old Gluon MAC schema
-                print('!! Node with old Gluon MAC schema will not be registered !!')
-                BatmanMacList = []
-            else:  # new Gluon MAC schema
+            if BatMeshMAC[:16] == FastdMAC[:16]:
                 BatmanMacList = __GenerateGluonMACs(BatNodeMAC)
 
-            if BatMeshMAC in BatmanMacList:  # Data is from Node
-                if NodeMAC is None:
-                    print('++ Found Node in Batman Translation Table:',BatNodeMAC)
-                    NodeMAC = BatNodeMAC
-                else:
-                    print('!! Multiple Nodes in Batman Translation Table !!')
-                    NodeMAC = None
-                    break
+                if BatMeshMAC in BatmanMacList and FastdMAC in BatmanMacList:  # Data is from current Node
+                    if NodeMAC is None:
+                        print('++ Node found in Batman Translation Table: %s' % (BatNodeMAC))
+                        NodeMAC = BatNodeMAC
+                    else:
+                        print('!! Unknown MACs in Batman Translation Table: %s -> %s + %s' % (BatMeshMAC,NodeMAC,BatNodeMAC))
+                        NodeMAC = None
+                        break
 
     return NodeMAC
 
@@ -610,8 +607,8 @@ def getNodeInfos(FastdMAC,FastdIF,FastdMTU,BatmanIF):
     NodeJson = __InfoFromRespondd(FastdMAC,FastdIF)
 
     if NodeJson is None:
-        print('++ No info via Respondd from VPN-Interface - trying via Batman TG ...')
-        NodeMAC = __getNodeMACviaBatman(BatmanIF)
+        print('++ No info via Respondd from VPN-Interface - Fallback to Batman TG ...')
+        NodeMAC = __getNodeMACviaBatman(BatmanIF,FastdMAC)
 
         if NodeMAC is not None:
             NodeJson = __InfoFromRespondd(NodeMAC,BatmanIF)
