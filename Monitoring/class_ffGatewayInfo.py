@@ -1112,7 +1112,7 @@ class ffGatewayInfo:
                                         DnsSegment = int(IPv4.split('.')[-1])
 
                                         if DnsSegment == GitSegment:
-                                            self.__FastdKeyDict[PeerFileName]['Dns4Seg'] = DnsSegment
+                                            self.__FastdKeyDict[DnsFileName]['Dns4Seg'] = DnsSegment
                                         else:
                                             self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
 
@@ -1145,7 +1145,7 @@ class ffGatewayInfo:
                                 DnsUpdate.delete(DnsPeerID)
 
                     else:
-                        self.__alert('++ Unknown Node-MAC - DNS Entry will be deleted: %s' % (DnsPeerID))
+                        self.__alert('++ Unknown Node-MAC - DNS Entry Type %d will be deleted: %s' % (DnsRecord.rdtype,DnsPeerID))
                         if DnsUpdate is not None:
                             DnsUpdate.delete(DnsPeerID)
 
@@ -1169,8 +1169,7 @@ class ffGatewayInfo:
                     DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                     print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv6))
 
-#            if self.__FastdKeyDict[PeerFileName]['Dns4Seg'] is None:
-            if False:
+            if self.__FastdKeyDict[PeerFileName]['Dns4Seg'] is None:
                 self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerMAC'],self.__FastdKeyDict[PeerFileName]['PeerName']))
                 PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,GitSegment)
                 self.__FastdKeyDict[PeerFileName]['Dns4Seg'] = GitSegment
@@ -1291,54 +1290,42 @@ class ffGatewayInfo:
 
                 for ffNodeMAC in NodeMoveDict:
                     KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
+                    DestSegment = NodeMoveDict[ffNodeMAC]
 
-                    if KeyFileName in self.__FastdKeyDict:
+                    if KeyFileName in self.__FastdKeyDict and DestSegment > 0 and DestSegment < 99:
                         SourceFile = '%s/peers/%s' % (self.__FastdKeyDict[KeyFileName]['KeyDir'], KeyFileName)
-                        PeerDnsName = KeyFileName+'-'+self.__FastdKeyDict[KeyFileName]['PeerKey'][:12]
-
-                        if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
-                            DestFile   = '<Trash>'
-                        else:
-                            DestFile   = 'vpn%02d/peers/%s' % (NodeMoveDict[ffNodeMAC], KeyFileName)
+                        DestFile   = 'vpn%02d/peers/%s' % (DestSegment, KeyFileName)
+                        PeerDnsName = '%s-%s' % (KeyFileName, self.__FastdKeyDict[KeyFileName]['PeerKey'][:12])
 
 #                        print(SourceFile,'->',DestFile)
-                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],NodeMoveDict[ffNodeMAC])
+                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],DestSegment)
                         print(MoveTextLine)
 
-                        if os.path.exists(os.path.join(self.__GitPath,SourceFile)) and NodeMoveDict[ffNodeMAC] > 0:
+                        if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
                             MoveCount += 1
                             GitCommitMessage += MoveTextLine+'\n'
                             GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
                             print('... Git remove of old location done.')
 
-                            if NodeMoveDict[ffNodeMAC] == 999:    # kill this Node
-                                os.remove(os.path.join(self.__GitPath,SourceFile))
-                                DnsUpdate.delete(PeerDnsName, 'AAAA')
-                                print('... Node deleted.')
-                            else:    # move this Node
-                                os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
-                                print('... File moved.')
-                                GitIndex.add([os.path.join(self.__GitPath,DestFile)])
-                                print('... Git add of new location done.')
-
-                                PeerDnsIPv6 = SegAssignIPv6Prefix+str(NodeMoveDict[ffNodeMAC])
-                                DnsUpdate.replace(PeerDnsName, 120, 'AAAA', PeerDnsIPv6)
+                            os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
+                            print('... File moved.')
+                            GitIndex.add([os.path.join(self.__GitPath,DestFile)])
+                            print('... Git add of new location done.')
+                            DnsUpdate.replace(PeerDnsName, 120, 'AAAA', '%s%d' % (SegAssignIPv6Prefix,NodeMoveDict[ffNodeMAC]))
+                            DnsUpdate.replace(PeerDnsName, 120, 'A',    '%s%d' % (SegAssignIPv4Prefix,NodeMoveDict[ffNodeMAC]))
 
 #                            self.__alert('   '+SourceFile+' -> '+DestFile)
-                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],NodeMoveDict[ffNodeMAC]))
+                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],DestSegment))
 
-                        elif NodeMoveDict[ffNodeMAC] == 0:
-                            self.__alert('!! Will not move to Legacy: '+KeyFileName+' = '+ffNodeMAC)
                         else:
                             print('... Key File was already moved by other process.')
 
                     else:
-                        self.__alert('!! Invalid NodeMove Entry: '+KeyFileName+' = '+ffNodeMAC)
+                        self.__alert('!! Invalid NodeMove Entry: %s = %s -> vpn%02d' % (KeyFileName,ffNodeMAC,DestSegment))
 
 
                 if MoveCount > 0:
                     print('... doing Git commit ...')
-#                    GitIndex.commit('Automatic move of node(s) by ffs-Monitor')
                     GitIndex.commit(GitCommitMessage)
                     GitOrigin.config_writer.set('url',GitAccount['URL'])
                     print('... doing Git pull ...')
