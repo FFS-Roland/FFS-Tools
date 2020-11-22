@@ -444,7 +444,7 @@ class ffNodeInfo:
             ('nodeinfo' not in NodeDict) or
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
-            print('+++ Invalid Record!',NodeDict)
+#            print('+++ Respondd Data incomplete!',NodeDict)
             return False
 
         if NodeDict['nodeinfo'] is None or 'node_id' not in NodeDict['nodeinfo']:
@@ -1051,7 +1051,7 @@ class ffNodeInfo:
     # public function "AddUplinkInfo"
     #
     #   Add fastd-Infos for Nodes
-    #     FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','DnsSeg' }
+    #     FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC', ... }
     #
     #=========================================================================
     def AddUplinkInfos(self,FastdKeyDict):

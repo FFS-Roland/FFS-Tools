@@ -80,13 +80,15 @@ MinGatewayCount     = 1              # minimum number of Gateways per Segment
 FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
 
 SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
+SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
 GwIgnoreList        = ['gw04n02','gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
 
 InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
+DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
+DnsIP6SegTemplate   = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 
-DnsSegTemplate      = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 DnsNodeTemplate     = re.compile('^ffs-[0-9a-f]{12}-[0-9a-f]{12}$')
 
 GwSegGroupTemplate  = re.compile('^gw[0-6][0-9](s[0-9]{2})$')
@@ -762,7 +764,7 @@ class ffGatewayInfo:
     #
     #   Load and analyse fastd-Key of Nodes from Git
     #
-    #     self.__FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','DnsSeg' }
+    #     self.__FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','Dns4Seg','Dns6Seg' }
     #     self.__Key2FileNameDict[PeerKey] = { 'KeyDir','KeyFile' }
     #
     #-----------------------------------------------------------------------
@@ -847,7 +849,8 @@ class ffGatewayInfo:
                                 'VpnMAC'   : None,
                                 'VpnGW'    : None,
                                 'Timestamp': 0,
-                                'DnsSeg'   : None
+                                'Dns4Seg'  : None,
+                                'Dns6Seg'  : None
                             }
 
                             self.__Key2FileNameDict[PeerKey] = {
@@ -1043,97 +1046,145 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckDNSvsGit(self,DnsZone):
 
-        isOK = True
-
         DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
         DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
 
+        if DnsUpdate is None:
+            self.__alert('!! ERROR: DNS cannot be updated if neccessary !!')
+            self.AnalyseOnly = True
+
         #---------- Check DNS against Git ----------
-        print('Checking Peer DNS Entries against Keys in Git ...')
+        print('Checking SegAssign DNS Entries against KeyFiles in Git ...')
         for DnsName, NodeData in DnsZone.nodes.items():
             for DnsRecord in NodeData.rdatasets:
                 DnsPeerID = DnsName.to_text()
 
-                if DnsNodeTemplate.match(DnsPeerID) and DnsRecord.rdtype == dns.rdatatype.AAAA:
-                    PeerFileName = DnsPeerID[:16]
-                    PeerKeyID    = DnsPeerID[17:]
-                    SegFromDNS   = None
+                if DnsNodeTemplate.match(DnsPeerID):
+                    DnsFileName = DnsPeerID[:16]
+                    DnsKeyID    = DnsPeerID[17:]
 
-                    for DnsAnswer in DnsRecord:
-                        IPv6 = DnsAnswer.to_text()
+                    if DnsFileName in self.__FastdKeyDict:
+                        GitSegment = int(self.__FastdKeyDict[DnsFileName]['KeyDir'][3:])
+                        GitKeyID   = self.__FastdKeyDict[DnsFileName]['PeerKey'][:12]
 
-                        if DnsSegTemplate.match(IPv6):
-                            if SegFromDNS is None:
-                                DnsNodeInfo = IPv6.split(':')
-                                SegFromDNS = 'vpn'+DnsNodeInfo[-1].zfill(2)
-                            else:
-                                self.__alert('!! Duplicate DNS Result: '+DnsPeerID+' = '+IPv6)
-                                self.AnalyseOnly = True
-                                isOK = False
+                        if DnsKeyID == GitKeyID:    # valid DNS-Name found ...
+
+                            if DnsRecord.rdtype == dns.rdatatype.AAAA:
+                                #---------- IPv6 ----------
+                                EntryCount = len(DnsRecord)
+
+                                for DnsEntry in DnsRecord:
+                                    IPv6 = DnsEntry.to_text()
+
+                                    if DnsIP6SegTemplate.match(IPv6):
+                                        DnsSegment = int(IPv6.split(':')[-1].zfill(1))
+
+                                        if DnsSegment == GitSegment:
+                                            self.__FastdKeyDict[DnsFileName]['Dns6Seg'] = DnsSegment
+                                        else:
+                                            self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
+
+                                            if DnsUpdate is not None:
+                                                if EntryCount > 1:
+                                                    DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
+                                                    EntryCount -= 1
+                                                else:
+                                                    DnsUpdate.replace(DnsPeerID,'AAAA',IPv6,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+
+                                    else:  # invalid IPv6-Address for SegAssign
+                                        self.__alert('++ Invalid IPv6-Entry for NodeID %s: %s' % (DnsPeerID,IPv6))
+
+                                        if DnsUpdate is not None:
+                                            if EntryCount > 1:
+                                                DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
+                                                EntryCount -= 1
+                                            else:
+                                                DnsUpdate.replace(DnsPeerID,120,'AAAA',IPv6,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+
+                            elif DnsRecord.rdtype == dns.rdatatype.A:
+                                #---------- IPv4 ----------
+                                EntryCount = len(DnsRecord)
+
+                                for DnsEntry in DnsRecord:
+                                    IPv4 = DnsEntry.to_text()
+
+                                    if DnsIP4SegTemplate.match(IPv4):
+                                        DnsSegment = int(IPv4.split('.')[-1])
+
+                                        if DnsSegment == GitSegment:
+                                            self.__FastdKeyDict[PeerFileName]['Dns4Seg'] = DnsSegment
+                                        else:
+                                            self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
+
+                                            if DnsUpdate is not None:
+                                                if EntryCount > 1:
+                                                    DnsUpdate.delete(DnsPeerID,'A',IPv4)
+                                                    EntryCount -= 1
+                                                else:
+                                                    DnsUpdate.replace(DnsPeerID,'A',IPv4,'%s%d' % (SegAssignIPv4Prefix,GitSegment))
+
+                                    else:  # invalid IPv4-Address for SegAssign
+                                        self.__alert('++ Invalid IPv4-Entry for NodeID %s: %s' % (DnsPeerID,IPv4))
+
+                                        if DnsUpdate is not None:
+                                            if EntryCount > 1:
+                                                DnsUpdate.delete(DnsPeerID,'A',IPv4)
+                                                EntryCount -= 1
+                                            else:
+                                                DnsUpdate.replace(DnsPeerID,120,'A',IPv4,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+
+                            elif DnsRecord.rdtype == dns.rdatatype.CNAME:
+                                self.__alert('++ CNAME found - DNS Entry will be deleted: %s' % (DnsPeerID))
+                                if DnsUpdate is not None:
+                                    DnsUpdate.delete(DnsPeerID,'CNAME')
+
+
                         else:
-                            self.__alert('!! Invalid DNS IPv6 result: '+DnsPeerID+' = '+IPv6)
-                            isOK = False
-
-                    if PeerFileName in self.__FastdKeyDict and SegFromDNS is not None:
-                        if self.__FastdKeyDict[PeerFileName]['PeerKey'][:12] == PeerKeyID:
-                            self.__FastdKeyDict[PeerFileName]['DnsSeg'] = SegFromDNS
-
-                            if SegFromDNS != self.__FastdKeyDict[PeerFileName]['KeyDir']:
-                                self.__alert('!! Segment mismatch DNS <> Git: '+DnsPeerID+' -> '+SegFromDNS+' <> '+self.__FastdKeyDict[PeerFileName]['KeyDir'])
-                                self.AnalyseOnly = True
-                                isOK = False
-                        else:
-                            self.__alert('!! Fastd-Key mismatch DNS <> Git: '+DnsPeerID+' -> '+PeerKeyID+' <> '+self.__FastdKeyDict[PeerFileName]['PeerKey'][:12])
-                            isOK = False
-
+                            self.__alert('++ Unknown Node-Key - DNS Entry will be deleted: %s' % (DnsPeerID))
                             if DnsUpdate is not None:
-                                DnsUpdate.delete(DnsPeerID, 'AAAA')
+                                DnsUpdate.delete(DnsPeerID)
 
                     else:
-                        print('++ Unknown / old DNS Entry will be deleted: '+DnsPeerID+' = '+IPv6)
-                        isOK = False
-
+                        self.__alert('++ Unknown Node-MAC - DNS Entry will be deleted: %s' % (DnsPeerID))
                         if DnsUpdate is not None:
-                            DnsUpdate.delete(DnsPeerID, 'AAAA')
+                            DnsUpdate.delete(DnsPeerID)
 
                 elif DnsPeerID != '@' and DnsPeerID != '*':
                     self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
-                    isOK = False
+
 
         #---------- Check Git for missing DNS entries ----------
-        print('Checking Keys from Git against DNS Entries ...')
-
-        self.__DnsAccDict['Server']
+        print('Checking KeyFiles from Git for missing DNS Entries ...')
 
         for PeerFileName in self.__FastdKeyDict:
-            if (PeerTemplate.match(PeerFileName)
-            and self.__FastdKeyDict[PeerFileName]['PeerKey'] != ''
-            and self.__FastdKeyDict[PeerFileName]['DnsSeg'] != self.__FastdKeyDict[PeerFileName]['KeyDir']):
+            PeerDnsName = '%s-%s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerKey'][:12])
+            GitSegment = int(self.__FastdKeyDict[PeerFileName]['KeyDir'][3:])
 
-                self.__alert('!! DNS Entry missing or wrong: '+PeerFileName+' -> '+self.__FastdKeyDict[PeerFileName]['PeerMAC']+' = '+self.__FastdKeyDict[PeerFileName]['PeerName'])
+            if self.__FastdKeyDict[PeerFileName]['Dns6Seg'] is None:
+                self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerMAC'],self.__FastdKeyDict[PeerFileName]['PeerName']))
+                PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,GitSegment)
+                self.__FastdKeyDict[PeerFileName]['Dns6Seg'] = GitSegment
 
                 if DnsUpdate is not None:
-                    PeerDnsName = PeerFileName+'-'+self.__FastdKeyDict[PeerFileName]['PeerKey'][:12]
-                    PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,int(self.__FastdKeyDict[PeerFileName]['KeyDir'][3:]))
+                    DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
+                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv6))
 
-                    if self.__FastdKeyDict[PeerFileName]['DnsSeg'] is None:
-                        DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
-                        print('>>> Adding Peer to DNS:',PeerDnsName,'->',PeerDnsIPv6)
-                    else:
-                        DnsUpdate.replace(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
-                        print('>>> Updating Peer in DNS:',PeerDnsName,'->',PeerDnsIPv6)
+#            if self.__FastdKeyDict[PeerFileName]['Dns4Seg'] is None:
+            if False:
+                self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerMAC'],self.__FastdKeyDict[PeerFileName]['PeerName']))
+                PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,GitSegment)
+                self.__FastdKeyDict[PeerFileName]['Dns4Seg'] = GitSegment
 
-                isOK = False
+                if DnsUpdate is not None:
+                    DnsUpdate.add(PeerDnsName, 120, 'A',PeerDnsIPv4)
+                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv4))
 
         if DnsUpdate is not None:
             if len(DnsUpdate.index) > 1:
                 dns.query.tcp(DnsUpdate,self.__DnsServerIP)
                 print('... Update launched on DNS-Server',self.__DnsServerIP)
-        elif not isOK:
-            self.__alert('!! ERROR: DNS cannot be updated !!')
-            self.AnalyseOnly = True
 
-        return isOK
+        return
 
 
 
@@ -1145,9 +1196,6 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckNodesInSegassignDNS(self):
 
-        DnsZone     = None
-        isOK        = True
-
         print('\nChecking DNS Zone \"segassign\" ...')
 
         try:
@@ -1158,15 +1206,12 @@ class ffGatewayInfo:
             self.__alert('!! ERROR on fetching DNS Zone \"segassign\"!')
             self.__DnsServerIP = None
             self.AnalyseOnly = True
-            isOK = False
-
-        if DnsZone is not None:
-            isOK = self.__CheckDNSvsGit(DnsZone)
+            DnsZone = None
         else:
-            isOK = False
+            self.__CheckDNSvsGit(DnsZone)
 
         print('... done.\n')
-        return isOK
+        return
 
 
 
