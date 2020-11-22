@@ -92,7 +92,9 @@ NODETYPE_DNS_SEGASSIGN   = 3
 NODETYPE_MTU_1340        = 4
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
-SEGASSIGN_PREFIX = '2001:2:0:711::'
+SegAssignIPv4Prefix = '198.18.190.'
+SegAssignIPv6Prefix = '2001:2:0:711::'
+
 
 RESPONDD_PORT    = 1001
 RESPONDD_TIMEOUT = 5.0
@@ -103,7 +105,9 @@ GwMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
 LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{1,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
-IPv6NodeTemplate = re.compile('^'+SEGASSIGN_PREFIX+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
+DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
+DnsIP6SegTemplate   = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
+
 
 BadNameTemplate  = re.compile('.*[|/\\<>]+.*')
 
@@ -997,7 +1001,8 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
     #========== Actions depending of Situation ==========
     NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment,NodeInfo['NodeID'])
     NewPeerDnsName = 'ffs-%s-%s' % (NodeID,PeerKey[:12])
-    NewPeerDnsIPv6 = '%s%d' % (SEGASSIGN_PREFIX,NewSegment)
+    NewPeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,NewSegment)
+    NewPeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,NewSegment)
 
     print('\n>>> Action = %s' % (Action))
     print('>>> New Peer Data: %s = %s -> %s' % (NewPeerDnsName,NewPeerFile,NewPeerDnsIPv6))
@@ -1032,6 +1037,8 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, None, PeerKey)
                     GitIndex.add([NewPeerFile])
                     DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                    DnsUpdate.replace(NewPeerDnsName, 120,'A',   NewPeerDnsIPv4)
+
                     print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
                     NeedCommit = True
 
@@ -1057,10 +1064,12 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     NeedCommit = True
 
                     if NewPeerDnsName != OldPeerDnsName:
-                        DnsUpdate.delete(OldPeerDnsName,'AAAA')
-                        DnsUpdate.add(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                        DnsUpdate.delete(OldPeerDnsName)
+                        DnsUpdate.add(NewPeerDnsName, 120, 'AAAA', NewPeerDnsIPv6)
+                        DnsUpdate.add(NewPeerDnsName, 120, 'A',    NewPeerDnsIPv4)
                     else:
-                        DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
+                        DnsUpdate.replace(NewPeerDnsName, 120, 'AAAA', NewPeerDnsIPv6)
+                        DnsUpdate.replace(NewPeerDnsName, 120, 'A',    NewPeerDnsIPv4)
                 else:
                     print('... Key File was already changed by other process.')
 
