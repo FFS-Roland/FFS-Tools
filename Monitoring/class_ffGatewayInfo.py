@@ -1089,7 +1089,7 @@ class ffGatewayInfo:
                                                     DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
                                                     EntryCount -= 1
                                                 else:
-                                                    DnsUpdate.replace(DnsPeerID,'AAAA',IPv6,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+                                                    DnsUpdate.replace(DnsPeerID, 120, 'AAAA', IPv6, '%s%d' % (SegAssignIPv6Prefix,GitSegment))
 
                                     else:  # invalid IPv6-Address for SegAssign
                                         self.__alert('++ Invalid IPv6-Entry for NodeID %s: %s' % (DnsPeerID,IPv6))
@@ -1099,7 +1099,7 @@ class ffGatewayInfo:
                                                 DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
                                                 EntryCount -= 1
                                             else:
-                                                DnsUpdate.replace(DnsPeerID,120,'AAAA',IPv6,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+                                                DnsUpdate.replace(DnsPeerID, 120, 'AAAA', IPv6, '%s%d' % (SegAssignIPv6Prefix,GitSegment))
 
                             elif DnsRecord.rdtype == dns.rdatatype.A:
                                 #---------- IPv4 ----------
@@ -1121,7 +1121,7 @@ class ffGatewayInfo:
                                                     DnsUpdate.delete(DnsPeerID,'A',IPv4)
                                                     EntryCount -= 1
                                                 else:
-                                                    DnsUpdate.replace(DnsPeerID,'A',IPv4,'%s%d' % (SegAssignIPv4Prefix,GitSegment))
+                                                    DnsUpdate.replace(DnsPeerID, 120, 'A', IPv4, '%s%d' % (SegAssignIPv4Prefix,GitSegment))
 
                                     else:  # invalid IPv4-Address for SegAssign
                                         self.__alert('++ Invalid IPv4-Entry for NodeID %s: %s' % (DnsPeerID,IPv4))
@@ -1131,7 +1131,7 @@ class ffGatewayInfo:
                                                 DnsUpdate.delete(DnsPeerID,'A',IPv4)
                                                 EntryCount -= 1
                                             else:
-                                                DnsUpdate.replace(DnsPeerID,120,'A',IPv4,'%s%d' % (SegAssignIPv6Prefix,GitSegment))
+                                                DnsUpdate.replace(DnsPeerID, 120, 'A', IPv4, '%s%d' % (SegAssignIPv6Prefix,GitSegment))
 
                             elif DnsRecord.rdtype == dns.rdatatype.CNAME:
                                 self.__alert('++ CNAME found - DNS Entry will be deleted: %s' % (DnsPeerID))
