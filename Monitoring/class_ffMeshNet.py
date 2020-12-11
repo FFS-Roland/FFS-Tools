@@ -14,7 +14,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2019, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -274,8 +274,9 @@ class ffMeshNet:
             for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
                 NodeSeg = self.__NodeDict[ffNodeMAC]['Segment']
 
-                if NodeSeg not in CurrentSegList:
-                    CurrentSegList.append(NodeSeg)
+                if NodeSeg is not None:
+                    if NodeSeg not in CurrentSegList:
+                        CurrentSegList.append(NodeSeg)
 
                 if self.__NodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_VPN:
                     if self.__NodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
@@ -355,13 +356,14 @@ class ffMeshNet:
 
             #---------- Actions depending of situation in cloud ----------
             if len(UpLinkSegDict) > 1 or len(CurrentSegList) > 1:
-                self.__alert('!! Shortcut detected: UplinkSegs = %d / CurrentSegs = %d' % (len(UpLinkSegDict),len(CurrentSegList)))
+                self.__alert('!! Shortcut detected in Cloud %s: UplinkSegs = %d / CurrentSegs = %d' % (CloudID,len(UpLinkSegDict),len(CurrentSegList)))
 
                 if CloudSegment is None:
                     self.__alert('!! Shortcut cannot be corrected, missing CloudSegment !!')
                     self.AnalyseOnly = True
                 else:
-                    self.__alert('** Shortcut will be corrected ...')
+                    self.__alert('** Shortcut in Cloud %s will be corrected, Number of Nodes = %d, Segment = %02d  ...' %
+                                    (CloudID,len(self.__MeshCloudDict[CloudID]['CloudMembers']),CloudSegment))
                     print(self.__MeshCloudDict[CloudID]['CloudMembers'])
                     print()
 
