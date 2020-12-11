@@ -208,6 +208,7 @@ class ffLocation:
 
         try:
             for FileName in JsonFileList:
+#                print('... %s ...' % (FileName))
                 Region  = os.path.basename(FileName).split('.')[0]
                 Segment = int(os.path.dirname(FileName).split('/')[-2][3:])
 
@@ -244,6 +245,7 @@ class ffLocation:
         except:
             RegionCount = 0
 
+#        print('>> RegionCount = %d' % (RegionCount))
         print('>> lon = [%f .. %f] / lat = [%f .. %f]' % (lon_min, lon_max, lat_min, lat_max))
         self.RegionDict['ValidArea']['lon_min'] = lon_min -  0.1
         self.RegionDict['ValidArea']['lon_max'] = lon_max +  0.1
@@ -277,9 +279,11 @@ class ffLocation:
 
         if RegionCount == 0:
             self.RegionDict = None
-
-        print('... Region Areas loaded: Total = %d / Non-ZIP = %d\n' % (RegionCount, RegionCount - len(self.RegionDict['ZipRegions'])))
+            print('... No Region Data available !!\n')
+        else:
+            print('... Region Areas loaded: Total = %d / Non-ZIP = %d\n' % (RegionCount, RegionCount - len(self.RegionDict['ZipRegions'])))
         return
+
 
 
     #-------------------------------------------------------------
