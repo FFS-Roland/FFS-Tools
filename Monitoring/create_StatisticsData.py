@@ -50,7 +50,7 @@ import argparse
 
 PlzTemplate = re.compile('^[0-9]{5}')
 
-SegIgnoreList = ['11','19','21','22']    # e.g. Single Nodes (Schools)
+SegIgnoreList = ['21','22','23']    # e.g. Single Nodes (Schools)
 
 
 
