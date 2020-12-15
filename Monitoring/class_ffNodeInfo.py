@@ -119,8 +119,9 @@ NODETYPE_LEGACY        = 1
 NODETYPE_SEGMENT_LIST  = 2
 NODETYPE_DNS_SEGASSIGN = 3
 NODETYPE_MTU_1340      = 4
+NODETYPE_MCAST_ff05    = 5
 
-GLUON_MARKER           = [ '?', '%', '$', '$', ' ' ]    # Marker for Gluon-Type in Lists
+GLUON_MARKER           = [ '?', '%', '$', '$', '$', ' ' ]    # Marker for Gluon-Type in Lists
 
 NODESTATE_UNKNOWN      = '?'
 NODESTATE_OFFLINE      = '#'
@@ -335,7 +336,9 @@ class ffNodeInfo:
         GluonType = NODETYPE_UNKNOWN
 
         if FirmwareRelease is not None:
-            if FirmwareRelease[:14] >= '1.3+2017-09-13':
+            if FirmwareRelease[:14] >= '1.4+2017-12-12':
+                GluonType = NODETYPE_MCAST_ff05
+            elif FirmwareRelease[:14] >= '1.3+2017-09-13':
                 GluonType = NODETYPE_MTU_1340
             elif FirmwareRelease[:14] >= '1.0+2017-02-14':
                 GluonType = NODETYPE_DNS_SEGASSIGN

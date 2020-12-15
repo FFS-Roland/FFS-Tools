@@ -606,7 +606,7 @@ class ffMeshNet:
                 RegionDict[ffRegion]['Nodes']    += 1
                 RegionDict[ffRegion]['Clients']  += self.__NodeDict[ffNodeMAC]['Clients']
 
-                if self.__NodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MTU_1340:
+                if self.__NodeDict[ffNodeMAC]['GluonType'] < NODETYPE_MCAST_ff05:
                     RegionDict[ffRegion]['OldGluon'] += 1
 
         return

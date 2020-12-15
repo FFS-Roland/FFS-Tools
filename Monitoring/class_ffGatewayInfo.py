@@ -83,7 +83,7 @@ SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n02','gw04n03','gw04n05','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = ['gw04n02','gw04n05','gw05n01','gw05n08','gw05n09']
 
 InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
 DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
