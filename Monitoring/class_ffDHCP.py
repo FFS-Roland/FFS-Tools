@@ -43,6 +43,7 @@
 ###########################################################################################
 
 import os
+import time
 
 import binascii
 import threading
@@ -65,13 +66,11 @@ from scapy.all import (
 )
 
 
-
 #-------------------------------------------------------------
 # Global Constants
 #-------------------------------------------------------------
 SNIFF_TIMEOUT = 10		# int: seconds to wait for reply from server
 ARP_RETRIES   = 3
-
 
 
 
