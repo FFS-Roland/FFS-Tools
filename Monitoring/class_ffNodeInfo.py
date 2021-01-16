@@ -18,7 +18,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -78,7 +78,7 @@ MaxOfflineTime     = 30 * 60        # 30 Minutes (in Seconds)
 MaxStatusAge       = 15 * 60        # 15 Minutes (in Seconds)
 
 BatmanTimeout      = 10             # 10 Seconds
-BatmanMinTQ        =  5             # Minimum Batman TQ for respondd Request
+BatmanMinTQ        =  2             # Minimum Batman TQ for respondd Request
 BatmanMaxSegment   = 64             # Highest Segment Number for regular Batman Traffic
 
 MinNodesCount      = 1000           # Minimum number of Nodes
@@ -157,7 +157,7 @@ class ffNodeInfo:
         socket.setdefaulttimeout(5)
 
         self.__LoadYanicData()            # Load Node Info from Yanic Server
-        self.__LoadHopglassData()         # Load Node Info from Hopglass Server
+#        self.__LoadHopglassData()         # Load Node Info from Hopglass Server
 
         self.__AddDataFromDB()            # Add Info from saved ffNodeDict
 
@@ -526,9 +526,9 @@ class ffNodeInfo:
 
         if 'autoupdater' in NodeDict['nodeinfo']['software']:
             if 'branch' in NodeDict['nodeinfo']['software']['autoupdater'] and 'enabled' in NodeDict['nodeinfo']['software']['autoupdater']:
-                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = NodeDict['nodeinfo']['software']['autoupdater']['branch']
+                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '%s (%s)' % (NodeDict['nodeinfo']['software']['autoupdater']['branch'],NodeDict['nodeinfo']['software']['autoupdater']['enabled'])
             else:
-                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '---'
+                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = None
 
 
         if (CurrentTime - LastSeen) > MaxInactiveTime:
@@ -779,7 +779,7 @@ class ffNodeInfo:
 
         NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
 
-        print('    >> Requesting %s via respondd from %s ...' % (Request,NodeIPv6))
+#        print('    >> Requesting %s via respondd from %s ...' % (Request,NodeIPv6))
         Retries = 3
         NodeJsonDict = None
 
@@ -803,7 +803,7 @@ class ffNodeInfo:
                 time.sleep(2)
 
         if NodeJsonDict is None:
-            print('    +++ Error on respondd!')
+            print('    +++ Error on respondd \'%s\' from %s ...' % (Request,NodeIPv6))
 
         return NodeJsonDict
 
@@ -838,6 +838,7 @@ class ffNodeInfo:
         CurrentTime = int(time.time())
         TotalNodes = 0
         TotalClients = 0
+        NewNodes = 0
 
         BatmanInterfaceList = self.__GetBatmanInterfaces()
 
@@ -918,9 +919,11 @@ class ffNodeInfo:
 
                                         if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
                                             self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                            print('    ** New Node added: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            print('       ** added: %s = \'%s\' (%s / %s)\n' %
+                                                    (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Hardware'],self.ffNodeDict[ffNodeMAC]['Firmware']))
+                                            NewNodes += 1
                                         else:
-                                            print('       ... Node ignored: %s -> %s = %s\n' % (ffMeshMAC,ffNodeMAC,NodeName))
+                                            print('       ... Node ignored: %s -> %s = \'%s\'\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
                                             if ffNodeMAC in self.ffNodeDict:
                                                 self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
@@ -928,7 +931,7 @@ class ffNodeInfo:
 
                                                 if not self.__IsOnline(ffNodeMAC):
                                                     self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                                    print('    >> Node is online: %s = %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                                    print('    >> Node is online: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                 elif ffNodeMAC in self.MAC2NodeIDDict:
                                     #---------- Check for Mesh-MAC in Client-Net ----------
@@ -969,7 +972,7 @@ class ffNodeInfo:
                 TotalNodes   += NodeCount
                 TotalClients += ClientCount
 
-        print('\nTotalNodes = %d / TotalClients = %d\n... done.\n' %(TotalNodes,TotalClients))
+        print('\nTotalNodes = %d / TotalClients = %d / NewNodes = %d\n... done.\n' %(TotalNodes,TotalClients,NewNodes))
         return
 
 
