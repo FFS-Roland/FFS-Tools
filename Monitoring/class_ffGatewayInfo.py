@@ -83,7 +83,8 @@ SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = ['gw04n02','gw04n05','gw05n01','gw05n08','gw05n09']
+GwIgnoreList        = [ 'gw05n08','gw05n09' ]
+SegmentIgnoreList   = [ 30 ]
 
 InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
 DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
@@ -606,6 +607,8 @@ class ffGatewayInfo:
 
         if DnsResolver is not None:
             for Segment in sorted(self.__SegmentDict.keys()):
+                if Segment in SegmentIgnoreList:  continue
+
                 print('... Segment %02d' % (Segment))
 
                 for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
@@ -651,6 +654,8 @@ class ffGatewayInfo:
         ffDhcpClient = DHCPClient()
 
         for Segment in sorted(self.__SegmentDict.keys()):
+            if Segment in SegmentIgnoreList:  continue
+
             print('... Segment %02d' % (Segment))
             DhcpSegCount = 0
 
@@ -696,6 +701,8 @@ class ffGatewayInfo:
         conf.verb = 0
 
         for Segment in sorted(self.__SegmentDict.keys()):
+            if Segment in SegmentIgnoreList:  continue
+
             print('... Segment %02d' % (Segment))
 
             for GwName in sorted(self.__SegmentDict[Segment]['GwBatNames']):
