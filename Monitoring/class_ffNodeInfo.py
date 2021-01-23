@@ -157,10 +157,7 @@ class ffNodeInfo:
         socket.setdefaulttimeout(5)
 
         self.__LoadYanicData()            # Load Node Info from Yanic Server
-#        self.__LoadHopglassData()         # Load Node Info from Hopglass Server
-
         self.__AddDataFromDB()            # Add Info from saved ffNodeDict
-
         self.__LoadBatmanData()           # Load Node Info from Batman Translation Table
 
         return
@@ -573,7 +570,7 @@ class ffNodeInfo:
                                 if MacAdrTemplate.match(ffNeighbour):
                                     if GwMacTemplate.match(ffNeighbour):
                                         if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
-                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \"%s\"' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                                     elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
@@ -586,7 +583,7 @@ class ffNodeInfo:
 
 
         if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
-            print('++ Node has no Mesh-IF: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+            print('++ Node has no Mesh-IF: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
             self.__AddGluonMACs(ffNodeMAC,None)
 
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
@@ -624,7 +621,7 @@ class ffNodeInfo:
 
         YanicAccessDict = self.__AccountsDict['YanicData']
         RawJsonDict = None
-        Retries = 5
+        Retries = 10
 
 
         while RawJsonDict is None and Retries > 0:
@@ -674,86 +671,6 @@ class ffNodeInfo:
                 UsedNodesCount += 1
                 ffNodeMAC = NodeDict['nodeinfo']['network']['mac'].strip().lower()
                 self.ffNodeDict[ffNodeMAC]['Source'] = 'Yanic'
-
-                if self.ffNodeDict[ffNodeMAC]['last_online'] > NewestTime:
-                    NewestTime = self.ffNodeDict[ffNodeMAC]['last_online']
-
-                if self.__IsOnline(ffNodeMAC):
-                    OnlineNodesCount += 1
-
-        print('... %d Nodes selected, online = %d (Age = %d sec.)\n' % (UsedNodesCount,OnlineNodesCount,CurrentTime-NewestTime))
-
-        if UsedNodesCount > MinNodesCount and (CurrentTime - NewestTime) < MaxStatusAge:
-            self.AnalyseOnly = False
-
-        return
-
-
-
-    #-----------------------------------------------------------------------
-    # private function "__LoadHopglassData"
-    #
-    #   Load and analyse raw.json from Hopglass Server
-    #
-    # RawJsonDict <- raw.json
-    #
-    # self.ffNodeDict[ffNodeMAC] -> all Infos of ffNode
-    # self.MAC2NodeIDDict[ffNode] -> Main MAC
-    #-----------------------------------------------------------------------
-    def __LoadHopglassData(self):
-
-        print('Loading raw.json from Hopglass Server ...')
-
-        if 'HopglassData' not in self.__AccountsDict:
-            self.__alert('++ Missing Account Data to access Hopglass raw.json !!!\n')
-            self.AnalyseOnly = True
-            return
-
-        CurrentTime = int(time.time())
-        NewestTime = 0
-        AllNodesCount = 0
-        UsedNodesCount = 0
-        OnlineNodesCount = 0
-
-        HGAccessDict = self.__AccountsDict['HopglassData']
-        RawJsonDict = None
-        Retries = 5
-
-
-        while RawJsonDict is None and Retries > 0:
-            Retries -= 1
-
-            try:
-                passman = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-                passman.add_password(None, HGAccessDict['URL'], HGAccessDict['Username'], HGAccessDict['Password'])
-                authhandler = urllib.request.HTTPBasicAuthHandler(passman)
-                opener = urllib.request.build_opener(authhandler)
-                urllib.request.install_opener(opener)
-
-                RawJsonHTTP = urllib.request.urlopen(HGAccessDict['URL'],timeout=15)
-                print('... is open ...')
-                RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
-                RawJsonHTTP.close()
-            except:
-                print('** need retry ...')
-                RawJsonDict = None
-                time.sleep(2)
-
-        if RawJsonDict is None:
-            if len(self.ffNodeDict) < MinNodesCount:
-                self.AnalyseOnly = True
-
-            self.__alert('++ Error on loading raw.json from Hopglass!!!\n')
-            return
-
-
-        print('Analysing raw.json (%d Records) ...' % (len(RawJsonDict)))
-
-        for NodeIdx in RawJsonDict:
-            if self.__ProcessResponddData(RawJsonDict[NodeIdx],CurrentTime,'%Y-%m-%dT%H:%M:%S.%fZ'):
-                UsedNodesCount += 1
-                ffNodeMAC = RawJsonDict[NodeIdx]['nodeinfo']['network']['mac'].strip().lower()
-                self.ffNodeDict[ffNodeMAC]['Source'] = 'Hopglass'
 
                 if self.ffNodeDict[ffNodeMAC]['last_online'] > NewestTime:
                     NewestTime = self.ffNodeDict[ffNodeMAC]['last_online']
@@ -875,8 +792,7 @@ class ffNodeInfo:
 
                                 BatmanMacList = self.__GenerateGluonMACs(ffNodeMAC)
 
-                                if ((ffNodeMAC in self.ffNodeDict) and ((CurrentTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge) and
-                                    (self.ffNodeDict[ffNodeMAC]['Source'] != 'DB')):
+                                if (ffNodeMAC in self.ffNodeDict) and ((CurrentTime - self.ffNodeDict[ffNodeMAC]['last_online']) < MaxStatusAge):
                                     #---------- Current data of Node already available ----------
 
                                     NodeList.append(ffNodeMAC)
@@ -886,8 +802,13 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
                                         print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                    if ffMeshMAC not in BatmanMacList:  # Data of known Node with non-Gluon MAC
-                                        print('    !! Special Node in Batman TG: %s -> %s = %s' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                    if ffMeshMAC not in BatmanMacList:
+                                        if ffMeshMAC in self.MAC2NodeIDDict:  # LAN-Interfaces of 2 nodes are connected
+                                            RealNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
+                                            print('    !! Configuration-Error on Node %s = \'%s\': %s -> %s = \'%s\'' %
+                                                (RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name'], ffMeshMAC, ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                        else:  # Data of known Node with non-Gluon MAC
+                                            print('    !! Special Node in Batman TG: %s -> %s = \'%s\'' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                     else:
                                         self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
@@ -1027,7 +948,7 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['InCloud'] = None
 
                 if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
-                    print('++ Node has no Mesh-IF: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                    print('++ Node has no Mesh-IF: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                     self.__AddGluonMACs(ffNodeMAC,None)
                 else:
                     for MeshMAC in self.ffNodeDict[ffNodeMAC]['MeshMACs']:
@@ -1100,7 +1021,7 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
 
                     if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
-                        print('++ Node has VPN-Connection: %s = \"%s\"' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                        print('++ Node has VPN-Connection: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
 
         print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
@@ -1169,14 +1090,13 @@ class ffNodeInfo:
                     (ZipRegion,ZipSegment) = LocationInfo.GetLocationDataFromZIP(ZipCode)
 
                     if ZipRegion is None or ZipSegment is None:
-                        print('++ Unknown ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
+                        print('++ Unknown ZIP-Code: %s = \'%s\' -> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],ZipCode))
                     else:  # valid ZIP-Code
                         if GpsRegion is None or GpsSegment is None:
                             GpsRegion  = ZipRegion
                             GpsSegment = ZipSegment
-#                            print('>>> Segment set by ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode,'->',lon,'|',lat,'->',GpsSegment)
                         elif ZipSegment != GpsSegment:
-                            print('!!!! Segment Mismatch GPS <> ZIP:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',GpsSegment,'<>',ZipSegment)
+                            print('!!!! Segment Mismatch GPS <> ZIP: %s = \'%s\' -> %02d <> %02d' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsSegment,ZipSegment))
 
                     if GpsZipCode is not None and ZipCode != GpsZipCode:
                         print('>>> ZIP-Code Mismatch GPS <> ZIP: %s = \'%s\' -> %s <> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],GpsZipCode,ZipCode))
@@ -1185,7 +1105,7 @@ class ffNodeInfo:
                 elif self.ffNodeDict[ffNodeMAC]['ZIP'] is None:
                     self.ffNodeDict[ffNodeMAC]['ZIP'] = GpsZipCode
                 else:
-                    print('!!! Invalid ZIP-Code:',ffNodeMAC,'= \''+self.ffNodeDict[ffNodeMAC]['Name']+'\' ->',ZipCode)
+                    print('!!! Invalid ZIP-Code: %s = \'%s\' -> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],ZipCode))
 
 
                 if GpsRegion is not None:
@@ -1301,7 +1221,7 @@ class ffNodeInfo:
         DnsUpdate   = None
         NodeDnsDict = {}
 
-        print('\nChecking DNS Zone \"nodes\" ...')
+        print('\nChecking DNS Zone \'nodes\' ...')
 
         try:
             DnsResolver = dns.resolver.Resolver()
