@@ -19,6 +19,7 @@
   },
   "KeyMail":{
       "Server": "<SMTP-Server>",
+      "Port": <Port>,
       "Username": "<user>",
       "Password": "<password>",
       "MailTo": "vpn-schluessel@lists.freifunk-stuttgart.net",
