@@ -19,7 +19,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -1141,12 +1141,15 @@ def __SendEmail(Subject,MailBody,Account):
             Email['To']      = Account['MailTo']
             Email['Bcc']     = Account['MailBCC']
 
-            server = smtplib.SMTP(Account['Server'])
-            server.starttls()
-            server.login(Account['Username'],Account['Password'])
+            server = smtplib.SMTP(host=Account['Server'],port=Account['Port'],timeout=5)
+
+            if (Account['Password'] != ''):
+                server.starttls()
+                server.login(Account['Username'],Account['Password'])
+
             server.send_message(Email)
             server.quit()
-            print('Email was sent to',Account['MailTo'])
+            print('\nEmail was sent to',Account['MailTo'])
 
         except:
             print('!! ERROR on sending Email to',Account['MailTo'])
