@@ -273,6 +273,7 @@ class ffMeshNet:
             #---------- Analysing nodes and related desired segments ----------
             for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
                 NodeSeg = self.__NodeDict[ffNodeMAC]['Segment']
+                DestSeg = self.__NodeDict[ffNodeMAC]['DestSeg']
 
                 if NodeSeg is not None:
                     if NodeSeg not in CurrentSegList:
@@ -303,11 +304,14 @@ class ffMeshNet:
                     else:
                         NodeWeigt = NODEWEIGHT_OFFLINE
 
-                if self.__NodeDict[ffNodeMAC]['DestSeg'] is not None:
-                    if self.__NodeDict[ffNodeMAC]['DestSeg'] not in DesiredSegDict:
-                        DesiredSegDict[self.__NodeDict[ffNodeMAC]['DestSeg']] = NodeWeigt
+                if DestSeg is not None:
+                    if DestSeg not in DesiredSegDict:
+                        DesiredSegDict[DestSeg] = NodeWeigt
                     else:
-                        DesiredSegDict[self.__NodeDict[ffNodeMAC]['DestSeg']] += NodeWeigt
+                        DesiredSegDict[DestSeg] += NodeWeigt
+
+                    if DestSeg not in UpTimeSegDict:
+                        UpTimeSegDict[DestSeg] = 0.0
 
             if len(UpLinkSegDict) == 0:
                 print('++ Cloud seems to be w/o VPN Uplink(s):',self.__MeshCloudDict[CloudID]['CloudMembers'])
@@ -342,13 +346,15 @@ class ffMeshNet:
             SegWeight = 0
 
             for Segment in DesiredSegDict:
-                if DesiredSegDict[Segment] > SegWeight or (DesiredSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment]):
+                if ((DesiredSegDict[Segment] > SegWeight) or
+                    (CloudSegment is not None and DesiredSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment])):
                     CloudSegment = Segment
                     SegWeight = DesiredSegDict[Segment]
 
             if CloudSegment is None:
                 for Segment in UpLinkSegDict:
-                    if UpLinkSegDict[Segment] > SegWeight or (UpLinkSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment]):
+                    if ((UpLinkSegDict[Segment] > SegWeight) or
+                        (CloudSegment is not None and UpLinkSegDict[Segment] == SegWeight and UpTimeSegDict[Segment] > UpTimeSegDict[CloudSegment])):
                         CloudSegment = Segment
                         SegWeight = UpLinkSegDict[Segment]
 
