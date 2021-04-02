@@ -502,9 +502,6 @@ class ffNodeInfo:
         if ffNodeMAC not in self.ffNodeDict:
             self.__CreateNodeEntry(ffNodeMAC, None)
 
-#            if len(self.ffNodeDict) > MinNodesCount:
-#                print('++ New Node: %s = \'%s\'' % (ffNodeMAC,NodeDict['nodeinfo']['hostname']))
-
         if LastSeen < self.ffNodeDict[ffNodeMAC]['last_online']:
             return False    # Newer Node-Info already existing ...
 
@@ -791,20 +788,26 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __GetResponddDataFromNode(self,ffNodeMAC,BatmanIF):
 
+        ResponddDict = None
         ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF, 'GET nodeinfo statistics neighbours')
 
         if ResponddData is not None:
             ResponddDict = NodeJsonDict = json.loads(zlib.decompress(ResponddData, wbits=-15, bufsize=4096).decode('utf-8'))
         else:
-            ResponddDict = { 'nodeinfo':None, 'statistics':None, 'neighbours':None }
+            nodeinfo = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo')
 
-            ResponddDict['nodeinfo'] = NodeJsonDict = json.loads(self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo').decode('utf-8'))
+            if nodeinfo is not None:
+                statistics = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics')
 
-            if ResponddDict['nodeinfo'] is not None:
-                ResponddDict['statistics'] = NodeJsonDict = json.loads(self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics').decode('utf-8'))
+                if statistics is not None:
+                    neighbours = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours')
 
-                if ResponddDict['statistics'] is not None:
-                    ResponddDict['neighbours'] = NodeJsonDict = json.loads(self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours').decode('utf-8'))
+                    if neighbours is not None:
+                        ResponddDict = {
+                            'nodeinfo'   : json.loads(nodeinfo.decode('utf-8')),
+                            'statistics' : json.loads(statistics.decode('utf-8')),
+                            'neighbours' : json.loads(neighbours.decode('utf-8'))
+                        }
 
         return ResponddDict
 
@@ -883,7 +886,7 @@ class ffNodeInfo:
                                     #---------- Node without current data available ----------
 
                                     if ffTQ >= BatmanMinTQ:
-                                        print('    ++ New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
+                                        print('    >> New Node in Batman TG: NodeID = %s (TQ = %d) -> Mesh = %s' % (ffNodeMAC,ffTQ,ffMeshMAC))
                                         NodeList.append(ffNodeMAC)
                                         NodeName = None
 
@@ -892,24 +895,23 @@ class ffNodeInfo:
                                         if ResponddDict is not None:
                                             ResponddDict['lastseen'] = CurrentTime
 
-                                        if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
-                                            self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                            print('       ** added: %s = \'%s\' (%s / %s)\n' %
-                                                    (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Hardware'],self.ffNodeDict[ffNodeMAC]['Firmware']))
-                                            NewNodes += 1
-                                        else:
-                                            if ResponddDict is not None:
+                                            if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
+                                                self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
+                                                print('       ** added: %s = \'%s\' (%s / %s)\n' %
+                                                        (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Hardware'],self.ffNodeDict[ffNodeMAC]['Firmware']))
+                                                NewNodes += 1
+                                            else:
                                                 if ResponddDict['nodeinfo'] is not None:
                                                     if 'hostname' in ResponddDict['nodeinfo']:
                                                         NodeName = ResponddDict['nodeinfo']['hostname']
 
-                                            if NodeName is None:
-                                                if ffNodeMAC in self.ffNodeDict:
-                                                    NodeName = self.ffNodeDict[ffNodeMAC]['Name']
-                                                else:
-                                                    NodeName = '- ?? -'
+                                                if NodeName is None:
+                                                    if ffNodeMAC in self.ffNodeDict:
+                                                        NodeName = self.ffNodeDict[ffNodeMAC]['Name']
+                                                    else:
+                                                        NodeName = '- ?? -'
 
-                                            print('       ... Node ignored: %s -> %s = \'%s\'\n' % (ffMeshMAC,ffNodeMAC,NodeName))
+                                                print('       ... Node ignored: %s -> %s = \'%s\'\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
                                             if ffNodeMAC in self.ffNodeDict:
                                                 self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
