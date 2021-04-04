@@ -502,8 +502,11 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GLUON_MARKER[self.__NodeDict[ffnb]['GluonType']]
 
-                MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'], Segment,
-                                                                                                self.__NodeDict[ffnb]['Clients'], ffnb, self.__NodeDict[ffnb]['KeyDir'],
+                if self.__NodeDict[ffnb]['FastdGW'] is None:
+                    self.__NodeDict[ffnb]['FastdGW'] = ''
+
+                MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %7s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'], Segment,
+                                                                                                self.__NodeDict[ffnb]['Clients'], ffnb, self.__NodeDict[ffnb]['FastdGW'],
                                                                                                 self.__NodeDict[ffnb]['KeyFile'], self.__NodeDict[ffnb]['Name'],
                                                                                                 self.__NodeDict[ffnb]['HomeSeg'], self.__NodeDict[ffnb]['Region'],
                                                                                                 self.__NodeDict[ffnb]['UpTime']))
@@ -563,9 +566,12 @@ class ffMeshNet:
                 if CurrentError == ' ':
                     CurrentError = GLUON_MARKER[self.__NodeDict[ffnb]['GluonType']]
 
-                MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %5s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'],
+                if self.__NodeDict[ffnb]['FastdGW'] is None:
+                    self.__NodeDict[ffnb]['FastdGW'] = ''
+
+                MeshCloudFile.write('%s%s Seg.%02d [%3d] %s = %7s - %16s = \'%s\' (%s = %s) UpT = %d\n' % (CurrentError, self.__NodeDict[ffnb]['Status'],
                                                                                                 Segment,self.__NodeDict[ffnb]['Clients'], ffnb,
-                                                                                                self.__NodeDict[ffnb]['KeyDir'], self.__NodeDict[ffnb]['KeyFile'],
+                                                                                                self.__NodeDict[ffnb]['FastdGW'], self.__NodeDict[ffnb]['KeyFile'],
                                                                                                 self.__NodeDict[ffnb]['Name'], self.__NodeDict[ffnb]['HomeSeg'],
                                                                                                 self.__NodeDict[ffnb]['Region'], self.__NodeDict[ffnb]['UpTime']))
         return

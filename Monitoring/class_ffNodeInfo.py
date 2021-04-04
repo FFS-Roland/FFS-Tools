@@ -235,6 +235,7 @@ class ffNodeInfo:
             if (CurrentTime - NodeInfoDict['last_online']) < MaxInactiveTime:
                 if (CurrentTime - NodeInfoDict['last_online']) < MaxOfflineTime:
                     self.ffNodeDict[ffNodeMAC]['Status']     = NodeInfoDict['Status']
+                    self.ffNodeDict[ffNodeMAC]['FastdGW']    = NodeInfoDict['FastdGW']
                     self.ffNodeDict[ffNodeMAC]['UpTime']     = NodeInfoDict['UpTime']
                     self.ffNodeDict[ffNodeMAC]['IPv6']       = NodeInfoDict['IPv6']
                     self.ffNodeDict[ffNodeMAC]['Segment']    = NodeInfoDict['Segment']
@@ -428,6 +429,7 @@ class ffNodeInfo:
     def __ProcessResponddData(self,NodeDict,CurrentTime,DateFormat):
 
         if (('lastseen' not in NodeDict) or
+            ('online' not in NodeDict) or
             ('nodeinfo' not in NodeDict) or
             ('statistics' not in NodeDict) or
             ('neighbours' not in NodeDict)):
@@ -566,12 +568,29 @@ class ffNodeInfo:
 
 
         if (CurrentTime - LastSeen) > MaxInactiveTime:
-#            print('+++ Data too old: ffs-%s = %d Min' % (ffNodeID,(CurrentTime - LastSeen) / 60))
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
             return False    # Data is obsolete / too old
 
         if (CurrentTime - LastSeen) <= MaxOfflineTime:
-            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+            if NodeDict['online']:
+                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+
+                if 'gateway_nexthop' in NodeDict['statistics']:
+                    if GwMacTemplate.match(NodeDict['statistics']['gateway_nexthop']):
+                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+
+                if 'mesh_vpn' in NodeDict['statistics']:
+                    if 'groups' in NodeDict['statistics']['mesh_vpn']:
+                        if 'backbone' in NodeDict['statistics']['mesh_vpn']['groups']:
+                            if 'peers' in NodeDict['statistics']['mesh_vpn']['groups']['backbone']:
+                                GWpeers = NodeDict['statistics']['mesh_vpn']['groups']['backbone']['peers']
+
+                                for Uplink in GWpeers:
+                                    if GWpeers[Uplink] is not None:
+                                        if 'established' in GWpeers[Uplink]:
+                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+            else:
+                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
             if 'addresses' in NodeDict['nodeinfo']['network']:
                 for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
@@ -582,21 +601,6 @@ class ffNodeInfo:
                 if GwMacTemplate.match(NodeDict['statistics']['gateway']):
                     self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeDict['statistics']['gateway'][9:11])
 
-            if 'gateway_nexthop' in NodeDict['statistics']:
-                if GwMacTemplate.match(NodeDict['statistics']['gateway_nexthop']):
-                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-
-            if 'mesh_vpn' in NodeDict['statistics']:
-                if 'groups' in NodeDict['statistics']['mesh_vpn']:
-                    if 'backbone' in NodeDict['statistics']['mesh_vpn']['groups']:
-                        if 'peers' in NodeDict['statistics']['mesh_vpn']['groups']['backbone']:
-                            GWpeers = NodeDict['statistics']['mesh_vpn']['groups']['backbone']['peers']
-
-                            for Uplink in GWpeers:
-                                if GWpeers[Uplink] is not None:
-                                    if 'established' in GWpeers[Uplink]:
-                                        self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-
             if NodeDict['neighbours'] is not None:
                 if 'batadv' in NodeDict['neighbours']:
                     self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
@@ -606,7 +610,7 @@ class ffNodeInfo:
                             for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
                                 if MacAdrTemplate.match(ffNeighbour):
                                     if GwMacTemplate.match(ffNeighbour):
-                                        if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
+                                        if NodeDict['online'] and self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
                                             print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                                     elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
@@ -894,6 +898,7 @@ class ffNodeInfo:
 
                                         if ResponddDict is not None:
                                             ResponddDict['lastseen'] = CurrentTime
+                                            ResponddDict['online'] = True
 
                                             if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
                                                 self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
@@ -1203,7 +1208,7 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['HomeSeg'] = CPE_TEMP_SEGMENT
                     self.ffNodeDict[ffNodeMAC]['SegMode'] = 'fix %02d' % (CPE_TEMP_SEGMENT)
 
-                if self.ffNodeDict[ffNodeMAC]['FastdGW'] is not None:   # Node has VPN-Connection to Gateway
+                if self.ffNodeDict[ffNodeMAC]['FastdGW'] is not None and self.ffNodeDict[ffNodeMAC]['FastdGW'] != '':   # Node has VPN-Connection to Gateway
                     if self.ffNodeDict[ffNodeMAC]['KeyDir'] > 'vpn08' and self.ffNodeDict[ffNodeMAC]['GluonType'] < NODETYPE_DNS_SEGASSIGN:
                         self.ffNodeDict[ffNodeMAC]['GluonType'] = NODETYPE_DNS_SEGASSIGN
                         print('++ Node has Gluon with DNS-SegAssign: %s / %s = \'%s\'' % ( self.ffNodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
