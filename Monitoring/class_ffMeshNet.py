@@ -234,6 +234,7 @@ class ffMeshNet:
                     print('++ ERROR accessing batman: % s' % (BatctlCmd))
                 else:
                     MeshMAC = None
+                    GwMAC = None
 
                     for BatctlLine in BatctlResult.split('\n'):
                         BatctlInfo = BatctlLine.replace('(',' ').replace(')',' ').split()
@@ -243,12 +244,16 @@ class ffMeshNet:
                             if BatctlInfo[0] == 'traceroute':
                                 MeshMAC = BatctlInfo[3]
                             elif MeshMAC is not None:
-                                if MacAdrTemplate.match(BatctlInfo[1]) and not GwMacTemplate.match(BatctlInfo[1]):
-                                    if BatctlInfo[1] == MeshMAC:
-                                        UplinkList.append(ffNodeMAC)
-                                        self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                                        self.__NodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                    break
+                                if MacAdrTemplate.match(BatctlInfo[1]):
+                                    if GwMacTemplate.match(BatctlInfo[1]):
+                                        GwMAC = BatctlInfo[1]
+                                    elif GwMAC is not None:
+                                        if BatctlInfo[1] == MeshMAC:
+                                            UplinkList.append(ffNodeMAC)
+                                            self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                                            self.__NodeDict[ffNodeMAC]['FastdGW'] = 'gw%sn%s' % (GwMAC[12:14],GwMAC[15:17])
+                                            self.__NodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                        break
 
         return UplinkList
 
@@ -316,9 +321,7 @@ class ffMeshNet:
 
                 for ffNodeMAC in self.__GetUplinkList(self.__MeshCloudDict[CloudID]['CloudMembers'],SearchList):
                     NodeSeg = self.__NodeDict[ffNodeMAC]['Segment']
-                    print('>> Uplink found by Batman: Seg.%02d - %s = \'%s\'' % (NodeSeg,ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
-
-                    self.__NodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                    print('>> Uplink found by Batman: Seg.%02d %s - %s = \'%s\'' % (NodeSeg,self.__NodeDict[ffNodeMAC]['FastdGW'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
 
                     if self.__NodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':
                         NodeWeigt = NODEWEIGHT_SEGMENT_FIX
@@ -391,10 +394,11 @@ class ffMeshNet:
 
                 if self.__NodeDict[ffNodeMAC]['Status'] == NODESTATE_ONLINE_MESH:
                     print('++ Node seems to be w/o VPN Uplink: %s / %s = \'%s\'' % (self.__NodeDict[ffNodeMAC]['KeyDir'],ffNodeMAC,self.__NodeDict[ffNodeMAC]['Name']))
+                    NodeSeg = int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:])
 
-                    for UplinkNodeMAC in self.__GetUplinkList([ffNodeMAC],[int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:])]):
-                        self.__NodeDict[UplinkNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                        print('>> Uplink found by Batman:',UplinkNodeMAC)
+                    for UplinkNodeMAC in self.__GetUplinkList([ffNodeMAC],[ NodeSeg ]):
+                        print('>> Uplink found by Batman: Seg.%02d %s - %s = \'%s\'' %
+                                (NodeSeg,self.__NodeDict[ffNodeMAC]['FastdGW'],UplinkNodeMAC,self.__NodeDict[UplinkNodeMAC]['Name']))
 
                 TargetSeg = self.__NodeDict[ffNodeMAC]['HomeSeg']
 
