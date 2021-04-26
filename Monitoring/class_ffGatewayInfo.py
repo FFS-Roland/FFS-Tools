@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2020, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -131,8 +131,8 @@ class ffGatewayInfo:
         self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, DnsSegments, BatmanSegments
         self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
         self.__GwAliasDict = {}          # GwAliasDict[LegacyName]     -> current new Gateway
-        self.__Key2FileNameDict = {}     # Key2FileNameDict[PeerKey]   -> SegDir, KeyFileName
-        self.__FastdKeyDict = {}         # FastdKeyDic[KeyFileName]    -> SegDir, VpnMAC, PeerMAC, PeerName, PeerKey
+        self.__FastdKeyDict = {}         # FastdKeyDict[PeerKey]       -> KeyDir,KeyFile,SegMode,PeerMAC,PeerName,VpnMAC,Timestamp,Dns4Seg,Dns6Seg
+        self.__FastdFileDict = {}        # FastdFileDict[KeyFileName]  -> PeerKey
 
         # Initializations
         socket.setdefaulttimeout(5)
@@ -771,8 +771,7 @@ class ffGatewayInfo:
     #
     #   Load and analyse fastd-Key of Nodes from Git
     #
-    #     self.__FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC','Timestamp','Dns4Seg','Dns6Seg' }
-    #     self.__Key2FileNameDict[PeerKey] = { 'KeyDir','KeyFile' }
+    #     self.__FastdKeyDict[PeerKey] = { 'KeyDir','KeyFile','SegMode','PeerMAC','PeerName','VpnMAC','Timestamp','Dns4Seg','Dns6Seg' }
     #
     #-----------------------------------------------------------------------
     def __LoadNodeKeysFromGit(self):
@@ -840,19 +839,19 @@ class ffGatewayInfo:
                     if PeerMAC is None or PeerKey is None:
                         self.__alert('!! Invalid Key File: %s' % (KeyFilePath))
                     else:
-                        if FileName in self.__FastdKeyDict or PeerKey in self.__Key2FileNameDict:
-                            self.__alert('!! Duplicate Key File: %s -> %s / %s' % (FileName,SegDir,self.__FastdKeyDict[FileName]['KeyDir']))
-                            self.__alert('                       %s = %s/peers/%s -> %s' % (PeerKey,self.__Key2FileNameDict[PeerKey]['KeyDir'],self.__Key2FileNameDict[PeerKey]['KeyFile'],KeyFilePath))
+                        if PeerKey in self.__FastdKeyDict or FileName in self.__FastdFileDict:
+                            self.__alert('!! Duplicate Key: %s -> %s / %s = %s' % (PeerKey,SegDir,FileName,PeerName))
+                            self.__alert('                        %s/peers/%s = %s' % (self.__FastdKeyDict[PeerKey]['KeyDir'],self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerName']))
                             self.AnalyseOnly = True
                         elif GwMacTemplate.match(PeerMAC):
                             self.__alert('!! GW Key in Peer Key File: %s -> %s' % (KeyFilePath,PeerMAC))
                         else:
-                            self.__FastdKeyDict[FileName] = {
+                            self.__FastdKeyDict[PeerKey] = {
                                 'KeyDir'   : SegDir,
+                                'KeyFile'  : FileName,
                                 'SegMode'  : SegMode,
                                 'PeerMAC'  : PeerMAC,
                                 'PeerName' : PeerName,
-                                'PeerKey'  : PeerKey,
                                 'VpnMAC'   : None,
                                 'VpnGW'    : None,
                                 'Timestamp': 0,
@@ -860,10 +859,7 @@ class ffGatewayInfo:
                                 'Dns6Seg'  : None
                             }
 
-                            self.__Key2FileNameDict[PeerKey] = {
-                                'KeyDir' : SegDir,
-                                'KeyFile': FileName
-                            }
+                            self.__FastdFileDict[FileName] = PeerKey
 
             else:
                 print('++ Invalid Key Filename: %s' %(KeyFilePath))
@@ -888,18 +884,13 @@ class ffGatewayInfo:
         for PeerKey in FastdPeersDict:
             if FastdPeersDict[PeerKey]['connection'] is not None:
 
-                if PeerKey in self.__Key2FileNameDict:
-                    KeyFileName = self.__Key2FileNameDict[PeerKey]['KeyFile']
-
-                    if FastdPeersDict[PeerKey]['name'] != KeyFileName:
-                        print('!! KeyFile mismatch to Git: %s = %s <> %s\n' % (PeerKey,FastdPeersDict[PeerKey]['name'],KeyFileName))
-
+                if PeerKey in self.__FastdKeyDict:
                     for PeerVpnMAC in FastdPeersDict[PeerKey]['connection']['mac_addresses']:
                         if MacAdrTemplate.match(PeerVpnMAC) and not GwMacTemplate.match(PeerVpnMAC):
                             ActiveKeyCount += 1
-                            self.__FastdKeyDict[KeyFileName]['VpnMAC'] = PeerVpnMAC
-                            self.__FastdKeyDict[KeyFileName]['VpnGW']  = GwName
-                            self.__FastdKeyDict[KeyFileName]['Timestamp'] = HttpTime
+                            self.__FastdKeyDict[PeerKey]['VpnMAC'] = PeerVpnMAC
+                            self.__FastdKeyDict[PeerKey]['VpnGW']  = GwName
+                            self.__FastdKeyDict[PeerKey]['Timestamp'] = HttpTime
 
                 else:
                     print('!! PeerKey not in Git: %s = %s\n' % (FastdPeersDict[PeerKey]['name'],PeerKey))
@@ -1070,11 +1061,11 @@ class ffGatewayInfo:
                     DnsFileName = DnsPeerID[:16]
                     DnsKeyID    = DnsPeerID[17:]
 
-                    if DnsFileName in self.__FastdKeyDict:
-                        GitSegment = int(self.__FastdKeyDict[DnsFileName]['KeyDir'][3:])
-                        GitKeyID   = self.__FastdKeyDict[DnsFileName]['PeerKey'][:12]
+                    if DnsFileName in self.__FastdFileDict:
+                        FastdKey = self.__FastdFileDict[DnsFileName]
+                        GitSegment = int(self.__FastdKeyDict[FastdKey]['KeyDir'][3:])
 
-                        if DnsKeyID == GitKeyID:    # valid DNS-Name found ...
+                        if DnsKeyID == FastdKey[:12]:    # valid DNS-Name found ...
 
                             if DnsRecord.rdtype == dns.rdatatype.AAAA:
                                 #---------- IPv6 ----------
@@ -1087,7 +1078,7 @@ class ffGatewayInfo:
                                         DnsSegment = int(IPv6.split(':')[-1].zfill(1))
 
                                         if DnsSegment == GitSegment:
-                                            self.__FastdKeyDict[DnsFileName]['Dns6Seg'] = DnsSegment
+                                            self.__FastdKeyDict[FastdKey]['Dns6Seg'] = DnsSegment
                                         else:
                                             self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
 
@@ -1119,7 +1110,7 @@ class ffGatewayInfo:
                                         DnsSegment = int(IPv4.split('.')[-1])
 
                                         if DnsSegment == GitSegment:
-                                            self.__FastdKeyDict[DnsFileName]['Dns4Seg'] = DnsSegment
+                                            self.__FastdKeyDict[FastdKey]['Dns4Seg'] = DnsSegment
                                         else:
                                             self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
 
@@ -1163,23 +1154,23 @@ class ffGatewayInfo:
         #---------- Check Git for missing DNS entries ----------
         print('Checking KeyFiles from Git for missing DNS Entries ...')
 
-        for PeerFileName in self.__FastdKeyDict:
-            PeerDnsName = '%s-%s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerKey'][:12])
-            GitSegment = int(self.__FastdKeyDict[PeerFileName]['KeyDir'][3:])
+        for PeerKey in self.__FastdKeyDict:
+            PeerDnsName = '%s-%s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],PeerKey[:12])
+            GitSegment = int(self.__FastdKeyDict[PeerKey]['KeyDir'][3:])
 
-            if self.__FastdKeyDict[PeerFileName]['Dns6Seg'] is None:
-                self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerMAC'],self.__FastdKeyDict[PeerFileName]['PeerName']))
+            if self.__FastdKeyDict[PeerKey]['Dns6Seg'] is None:
+                self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
                 PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,GitSegment)
-                self.__FastdKeyDict[PeerFileName]['Dns6Seg'] = GitSegment
+                self.__FastdKeyDict[PeerKey]['Dns6Seg'] = GitSegment
 
                 if DnsUpdate is not None:
                     DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                     print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv6))
 
-            if self.__FastdKeyDict[PeerFileName]['Dns4Seg'] is None:
-                self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (PeerFileName,self.__FastdKeyDict[PeerFileName]['PeerMAC'],self.__FastdKeyDict[PeerFileName]['PeerName']))
+            if self.__FastdKeyDict[PeerKey]['Dns4Seg'] is None:
+                self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
                 PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,GitSegment)
-                self.__FastdKeyDict[PeerFileName]['Dns4Seg'] = GitSegment
+                self.__FastdKeyDict[PeerKey]['Dns4Seg'] = GitSegment
 
                 if DnsUpdate is not None:
                     DnsUpdate.add(PeerDnsName, 120, 'A',PeerDnsIPv4)
@@ -1266,7 +1257,7 @@ class ffGatewayInfo:
 
         if len(NodeMoveDict) < 1:
 #        if True:
-#            print(NodeMoveDict)
+            print(NodeMoveDict)
             print('++ There are no Peers to be moved.')
             return
 
@@ -1299,13 +1290,14 @@ class ffGatewayInfo:
                     KeyFileName = 'ffs-'+ffNodeMAC.replace(':','')
                     DestSegment = NodeMoveDict[ffNodeMAC]
 
-                    if KeyFileName in self.__FastdKeyDict and DestSegment > 0 and DestSegment < 99:
-                        SourceFile = '%s/peers/%s' % (self.__FastdKeyDict[KeyFileName]['KeyDir'], KeyFileName)
+                    if KeyFileName in self.__FastdFileDict and DestSegment > 0 and DestSegment < 99:
+                        FastdKey = self.__FastdFileDict[KeyFileName]
+                        SourceFile = '%s/peers/%s' % (self.__FastdKeyDict[FastdKey]['KeyDir'], KeyFileName)
                         DestFile   = 'vpn%02d/peers/%s' % (DestSegment, KeyFileName)
-                        PeerDnsName = '%s-%s' % (KeyFileName, self.__FastdKeyDict[KeyFileName]['PeerKey'][:12])
+                        PeerDnsName = '%s-%s' % (KeyFileName, FastdKey[:12])
 
 #                        print(SourceFile,'->',DestFile)
-                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],DestSegment)
+                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[FastdKey]['PeerName'],self.__FastdKeyDict[FastdKey]['KeyDir'],DestSegment)
                         print(MoveTextLine)
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
@@ -1322,7 +1314,7 @@ class ffGatewayInfo:
                             DnsUpdate.replace(PeerDnsName, 120, 'A',    '%s%d' % (SegAssignIPv4Prefix,NodeMoveDict[ffNodeMAC]))
 
 #                            self.__alert('   '+SourceFile+' -> '+DestFile)
-                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[KeyFileName]['PeerName'],self.__FastdKeyDict[KeyFileName]['KeyDir'],DestSegment))
+                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[FastdKey]['PeerName'],self.__FastdKeyDict[FastdKey]['KeyDir'],DestSegment))
 
                         else:
                             print('... Key File was already moved by other process.')

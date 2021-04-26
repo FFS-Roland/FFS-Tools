@@ -1028,7 +1028,7 @@ class ffNodeInfo:
     # public function "AddUplinkInfo"
     #
     #   Add fastd-Infos for Nodes
-    #     FastdKeyDict[KeyFileName] = { 'KeyDir','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC', ... }
+    #     FastdKeyDict[PeerKey] = { 'KeyDir','KeyFile','SegMode','PeerMAC','PeerName','PeerKey','VpnMAC', ... }
     #
     #=========================================================================
     def AddUplinkInfos(self,FastdKeyDict):
@@ -1037,8 +1037,8 @@ class ffNodeInfo:
         addedInfos = 0
         fastdNodes = 0
 
-        for KeyFileName in FastdKeyDict:
-            FastdKeyInfo = FastdKeyDict[KeyFileName]
+        for PeerKey in FastdKeyDict:
+            FastdKeyInfo = FastdKeyDict[PeerKey]
             ffNodeMAC = FastdKeyInfo['PeerMAC']  # is from Key-File, *not* live data!
             ffVpnMAC = FastdKeyInfo['VpnMAC']    # MAC of fastd-Interface with Mesh-Traffic
 
@@ -1056,20 +1056,20 @@ class ffNodeInfo:
 
                     if ffVpnMAC in GluonMacList:
                         print('++ Unknown VPN-MAC (Gluon): %s / %s -> %s / %s = \'%s\' -> %s' %
-                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],KeyFileName,FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
+                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],FastdKeyInfo['KeyFile'],FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
                     else:
                         print('++ Unknown VPN-MAC (Non-Gluon): %s / %s -> %s / %s = \'%s\' -> %s' %
-                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],KeyFileName,FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
+                              (ffVpnMAC,ffNodeMAC,FastdKeyInfo['KeyDir'],FastdKeyInfo['KeyFile'],FastdKeyInfo['PeerName'],FastdKeyInfo['VpnGW']))
 
             if ffNodeMAC in self.ffNodeDict:
-                self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
+                self.ffNodeDict[ffNodeMAC]['FastdKey'] = PeerKey
                 self.ffNodeDict[ffNodeMAC]['KeyDir']   = FastdKeyInfo['KeyDir']
-                self.ffNodeDict[ffNodeMAC]['KeyFile']  = KeyFileName
-                self.ffNodeDict[ffNodeMAC]['FastdKey'] = FastdKeyInfo['PeerKey']
+                self.ffNodeDict[ffNodeMAC]['KeyFile']  = FastdKeyInfo['KeyFile']
+                self.ffNodeDict[ffNodeMAC]['SegMode']  = FastdKeyInfo['SegMode']
                 addedInfos += 1
 
                 if self.ffNodeDict[ffNodeMAC]['Name'].strip().lower() != FastdKeyInfo['PeerName'].strip().lower():
-                    print('++ Hostname Mismatch:  %s = \'%s\' <- \'%s\'' % (KeyFileName,self.ffNodeDict[ffNodeMAC]['Name'],FastdKeyInfo['PeerName']))
+                    print('++ Hostname Mismatch:  %s = \'%s\' <- \'%s\'' % (FastdKeyInfo['KeyFile'],self.ffNodeDict[ffNodeMAC]['Name'],FastdKeyInfo['PeerName']))
                     FastdKeyInfo['PeerName'] = self.ffNodeDict[ffNodeMAC]['Name']
 
                 if ffVpnMAC is not None:   # Node has VPN-Connection to Gateway ...
