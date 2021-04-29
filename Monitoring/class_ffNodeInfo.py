@@ -208,7 +208,7 @@ class ffNodeInfo:
             'KeyDir': '',
             'KeyFile': '',
             'FastdGW': None,
-            'FastdKey': '',
+            'FastdKey': None,
             'InCloud': None,
             'Neighbours': [],
             'AutoUpdate': None,

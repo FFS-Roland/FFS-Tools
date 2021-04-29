@@ -197,15 +197,17 @@ class ffMeshNet:
     def __MarkNodesInCloudForMove(self,CloudID,TargetSeg):
 
         for ffNodeMAC in self.__MeshCloudDict[CloudID]['CloudMembers']:
-            if self.__NodeDict[ffNodeMAC]['KeyDir'] != '':
+            if self.__NodeDict[ffNodeMAC]['FastdKey'] is not None:
                 if int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
-                    if ffNodeMAC in self.__NodeMoveDict:
-                        print('!! Multiple Move: %s -> %s' % (ffNodeMAC,TargetSeg))
+                    FastdKey = self.__NodeDict[ffNodeMAC]['FastdKey']
+
+                    if FastdKey in self.__NodeMoveDict:
+                        print('!! Multiple Move: %s / %s -> %s' % (FastdKey,ffNodeMAC,TargetSeg))
 
                     if TargetSeg == 0:
                         print('!! No move to Legacy: %s/peers/%s\n' % (self.__NodeDict[ffNodeMAC]['KeyDir'],self.__NodeDict[ffNodeMAC]['KeyFile']) )
                     else:
-                        self.__NodeMoveDict[ffNodeMAC] = TargetSeg
+                        self.__NodeMoveDict[FastdKey] = TargetSeg
                         print('>> git mv %s/peers/%s vpn%02d/peers/  = \'%s\'\n' % ( self.__NodeDict[ffNodeMAC]['KeyDir'],self.__NodeDict[ffNodeMAC]['KeyFile'],
                                                                                  TargetSeg,self.__NodeDict[ffNodeMAC]['Name'] ))
         return
