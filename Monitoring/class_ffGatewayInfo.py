@@ -70,10 +70,6 @@ from class_ffDHCP import *
 # Global Constants
 #-------------------------------------------------------------
 
-DNS_RETRIES         = 3
-PING_RETRIES        = 3
-HTTPS_RETRIES       = 3
-
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
 MinGatewayCount     = 1              # minimum number of Gateways per Segment
 
@@ -86,7 +82,8 @@ SegAssignIPv6Prefix = '2001:2:0:711::'
 GwIgnoreList        = [ 'gw05n08','gw05n09' ]
 SegmentIgnoreList   = [ 30 ]
 
-InternetTestTargets = ['www.google.de','youtube.de','ebay.de','wikipedia.de']
+InternetTestTargets = ['www.google.de','www.youtube.de','www.ebay.de','www.wikipedia.de','www.heise.de']
+
 DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
 DnsIP6SegTemplate   = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 
@@ -623,18 +620,23 @@ class ffGatewayInfo:
 #                            for DnsType in ['A','AAAA']:
                             for DnsType in ['A']:
                                 DnsResult = None
-                                Retries = DNS_RETRIES
+                                Retries = len(InternetTestTargets)
+                                TestIdx = 0
 
-                                while DnsResult is None and Retries > 0:
-                                    Retries -= 1
+                                while DnsResult is None and TestIdx < Retries:
                                     try:
-                                        DnsResult = DnsResolver.query(InternetTestTargets[0],DnsType)
+                                        DnsResult = DnsResolver.query(InternetTestTargets[TestIdx],DnsType)
                                     except:
                                         time.sleep(1)
                                         DnsResult = None
+                                        TestIdx += 1
+                                    else:
+                                        Retries = 0
+                                        if DnsResult is None:
+                                            self.__alert('    !! No result on DNS-Server: Seg.%02d -> %s = %s -> %s' % (Segment,GwName,DnsServer,InternetTestTargets[TestIdx]) )
 
                                 if DnsResult is None:
-                                    self.__alert('    !! Error on DNS-Server: Seg.%02d -> %s = %s -> %s (%s)' % (Segment,GwName,DnsServer,InternetTestTargets[0],DnsType) )
+                                    self.__alert('    !! Error on DNS-Server: Seg.%02d -> %s = %s' % (Segment,GwName,DnsServer) )
 
         print('... done.\n')
         return
@@ -670,8 +672,8 @@ class ffGatewayInfo:
 
                     if DhcpResult is None:
 #                        self.__alert('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
-                        print('    !! Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
-                        CheckDict[GwName] -= 4
+                        print('    >> Error on DHCP-Server: Seg.%02d -> %s' % (Segment,GwName))
+                        CheckDict[GwName] -= 8
                     else:
                         CheckDict[GwName] += 1
                         DhcpSegCount += 1
@@ -697,6 +699,8 @@ class ffGatewayInfo:
 
         print('\nChecking Internet-Connection via Gateways ...')
 
+        PingCheckDict = {}
+        HttpsCheckDict = {}
         DnsResolver = dns.resolver.Resolver()
         conf.verb = 0
 
@@ -711,15 +715,17 @@ class ffGatewayInfo:
 
                     #---------- Ping ----------
                     PingResult = None
-                    Retries = PING_RETRIES
+                    Retries = len(InternetTestTargets)
+                    TestIdx = 0
 
-                    while PingResult is None and Retries > 0:
-                        TestIdx = (PING_RETRIES - Retries) % len(InternetTestTargets)
+                    if GwName not in PingCheckDict:
+                        PingCheckDict[GwName] = 0
+
+                    while PingResult is None and TestIdx < Retries:
                         TestIP = DnsResolver.query('%s.' % (InternetTestTargets[TestIdx]),'A')[0].to_text()
                         PingPacket = IP(dst=TestIP,ttl=20)/ICMP()
                         conf.route.resync()
                         conf.route.add(host=TestIP,gw=InternalGwIPv4)
-                        Retries -= 1
 
                         try:
                             PingResult = sr1(PingPacket,timeout=1)
@@ -727,25 +733,34 @@ class ffGatewayInfo:
                             time.sleep(1)
                             PingResult = None
 
-                        if PingResult is not None:
-                            if PingResult.src != TestIP or PingResult.dst[:7] != InternalGwIPv4[:7]:
-                            	PingResult = None
+                        if PingResult is None:
+                            print('    >> Error on Ping to Internet: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+                        elif PingResult.src != TestIP or PingResult.dst[:7] != InternalGwIPv4[:7]:
+                            print('    >> Invalid response on Ping to Internet: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+                       	    PingResult = None
+#                        else:
+#                            print('    Ping  ok: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+
+                        TestIdx += 1
 
                     if PingResult is None:
-                        self.__alert('    !! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
-
+                        PingCheckDict[GwName] -= 8
+                    else:
+                        PingCheckDict[GwName] += 1
 
                     #---------- HTTPS ----------
                     HttpsResult = None
-                    Retries = HTTPS_RETRIES
+                    Retries = len(InternetTestTargets)
+                    TestIdx = 0
 
-                    while HttpsResult is None and Retries > 0:
-                        TestIdx = (PING_RETRIES - Retries) % len(InternetTestTargets)
+                    if GwName not in HttpsCheckDict:
+                        HttpsCheckDict[GwName] = 0
+
+                    while HttpsResult is None and TestIdx < Retries:
                         TestIP = DnsResolver.query('%s.' % (InternetTestTargets[TestIdx]),'A')[0].to_text()
-                        TcpPacket  = IP(dst=TestIP)/TCP(dport=[443])
+                        TcpPacket = IP(dst=TestIP,ttl=20)/TCP(dport=443)
                         conf.route.resync()
                         conf.route.add(host=TestIP,gw=InternalGwIPv4)
-                        Retries -= 1
 
                         try:
                             HttpsResult = sr1(TcpPacket,timeout=1)
@@ -753,12 +768,28 @@ class ffGatewayInfo:
                             time.sleep(1)
                             HttpsResult = None
 
-                        if HttpsResult is not None:
-                            if HttpsResult.src != TestIP or HttpsResult.dst[:7] != InternalGwIPv4[:7]:
-                                HttpsResult = None
+                        if HttpsResult is None:
+                            print('    >> No Response on HTTPS: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+                        elif HttpsResult.src != TestIP or HttpsResult.dst[:7] != InternalGwIPv4[:7]:
+                            print('    >> Invalid Response on HTTPS to Internet: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+                            HttpsResult = None
+#                        else:
+#                            print('    HTTPS ok: %s (%s) -> %s = %s' % (GwName,InternalGwIPv4,InternetTestTargets[TestIdx],TestIP))
+
+                        TestIdx += 1
 
                     if HttpsResult is None:
-                        self.__alert('    !! Error on HTTPS to Internet: Seg.%02d -> %s' % (Segment,GwName))
+                        HttpsCheckDict[GwName] -= 8
+                    else:
+                        HttpsCheckDict[GwName] += 1
+
+        for GwName in PingCheckDict:
+            if PingCheckDict[GwName] < 0:
+                self.__alert('    !!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
+
+        for GwName in HttpsCheckDict:
+            if HttpsCheckDict[GwName] < 0:
+                self.__alert('    !!! Error on HTTPS to Internet: Seg.%02d = %s' % (Segment,GwName))
 
         conf.route.resync()
         print('... done.\n')
