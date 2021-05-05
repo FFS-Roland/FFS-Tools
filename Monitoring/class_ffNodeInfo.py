@@ -918,13 +918,13 @@ class ffNodeInfo:
 
                                                 print('       ... Node ignored: %s -> %s = \'%s\'\n' % (ffMeshMAC,ffNodeMAC,NodeName))
 
-                                            if ffNodeMAC in self.ffNodeDict:
-                                                self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                                self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                                        if ffNodeMAC in self.ffNodeDict:
+                                            self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
+                                            self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
 
-                                                if not self.__IsOnline(ffNodeMAC):
-                                                    self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
-                                                    print('    >> Node is online: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            if not self.__IsOnline(ffNodeMAC):
+                                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+                                                print('    >> Node is online: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
                                 elif ffNodeMAC in self.MAC2NodeIDDict:
                                     #---------- Check for Mesh-MAC in Client-Net ----------
