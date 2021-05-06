@@ -407,10 +407,12 @@ class ffMeshNet:
                 if TargetSeg is not None:
                     if int(self.__NodeDict[ffNodeMAC]['KeyDir'][3:]) != TargetSeg:
                         if TargetSeg <= 8 or self.__NodeDict[ffNodeMAC]['GluonType'] >= NODETYPE_DNS_SEGASSIGN:
-                            if ffNodeMAC in self.__NodeMoveDict:
-                                print('!! Multiple Move:',ffNodeMAC,'->',TargetSeg)
+                            FastdKey = self.__NodeDict[ffNodeMAC]['FastdKey']
 
-                            self.__NodeMoveDict[ffNodeMAC] = TargetSeg
+                            if FastdKey in self.__NodeMoveDict:
+                                print('!! Multiple Move: %s / %s -> %s' % (FastdKey,ffNodeMAC,TargetSeg))
+
+                            self.__NodeMoveDict[FastdKey] = TargetSeg
                             print('>> git mv %s/peers/%s vpn%02d/peers/  = \'%s\'' % (self.__NodeDict[ffNodeMAC]['KeyDir'],self.__NodeDict[ffNodeMAC]['KeyFile'],
                                                                                       TargetSeg,self.__NodeDict[ffNodeMAC]['Name'] ))
                         else:

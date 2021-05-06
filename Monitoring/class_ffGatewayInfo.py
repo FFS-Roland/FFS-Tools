@@ -128,7 +128,7 @@ class ffGatewayInfo:
         self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, DnsSegments, BatmanSegments
         self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
         self.__GwAliasDict = {}          # GwAliasDict[LegacyName]     -> current new Gateway
-        self.__FastdKeyDict = {}         # FastdKeyDict[PeerKey]       -> KeyDir,KeyFile,SegMode,PeerMAC,PeerName,VpnMAC,Timestamp,Dns4Seg,Dns6Seg
+        self.__FastdKeyDict = {}         # FastdKeyDict[FastdKey]      -> KeyDir,KeyFile,SegMode,PeerMAC,PeerName,VpnMAC,Timestamp,Dns4Seg,Dns6Seg
         self.__PeerDnsDict = {}          # PeerDnsDict[DNS-ID]         -> Segment
 
         # Initializations
@@ -802,7 +802,7 @@ class ffGatewayInfo:
     #
     #   Load and analyse fastd-Key of Nodes from Git
     #
-    #     self.__FastdKeyDict[PeerKey] = { 'KeyDir','KeyFile','SegMode','PeerMAC','PeerName','VpnMAC','Timestamp','Dns4Seg','Dns6Seg' }
+    #     self.__FastdKeyDict[FastdKey] = { 'KeyDir','KeyFile','SegMode','PeerMAC','PeerName','VpnMAC','Timestamp','Dns4Seg','Dns6Seg' }
     #
     #-----------------------------------------------------------------------
     def __LoadNodeKeysFromGit(self):
@@ -1330,13 +1330,13 @@ class ffGatewayInfo:
                 MoveCount = 0
 
                 for FastdKey in NodeMoveDict:
-                    KeyFileName = self.__FastdKeyDict[PeerKey]['KeyFile']
+                    KeyFileName = self.__FastdKeyDict[FastdKey]['KeyFile']
                     DestSegment = NodeMoveDict[FastdKey]
 
                     if DestSegment > 0 and DestSegment < 99:
                         SourceFile = '%s/peers/%s' % (self.__FastdKeyDict[FastdKey]['KeyDir'], KeyFileName)
                         DestFile   = 'vpn%02d/peers/%s' % (DestSegment, KeyFileName)
-                        PeerDnsName = self.__FastdKeyDict[PeerKey]['DnsName']
+                        PeerDnsName = self.__FastdKeyDict[FastdKey]['DnsName']
 
 #                        print(SourceFile,'->',DestFile)
                         MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[FastdKey]['PeerName'],self.__FastdKeyDict[FastdKey]['KeyDir'],DestSegment)
