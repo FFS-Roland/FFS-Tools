@@ -108,7 +108,7 @@ NodeIdTemplate         = re.compile('^[0-9a-f]{12}$')
 
 PeerTemplate           = re.compile('^ffs-[0-9a-f]{12}')
 
-ZipTemplate            = re.compile('^[0-9]{5}$')
+ZipTemplate            = re.compile('^[0-9]{5}')
 SegmentTemplate        = re.compile('^[0-9]{2}$')
 
 KeyDirTemplate         = re.compile('^vpn[0-9]{2}$')
@@ -540,11 +540,11 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['Longitude'] = NodeDict['nodeinfo']['location']['longitude']
 
             if 'zip' in NodeDict['nodeinfo']['location']:
-                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip']).strip()
+                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip']).strip()[:5]
 
         if 'custom_fields' in NodeDict:
             if 'zip' in NodeDict['custom_fields']:
-                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['custom_fields']['zip']).strip()
+                self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['custom_fields']['zip']).strip()[:5]
 
         if 'owner' in NodeDict['nodeinfo']:
             if NodeDict['nodeinfo']['owner'] is not None:
@@ -776,7 +776,7 @@ class ffNodeInfo:
                 ResponddSock.close()
             except:
                 NodeResponse = None
-                time.sleep(2)
+                time.sleep(1)
 
         if NodeResponse is None:
             print('    +++ Error on respondd \'%s\' from %s ...' % (Request,NodeIPv6))
@@ -1144,7 +1144,7 @@ class ffNodeInfo:
                 ZipCode = self.ffNodeDict[ffNodeMAC]['ZIP']
 
                 if ZipCode is not None and ZipTemplate.match(ZipCode):
-                    (ZipRegion,ZipSegment) = LocationInfo.GetLocationDataFromZIP(ZipCode)
+                    (ZipRegion,ZipSegment) = LocationInfo.GetLocationDataFromZIP(ZipCode[:5])
 
                     if ZipRegion is None or ZipSegment is None:
                         print('++ Unknown ZIP-Code: %s = \'%s\' -> %s' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],ZipCode))
@@ -1169,7 +1169,10 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['Region']  = GpsRegion
 
                 if self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'fix':        # fixed Segment independent of Location
-                    self.ffNodeDict[ffNodeMAC]['HomeSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
+                    if self.ffNodeDict[ffNodeMAC]['SegMode'][4:].isnumeric():
+                        self.ffNodeDict[ffNodeMAC]['HomeSeg'] = int(self.ffNodeDict[ffNodeMAC]['SegMode'][4:])
+                    else:
+                        self.ffNodeDict[ffNodeMAC]['HomeSeg'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
                 elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'man':      # manually defined Segment
                     self.ffNodeDict[ffNodeMAC]['HomeSeg'] = int(self.ffNodeDict[ffNodeMAC]['KeyDir'][3:])
                 elif self.ffNodeDict[ffNodeMAC]['SegMode'][:3] == 'mob':      # No specific Segment for mobile Nodes
