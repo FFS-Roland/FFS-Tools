@@ -451,14 +451,14 @@ class ffNodeInfo:
             print('    >> Data of Gateway:',ffNodeID)
             return False
 
-        if NodeDict['statistics'] is None or 'node_id' not in NodeDict['statistics']:
-            print('    +++ Missing node_id of statistics!',NodeDict['statistics'])
-            return False
-
-        if NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
-            print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
-                     (NodeDict['nodeinfo']['node_id'],NodeDict['statistics']['node_id']))
-            return False
+        if NodeDict['statistics'] is not None:
+            if 'node_id' not in NodeDict['statistics']:
+                print('    +++ Missing node_id of statistics!',NodeDict['statistics'])
+                return False
+            elif NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
+                print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
+                         (NodeDict['nodeinfo']['node_id'],NodeDict['statistics']['node_id']))
+                return False
 
         if NodeDict['neighbours'] is not None:
             if 'node_id' not in NodeDict['neighbours']:
@@ -523,13 +523,6 @@ class ffNodeInfo:
 
         self.ffNodeDict[ffNodeMAC]['MeshMACs'] = []
 
-        if 'clients' in NodeDict['statistics']:
-            if NodeDict['statistics']['clients'] is not None:
-                if 'total' in NodeDict['statistics']['clients']:
-                    self.ffNodeDict[ffNodeMAC]['Clients'] = int(NodeDict['statistics']['clients']['total'])
-                else:
-                    print('!!! total statistics missing: %s' % (NodeIdx))
-
         if 'hardware' in NodeDict['nodeinfo']:
             if 'model' in NodeDict['nodeinfo']['hardware']:
                 self.ffNodeDict[ffNodeMAC]['Hardware'] = NodeDict['nodeinfo']['hardware']['model']
@@ -570,11 +563,20 @@ class ffNodeInfo:
         if (CurrentTime - LastSeen) > MaxInactiveTime:
             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
             return False    # Data is obsolete / too old
-
-        if (CurrentTime - LastSeen) <= MaxOfflineTime:
+        elif (CurrentTime - LastSeen) > MaxOfflineTime:
+            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
+        else:
             if NodeDict['online']:
                 self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
+            else:
+                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
+            if 'addresses' in NodeDict['nodeinfo']['network']:
+                for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
+                    if ffsIPv6Template.match(NodeAddress):
+                        self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
+
+            if NodeDict['statistics'] is not None:
                 if 'gateway_nexthop' in NodeDict['statistics']:
                     if GwMacTemplate.match(NodeDict['statistics']['gateway_nexthop']):
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
@@ -589,17 +591,20 @@ class ffNodeInfo:
                                     if GWpeers[Uplink] is not None:
                                         if 'established' in GWpeers[Uplink]:
                                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-            else:
-                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
-            if 'addresses' in NodeDict['nodeinfo']['network']:
-                for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
-                    if ffsIPv6Template.match(NodeAddress):
-                        self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
+                if 'gateway' in NodeDict['statistics']:
+                    if GwMacTemplate.match(NodeDict['statistics']['gateway']):
+                        self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeDict['statistics']['gateway'][9:11])
 
-            if 'gateway' in NodeDict['statistics']:
-                if GwMacTemplate.match(NodeDict['statistics']['gateway']):
-                    self.ffNodeDict[ffNodeMAC]['Segment'] = int(NodeDict['statistics']['gateway'][9:11])
+                if 'clients' in NodeDict['statistics']:
+                    if NodeDict['statistics']['clients'] is not None:
+                        if 'total' in NodeDict['statistics']['clients']:
+                            self.ffNodeDict[ffNodeMAC]['Clients'] = int(NodeDict['statistics']['clients']['total'])
+                        else:
+                            print('!!! total statistics missing: %s' % (NodeIdx))
+
+                if 'uptime' in NodeDict['statistics']:
+                    self.ffNodeDict[ffNodeMAC]['UpTime'] = NodeDict['statistics']['uptime']
 
             if NodeDict['neighbours'] is not None:
                 if 'batadv' in NodeDict['neighbours']:
@@ -611,16 +616,10 @@ class ffNodeInfo:
                                 if MacAdrTemplate.match(ffNeighbour):
                                     if GwMacTemplate.match(ffNeighbour):
                                         if NodeDict['online'] and self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
-                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+#                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                             self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
                                     elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
                                         self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
-
-            if 'uptime' in NodeDict['statistics']:
-                self.ffNodeDict[ffNodeMAC]['UpTime'] = NodeDict['statistics']['uptime']
-
-        else:
-            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
 
         if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
@@ -792,26 +791,37 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __GetResponddDataFromNode(self,ffNodeMAC,BatmanIF):
 
-        ResponddDict = None
         ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF, 'GET nodeinfo statistics neighbours')
+        try:
+            ResponddDict = json.loads(zlib.decompress(ResponddData, wbits=-15, bufsize=4096).decode('utf-8'))
+        except:
+            ResponddDict = None
 
-        if ResponddData is not None:
-            ResponddDict = NodeJsonDict = json.loads(zlib.decompress(ResponddData, wbits=-15, bufsize=4096).decode('utf-8'))
-        else:
-            nodeinfo = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo')
+        if ResponddDict is None:
+            ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo')
+            try:
+                nodeinfo = json.loads(ResponddData.decode('utf-8'))
+            except:
+                nodeinfo = None
 
             if nodeinfo is not None:
-                statistics = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics')
+                ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics')
+                try:
+                    statistics = json.loads(ResponddData.decode('utf-8'))
+                except:
+                    statistics = None
 
-                if statistics is not None:
-                    neighbours = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours')
+                ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours')
+                try:
+                    neighbours = json.loads(ResponddData.decode('utf-8'))
+                except:
+                    neighbours = None
 
-                    if neighbours is not None:
-                        ResponddDict = {
-                            'nodeinfo'   : json.loads(nodeinfo.decode('utf-8')),
-                            'statistics' : json.loads(statistics.decode('utf-8')),
-                            'neighbours' : json.loads(neighbours.decode('utf-8'))
-                        }
+                ResponddDict = {
+                            'nodeinfo'   : nodeinfo,
+                            'statistics' : statistics,
+                            'neighbours' : neighbours
+                }
 
         return ResponddDict
 
