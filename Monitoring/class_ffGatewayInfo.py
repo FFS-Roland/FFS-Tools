@@ -80,7 +80,7 @@ SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
 GwIgnoreList        = [ 'gw05n08','gw05n09' ]
-SegmentIgnoreList   = [ 30 ]
+SegmentIgnoreList   = [ 0 ]
 
 InternetTestTargets = ['www.google.de','www.youtube.de','www.ebay.de','www.wikipedia.de','www.heise.de']
 
@@ -506,7 +506,7 @@ class ffGatewayInfo:
         BatResult = None
         GwList    = []
 
-        BatctlCmd = ('/usr/sbin/batctl -m bat%02d gwl' % (Segment)).split()
+        BatctlCmd = ('/usr/sbin/batctl meshif bat%02d gwl' % (Segment)).split()
 
         try:
             BatctlGwl = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)

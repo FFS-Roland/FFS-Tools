@@ -227,7 +227,7 @@ class ffMeshNet:
 
         for ffSeg in SegmentSearchList:
             for ffNodeMAC in NodeList:
-                BatctlCmd = ('/usr/sbin/batctl -m bat%02d tr %s' % (ffSeg,ffNodeMAC)).split()
+                BatctlCmd = ('/usr/sbin/batctl meshif bat%02d tr %s' % (ffSeg,ffNodeMAC)).split()
 
                 try:
                     BatctlTr = subprocess.run(BatctlCmd, stdout=subprocess.PIPE, timeout=BatmanTimeout)

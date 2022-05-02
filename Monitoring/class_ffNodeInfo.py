@@ -132,7 +132,7 @@ NODESTATE_ONLINE_VPN   = 'V'
 RESPONDD_PORT          = 1001
 RESPONDD_TIMEOUT       = 2.0
 
-CPE_TEMP_SEGMENT       = 23
+CPE_TEMP_SEGMENT       = 30
 
 
 
@@ -848,7 +848,7 @@ class ffNodeInfo:
             if ffSeg > BatmanMaxSegment:  continue
 
             print('... Segment %02d ...' % (ffSeg))
-            BatctlCmd = ('/usr/sbin/batctl -m %s tg' % (BatIF)).split()    # batman translation table ...
+            BatctlCmd = ('/usr/sbin/batctl meshif %s tg' % (BatIF)).split()    # batman translation table ...
 
             try:
                 BatctlTg = subprocess.run(BatctlCmd, stdout=subprocess.PIPE, timeout=BatmanTimeout)
