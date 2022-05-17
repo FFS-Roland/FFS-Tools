@@ -13,6 +13,7 @@ apt-get dist-upgrade
 # Installing neccessary Modules
 # -----------------------------
 apt install haveged
+apt install libpcap0.8
 apt install mc
 apt install fastd
 apt install batctl
@@ -37,7 +38,11 @@ fi
 mkdir -p /var/lib/ffs/git
 mkdir -p /var/lib/ffs/keys
 mkdir -p /var/lib/ffs/database
+mkdir -p /var/lib/ffs/blacklist
+
 mkdir -p /var/log/ffs
+mkdir -p /var/log/ffs/monitor
+mkdir -p /var/log/ffs/onboarder
 
 
 # Setting up Git Repositories

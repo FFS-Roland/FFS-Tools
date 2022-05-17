@@ -343,9 +343,9 @@ for KeyFilePath in KeyFileList:
     MyKeysDict = LoadMyKeys(KeyFilePath)
     Segment  = int(os.path.basename(KeyFilePath).split('.')[0][3:])
 
-#    WriteFastdGitFile(MyKeysDict,Segment,args.GITPEERS,MonitorID)
+    WriteFastdGitFile(MyKeysDict,Segment,args.GITPEERS,MonitorID)
     WriteFastdConfigFile(MyKeysDict,Segment,WanInterface)
     WriteFastdPeerFiles(GwKeyDict, Segment)
-#    WriteNetworkFile(Segment,MonitorID)
+    WriteNetworkFile(Segment,MonitorID)
 
 exit(0)
