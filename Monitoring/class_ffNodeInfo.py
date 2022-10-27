@@ -791,37 +791,35 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __GetResponddDataFromNode(self,ffNodeMAC,BatmanIF):
 
-        ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF, 'GET nodeinfo statistics neighbours')
         try:
+            ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF, 'GET nodeinfo statistics neighbours')
             ResponddDict = json.loads(zlib.decompress(ResponddData, wbits=-15, bufsize=4096).decode('utf-8'))
         except:
-            ResponddDict = None
+            ResponddDict = {}
 
-        if ResponddDict is None:
-            ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo')
+        if 'nodeinfo' not in ResponddDict:
             try:
-                nodeinfo = json.loads(ResponddData.decode('utf-8'))
+                ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'nodeinfo')
+                ResponddDict['nodeinfo'] = json.loads(ResponddData.decode('utf-8'))
             except:
-                nodeinfo = None
+                ResponddDict['nodeinfo'] = None
 
-            if nodeinfo is not None:
-                ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics')
+        if ResponddDict['nodeinfo'] is not None:
+            if 'statistics' not in ResponddDict:
                 try:
-                    statistics = json.loads(ResponddData.decode('utf-8'))
+                    ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'statistics')
+                    ResponddDict['statistics'] = json.loads(ResponddData.decode('utf-8'))
                 except:
-                    statistics = None
+                    ResponddDict['statistics'] = None
 
-                ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours')
+            if 'neighbours' not in ResponddDict:
                 try:
-                    neighbours = json.loads(ResponddData.decode('utf-8'))
+                    ResponddData = self.__InfoFromRespondd(ffNodeMAC, BatmanIF,'neighbours')
+                    ResponddDict['neighbours'] = json.loads(ResponddData.decode('utf-8'))
                 except:
-                    neighbours = None
-
-                ResponddDict = {
-                            'nodeinfo'   : nodeinfo,
-                            'statistics' : statistics,
-                            'neighbours' : neighbours
-                }
+                    ResponddDict['neighbours'] = None
+        else:
+            ResponddDict = None
 
         return ResponddDict
 
@@ -916,9 +914,8 @@ class ffNodeInfo:
                                                         (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Hardware'],self.ffNodeDict[ffNodeMAC]['Firmware']))
                                                 NewNodes += 1
                                             else:
-                                                if ResponddDict['nodeinfo'] is not None:
-                                                    if 'hostname' in ResponddDict['nodeinfo']:
-                                                        NodeName = ResponddDict['nodeinfo']['hostname']
+                                                if 'hostname' in ResponddDict['nodeinfo']:
+                                                    NodeName = ResponddDict['nodeinfo']['hostname']
 
                                                 if NodeName is None:
                                                     if ffNodeMAC in self.ffNodeDict:
