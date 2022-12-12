@@ -529,8 +529,10 @@ class ffNodeInfo:
 
         if 'location' in NodeDict['nodeinfo']:
             if 'latitude' in NodeDict['nodeinfo']['location'] and 'longitude' in NodeDict['nodeinfo']['location']:
-                self.ffNodeDict[ffNodeMAC]['Latitude']  = NodeDict['nodeinfo']['location']['latitude']
-                self.ffNodeDict[ffNodeMAC]['Longitude'] = NodeDict['nodeinfo']['location']['longitude']
+                if (NodeDict['nodeinfo']['location']['latitude'] >= -90.0 and NodeDict['nodeinfo']['location']['latitude'] <= 90.0 and
+                    NodeDict['nodeinfo']['location']['longitude'] >= -180.0 and NodeDict['nodeinfo']['location']['longitude'] <= 180.0):
+                    self.ffNodeDict[ffNodeMAC]['Latitude']  = NodeDict['nodeinfo']['location']['latitude']
+                    self.ffNodeDict[ffNodeMAC]['Longitude'] = NodeDict['nodeinfo']['location']['longitude']
 
             if 'zip' in NodeDict['nodeinfo']['location']:
                 self.ffNodeDict[ffNodeMAC]['ZIP'] = str(NodeDict['nodeinfo']['location']['zip']).strip()[:5]
@@ -604,7 +606,8 @@ class ffNodeInfo:
                             print('!!! total statistics missing: %s' % (NodeIdx))
 
                 if 'uptime' in NodeDict['statistics']:
-                    self.ffNodeDict[ffNodeMAC]['UpTime'] = NodeDict['statistics']['uptime']
+                    if NodeDict['statistics']['uptime'] > 0.0:
+                        self.ffNodeDict[ffNodeMAC]['UpTime'] = NodeDict['statistics']['uptime']
 
             if NodeDict['neighbours'] is not None:
                 if 'batadv' in NodeDict['neighbours']:
