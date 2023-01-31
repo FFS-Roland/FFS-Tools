@@ -887,11 +887,11 @@ class ffNodeInfo:
                                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
                                         print('    >> Node is online: %s = %s\n' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
 
-                                    if ffMeshMAC not in BatmanMacList:
+                                    if (ffMeshMAC not in BatmanMacList) and (ffMeshMAC not in self.ffNodeDict[ffNodeMAC]['MeshMACs']):
                                         if ffMeshMAC in self.MAC2NodeIDDict:  # LAN-Interfaces of 2 nodes are connected
                                             RealNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
-                                            print('    !! Configuration-Error on Node %s = \'%s\': %s -> %s = \'%s\'' %
-                                                (RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name'], ffMeshMAC, ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                            print('    !! Illegal LAN-Connection: %s = \'%s\' is client of node %s = \'%s\' (%s)' %
+                                                (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name'],ffMeshMAC))
                                         else:  # Data of known Node with non-Gluon MAC
                                             print('    !! Special Node in Batman TG: %s -> %s = \'%s\'' % (ffMeshMAC,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
                                     else:
@@ -913,7 +913,7 @@ class ffNodeInfo:
 
                                             if self.__ProcessResponddData(ResponddDict,CurrentTime,None):
                                                 self.ffNodeDict[ffNodeMAC]['Source'] = 'respondd'
-                                                print('       ** added: %s = \'%s\' (%s / %s)\n' %
+                                                print('       ++ added: %s = \'%s\' (%s / %s)\n' %
                                                         (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name'],self.ffNodeDict[ffNodeMAC]['Hardware'],self.ffNodeDict[ffNodeMAC]['Firmware']))
                                                 NewNodes += 1
                                             else:
@@ -946,8 +946,8 @@ class ffNodeInfo:
                                             BaseNodeMAC = self.MAC2NodeIDDict[ffMeshMAC]
 
                                             if BaseNodeMAC in self.ffNodeDict and RealNodeMAC in self.ffNodeDict:
-                                                print('    !! Mesh-MAC in Client Net: %s = \'%s\' -> %s -> %s =\'%s\'' %
-                                                         (BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name'],ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name']))
+                                                print('    ** Mesh-MAC in Client Net: %s (%s = \'%s\') -> %s (%s = \'%s\')' %
+                                                    (ffNodeMAC,RealNodeMAC,self.ffNodeDict[RealNodeMAC]['Name'],ffMeshMAC,BaseNodeMAC,self.ffNodeDict[BaseNodeMAC]['Name']))
 
                                                 self.ffNodeDict[BaseNodeMAC]['Segment'] = ffSeg
                                                 self.ffNodeDict[RealNodeMAC]['Segment'] = ffSeg
