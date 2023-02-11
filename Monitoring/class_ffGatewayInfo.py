@@ -80,7 +80,7 @@ SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
 GwIgnoreList        = [ 'gw05n08','gw05n09' ]
-SegmentIgnoreList   = [ 0 ]
+SegmentIgnoreList   = [ 0, 26 ]
 
 InternetTestTargets = ['www.google.de','www.youtube.de','www.ebay.de','www.wikipedia.de','www.heise.de']
 
@@ -1166,10 +1166,12 @@ class ffGatewayInfo:
                                 DnsUpdate.delete(DnsPeerID,'CNAME')
 
                     else:
-                        self.__alert('++ Unknown Node-Entry - DNS Entry will be deleted: %s' % (DnsPeerID))
-                        if DnsUpdate is not None:
+                        CurrentHour = datetime.datetime.now().hour
+                        if DnsUpdate is not None and CurrentHour > 2 and CurrentHour < 6:
+                            self.__alert('++ Unknown Node-Entry - DNS Entry will be deleted: %s' % (DnsPeerID))
                             DnsUpdate.delete(DnsPeerID)
-
+                        else:
+                            self.__alert('++ Unknown Node DNS-Entry: %s' % (DnsPeerID))
                 elif DnsPeerID != '@' and DnsPeerID != '*':
                     self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
 
