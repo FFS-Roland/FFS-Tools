@@ -20,7 +20,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2023, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -216,13 +216,15 @@ for Alert in ffsNodes.Alerts:
 for Alert in ffsNet.Alerts:
     MailBody += Alert+'\n'
 
+TimeInfo = datetime.datetime.now()
+TimeString = TimeInfo.strftime('%d.%m.%Y - %H:%M:%S')
+
 if MailBody != '':
     print('\nSending Email to inform Admins on Errors ...')
-    __SendEmail('Alert from ffs-Monitor \"%s\"' % (socket.gethostname()),MailBody,AccountsDict['StatusMail'])
+    __SendEmail('Alert from ffs-Monitor \"%s\"' % (socket.gethostname()), TimeString+'\n\n'+MailBody, AccountsDict['StatusMail'])
 else:
-    TimeInfo = datetime.datetime.now()
     if TimeInfo.hour == 12 and TimeInfo.minute < 12:
         print('\nSending Hello Mail to inform Admins beeing alive ...')
-        __SendEmail('Hello from ffs-Monitor \"%s\"' % (socket.gethostname()),'ffs-Monitor is alive. No Alerts right now.',AccountsDict['StatusMail'])
+        __SendEmail('Hello from ffs-Monitor \"%s\"' % (socket.gethostname()), TimeString+'\n\nffs-Monitor is alive. No Alerts right now.', AccountsDict['StatusMail'])
 
 print('\nOK.\n')
