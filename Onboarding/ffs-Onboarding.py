@@ -19,7 +19,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2023, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -82,14 +82,15 @@ AccountFileName = '.Accounts.json'
 ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
+CPE_SAFE_GLUON           = '1.4+2018-06-24'
 CPE_TEMP_SEGMENT         = 30
 DEFAULT_SEGMENT          = 3
 
-NODETYPE_UNKNOWN         = 0
-NODETYPE_LEGACY          = 1
-NODETYPE_SEGMENT_LIST    = 2
-NODETYPE_DNS_SEGASSIGN   = 3
-NODETYPE_MTU_1340        = 4
+NODETYPE_LEGACY          = 1    # Gluon <  0.7+2016.01.02
+NODETYPE_SEGMENT_LIST    = 2    # Gluon >= 0.7+2016.01.02
+NODETYPE_DNS_SEGASSIGN   = 3    # Gluon >= 1.0+2017-02-14
+NODETYPE_MTU_1340        = 4    # Gluon >= 1.3+2017-09-13
+NODETYPE_MCAST_ff05      = 5    # Gluon >= 1.4+2017-12-12
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
@@ -289,7 +290,7 @@ def getNodeFastdMAC(FastdStatusSocket):
 #
 #    -> MAC of fastd Interface attached to bat0 on Node via "batctl -n"
 #-----------------------------------------------------------------------
-def ActivateBatman(BatmanIF,FastdIF):
+def ActivateBatman(BatmanIF, FastdIF):
 
     print('... Activating Batman ...')
     Retries = 30
@@ -337,7 +338,7 @@ def ActivateBatman(BatmanIF,FastdIF):
 # function "DeactivateBatman"
 #
 #-----------------------------------------------------------------------
-def DeactivateBatman(BatmanIF,FastdIF):
+def DeactivateBatman(BatmanIF, FastdIF):
 
     print('... Deactivating Batman ...')
 
@@ -354,7 +355,7 @@ def DeactivateBatman(BatmanIF,FastdIF):
 
 
 #-----------------------------------------------------------------------
-# function "__GenerateGluonMACs(MainMAC)"
+# function "GenerateGluonMACs(MainMAC)"
 #
 #   Get all related MACs based on Primary MAC for Gluon >= 2016.2
 #
@@ -386,7 +387,7 @@ def DeactivateBatman(BatmanIF,FastdIF):
 #
 # return string.format('%02x:%s:%s:%s:%s:%02x', m1, m2, m3, m4, m5, m6)
 #-----------------------------------------------------------------------
-def __GenerateGluonMACs(MainMAC):
+def GenerateGluonMACs(MainMAC):
 
     mHash = hashlib.md5(MainMAC.encode(encoding='UTF-8'))
     vMAC = mHash.hexdigest()
@@ -407,11 +408,11 @@ def __GenerateGluonMACs(MainMAC):
 
 
 #-----------------------------------------------------------------------
-# function "__getNodeMACviaBatman"
+# function "getNodeMACviaBatman"
 #
 #    -> NodeMAC
 #-----------------------------------------------------------------------
-def __getNodeMACviaBatman(BatmanIF,FastdMAC):
+def getNodeMACviaBatman(BatmanIF, FastdMAC):
 
     print('Find Node MAC via Batman TG ...')
     NodeMAC = None
@@ -431,7 +432,7 @@ def __getNodeMACviaBatman(BatmanIF,FastdMAC):
             BatMeshMAC = BatctlInfo[5]
 
             if BatMeshMAC[:16] == FastdMAC[:16]:
-                BatmanMacList = __GenerateGluonMACs(BatNodeMAC)
+                BatmanMacList = GenerateGluonMACs(BatNodeMAC)
 
                 if BatMeshMAC in BatmanMacList and FastdMAC in BatmanMacList:  # Data is from current Node
                     if NodeMAC is None:
@@ -447,11 +448,11 @@ def __getNodeMACviaBatman(BatmanIF,FastdMAC):
 
 
 #-----------------------------------------------------------------------
-# function "__InfoFromRespondd"
+# function "InfoFromRespondd"
 #
 #  -> NodeJsonDict
 #-----------------------------------------------------------------------
-def __InfoFromRespondd(NodeMAC,NodeIF):
+def InfoFromRespondd(NodeMAC, NodeIF):
 
     NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
 
@@ -484,11 +485,39 @@ def __InfoFromRespondd(NodeMAC,NodeIF):
 
 
 #-----------------------------------------------------------------------
-# function "__AnalyseNodeJson"
+# function "GetNodeType"
+#
+#  -> NodeType
+#-----------------------------------------------------------------------
+def GetNodeType(GluonVersion, FastdMTU):
+
+    NodeType = None
+
+    if GluonVersion is not None:
+        if GluonVersion[:14] >= '1.4+2017-12-12':
+            NodeType = NODETYPE_MCAST_ff05
+        elif GluonVersion[:14] >= '1.3+2017-09-13':
+            NodeType = NODETYPE_MTU_1340
+        elif GluonVersion[:14] >= '1.0+2017-02-14':
+            if FastdMTU == 1340:
+                NodeType = NODETYPE_MTU_1340
+            else:
+                NodeType = NODETYPE_DNS_SEGASSIGN
+        elif GluonVersion[:14] >= '0.7+2016.01.02':
+            NodeType = NODETYPE_SEGMENT_LIST
+        else:
+            NodeType = NODETYPE_LEGACY
+
+    return NodeType
+
+
+
+#-----------------------------------------------------------------------
+# function "AnalyseNodeJson"
 #
 #  -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
+def AnalyseNodeJson(NodeJson, NodeVpnMAC, FastdMTU):
 
     NodeInfoDict = {
         'NodeType' : None,
@@ -515,34 +544,14 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
                     if 'firmware' in NodeJson['software']:
                         if 'release' in NodeJson['software']['firmware']:
                             NodeInfoDict['GluonVer'] = NodeJson['software']['firmware']['release']
+                            NodeInfoDict['NodeType'] = GetNodeType(NodeInfoDict['GluonVer'], FastdMTU)
 
-                            if NodeInfoDict['GluonVer'][:14] >= '1.3+2017-09-13':
-                                NodeInfoDict['NodeType'] = NODETYPE_MTU_1340
-                            elif NodeInfoDict['GluonVer'][:14] >= '1.0+2017-02-14':
-                                if FastdMTU == 1340:
-                                    NodeInfoDict['NodeType'] = NODETYPE_MTU_1340
-                                else:
-                                    NodeInfoDict['NodeType'] = NODETYPE_DNS_SEGASSIGN
-                            elif NodeInfoDict['GluonVer'][:14] >= '0.7+2016.01.02':
-                                NodeInfoDict['NodeType'] = NODETYPE_SEGMENT_LIST
-                            else:
-                                NodeInfoDict['NodeType'] = NODETYPE_LEGACY
-
-                        BatmanMacList = __GenerateGluonMACs(NodeInfoDict['MAC'])
+                        BatmanMacList = GenerateGluonMACs(NodeInfoDict['MAC'])
 
                         if NodeVpnMAC not in BatmanMacList:
                             print(BatmanMacList)
-                            if NodeInfoDict['NodeType'] == NODETYPE_SEGMENT_LIST:
-                                BatmanMacList = __GenerateOldGluonMACs(NodeInfoDict['MAC'])
-
-                                if NodeVpnMAC not in BatmanMacList:
-                                    print('!!! Invalid Batman MAC schema!')
-                                    NodeInfoDict['NodeType'] = None
-                                else:
-                                    print('+++ Old Gluon Version.')
-                            else:
-                                print('!!! Invalid Batman MAC schema!')
-                                NodeInfoDict['NodeType'] = None
+                            print('!!! Invalid Batman MAC schema: VpnMAC = %s' % (NodeVpnMAC))
+                            NodeInfoDict['NodeType'] = None
 
                     if 'autoupdater' in NodeJson['software']:
                         if 'enabled' in NodeJson['software']['autoupdater']:
@@ -606,22 +615,22 @@ def __AnalyseNodeJson(NodeJson,NodeVpnMAC,FastdMTU):
 #
 #    -> NodeInfoDict {'NodeType','NodeID','MAC','Hostname','Segment'}
 #-----------------------------------------------------------------------
-def getNodeInfos(FastdMAC,FastdIF,FastdMTU,BatmanIF):
+def getNodeInfos(FastdMAC, FastdIF, FastdMTU, BatmanIF):
 
-    NodeJson = __InfoFromRespondd(FastdMAC,FastdIF)
+    NodeJson = InfoFromRespondd(FastdMAC,FastdIF)
 
     if NodeJson is None:
         print('++ No info via Respondd from VPN-Interface - Fallback to Batman TG ...')
-        NodeMAC = __getNodeMACviaBatman(BatmanIF,FastdMAC)
+        NodeMAC = getNodeMACviaBatman(BatmanIF,FastdMAC)
 
         if NodeMAC is not None:
-            NodeJson = __InfoFromRespondd(NodeMAC,BatmanIF)
+            NodeJson = InfoFromRespondd(NodeMAC,BatmanIF)
 
     if NodeJson is None:
         print('++ No info via Respondd!')
         NodeInfoDict = None
     else:
-        NodeInfoDict = __AnalyseNodeJson(NodeJson,FastdMAC,FastdMTU)
+        NodeInfoDict = AnalyseNodeJson(NodeJson,FastdMAC,FastdMTU)
 
     return NodeInfoDict
 
@@ -674,12 +683,12 @@ def getBatmanSegment(BatmanIF):
 
 
 #-------------------------------------------------------------
-# function "__SetupZipAreaData"
+# function "SetupZipAreaData"
 #
 #     ZipFileDict -> Dictionary of ZIP-Area Files
 #
 #-------------------------------------------------------------
-def __SetupZipAreaData(GitPath):
+def SetupZipAreaData(GitPath):
 
     print('Setting up ZIP-Area Data ...')
 
@@ -701,12 +710,12 @@ def __SetupZipAreaData(GitPath):
 
 
 #-------------------------------------------------------------
-# function "__SetupZipGridData"
+# function "SetupZipGridData"
 #
 #     ZipGridDict -> Grid with ZIP-Codes
 #
 #-------------------------------------------------------------
-def __SetupZipGridData(DatabasePath):
+def SetupZipGridData(DatabasePath):
 
     print('Setting up ZIP-Grid Data ...')
 
@@ -736,12 +745,12 @@ def __SetupZipGridData(DatabasePath):
 
 
 #-------------------------------------------------------------
-# function "__GetZipSegmentFromGPS"
+# function "GetZipSegmentFromGPS"
 #
 #     Get Segment from GPS using ZIP-Areas
 #
 #-------------------------------------------------------------
-def __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict):
+def GetZipSegmentFromGPS(lon, lat, ZipAreaDict, ZipGridDict):
 
     ZipSegment = None
 
@@ -797,7 +806,7 @@ def __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict):
 #
 #   Get Segment from Regions
 #-----------------------------------------------------------------------
-def GetGeoSegment(Location,GitPath,DatabasePath):
+def GetGeoSegment(Location, GitPath, DatabasePath):
 
     print('Get Segment from Position ...',Location)
 
@@ -810,8 +819,8 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
         print('... No Location available.')
     else:
 #        print('*** Location =',Location)
-        ZipAreaDict = __SetupZipAreaData(GitPath)
-        ZipGridDict = __SetupZipGridData(DatabasePath)
+        ZipAreaDict = SetupZipAreaData(GitPath)
+        ZipGridDict = SetupZipGridData(DatabasePath)
 
         if ZipAreaDict is None or ZipGridDict is None:
             print('!! No Region Data available !!!')
@@ -833,7 +842,7 @@ def GetGeoSegment(Location,GitPath,DatabasePath):
                 while lon > 70.0:    # missing decimal separator
                     lon /= 10.0
 
-                GpsSegment = __GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
+                GpsSegment = GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
 
             else:
                 print('** Bad GPS Data:',str(lat),'|',str(lon))
@@ -1080,15 +1089,15 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 GitOrigin.pull()
                 print('... doing Git push ...')
                 GitOrigin.push()
-                print()
 
                 if len(DnsUpdate.index) > 1:
+                    print('... doing DNS update ...')
                     dns.query.tcp(DnsUpdate,DnsServerIP)
 
                 MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey)
                 print(MailBody)
 
-                __SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
+                SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
 
     except:
         print('!!! ERROR on registering Node:',Action)
@@ -1125,16 +1134,19 @@ def setBlacklistFile(BlacklistFile):
 
 
 #-----------------------------------------------------------------------
-# Function "__SendEmail"
+# Function "SendEmail"
 #
 #   Sending an Email
 #
 #-----------------------------------------------------------------------
-def __SendEmail(Subject,MailBody,Account):
+def SendEmail(Subject, MailBody, Account):
 
     if MailBody != '':
+        TimeInfo = datetime.datetime.now()
+        TimeString = TimeInfo.strftime('%d.%m.%Y - %H:%M:%S')
+
         try:
-            Email = MIMEText(MailBody)
+            Email = MIMEText(TimeString+'\n\n'+MailBody)
 
             Email['Subject'] = Subject
             Email['From']    = Account['Username']
@@ -1221,7 +1233,7 @@ else:
                     print('!!! Node with old Firmware will not be registered if Autoupdater is disabled!')
                 else:
                     if (NodeInfoDict['Hardware'].lower().startswith('tp-link cpe') and
-                        (NodeInfoDict['NodeType'] < NODETYPE_MTU_1340 or NodeInfoDict['GluonVer'][:14] < '1.4+2018-06-24')):
+                        (NodeInfoDict['NodeType'] < NODETYPE_MTU_1340 or NodeInfoDict['GluonVer'][:14] < CPE_SAFE_GLUON)):
                         print('!! TP-Link CPE with outdated Firmware found: %s!!' % (NodeInfoDict['Hostname']))
                         NodeInfoDict['Segment'] = CPE_TEMP_SEGMENT
                     elif NodeInfoDict['Segment'] is None:
