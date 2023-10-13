@@ -8,11 +8,11 @@ iface bat10139	inet6 static
     hwaddress	02:00:39:ff:07:39
     pre-up	/sbin/modprobe batman_adv
     post-up	/sbin/ip link set dev $IFACE up || true
-    post-up	/usr/sbin/batctl -m $IFACE mm 0 || true
+    post-up	/usr/sbin/batctl meshif $IFACE mm 0 || true
 
 # fastd VPN ---------
 allow-hotplug	onb10139
 iface onb10139	inet6 manual
     hwaddress	02:00:38:ff:07:39
     pre-up	/sbin/modprobe batman_adv
-    pre-down	/usr/sbin/batctl -m bat10139 if del $IFACE
+    pre-down	/usr/sbin/batctl meshif bat10139 if del $IFACE
