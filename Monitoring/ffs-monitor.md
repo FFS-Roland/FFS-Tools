@@ -17,14 +17,14 @@ apt install libpcap0.8
 apt install mc
 apt install fastd
 apt install batctl
-apt install python3-pip
 apt install iptables-persistent 
 
-pip3 install gitpython
-pip3 install dnspython
-pip3 install psutil
-pip3 install shapely
-pip3 install scapy
+apt install python3-git
+apt install python3-dnspython
+apt install python3-psutil
+apt install python3-shapely
+apt install python3-scapy
+
 
 if [ $(grep -c "batman_adv" /etc/modules) = 0 ]; then
   echo batman_adv >>/etc/modules
