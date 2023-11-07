@@ -1097,7 +1097,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey)
                 print(MailBody)
 
-                SendEmail('Onboarding of Node %s by ffs-Monitor' % (NodeInfo['Hostname']),MailBody,AccountsDict['KeyMail'])
+                SendEmail('Onboarding of Node \"%s\" by %s' % (NodeInfo['Hostname'],socket.gethostname()), MailBody, AccountsDict['KeyMail'])
 
     except:
         print('!!! ERROR on registering Node:',Action)
