@@ -274,7 +274,7 @@ def WriteNetworkFile(Segment,MonitorID):
         OutFile.write('    pre-up      /sbin/modprobe batman_adv\n')
         OutFile.write('    post-up     /sbin/ip address add 10.190.%d.%d/21 broadcast 10.190.%d.255 dev $IFACE\n' % (8*(Segment-1),110+MonitorID,8*Segment - 1))
         OutFile.write('    post-up     /sbin/ip link set dev $IFACE up || true\n')
-        OutFile.write('    post-up     /usr/sbin/batctl meshif $IFACE mm 0 || true\n')
+        OutFile.write('    post-up     /usr/sbin/batctl meshif $IFACE mff 0 || true\n')
         OutFile.write('    post-up     /usr/sbin/batctl meshif $IFACE it 10000 || true\n')
         OutFile.write('    post-up     /usr/sbin/batctl meshif $IFACE hp 255 || true\n\n')
         OutFile.write('# fastd VPN ---------\n')
