@@ -426,7 +426,7 @@ class ffNodeInfo:
     #
     #     return:    True = Data can be used
     #-----------------------------------------------------------------------
-    def __ProcessResponddData(self,NodeDict,CurrentTime,DateFormat):
+    def __ProcessResponddData(self, NodeDict, CurrentTime, DateFormat):
 
         if (('lastseen' not in NodeDict) or
             ('online' not in NodeDict) or
@@ -547,18 +547,18 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['Owner'] = NodeDict['nodeinfo']['owner']['contact']
 
         if 'mesh' in NodeDict['nodeinfo']['network']:
-            if NodeDict['nodeinfo']['network']['mesh'] is None:
-                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
-                print('    +++ Corrupted Mesh Data on Node %s = \"%s\" !' % (ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Name']))
-                return False	# Corrupted Node network
-
-            for InterfaceType in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces']:
-                for MeshMAC in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
+            if NodeDict['nodeinfo']['network']['mesh'] is not None:
+                for InterfaceType in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces']:
+                    for MeshMAC in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
+                        self.__AddGluonMACs(ffNodeMAC, MeshMAC)
+        elif 'mesh_interfaces' in NodeDict['nodeinfo']['network']:
+            if NodeDict['nodeinfo']['network']['mesh_interfaces'] is not None:
+                for MeshMAC in NodeDict['nodeinfo']['network']['mesh_interfaces']:
                     self.__AddGluonMACs(ffNodeMAC, MeshMAC)
 
-        elif 'mesh_interfaces' in NodeDict['nodeinfo']['network']:
-            for MeshMAC in NodeDict['nodeinfo']['network']['mesh_interfaces']:
-                self.__AddGluonMACs(ffNodeMAC,MeshMAC)
+        if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
+            print('++ Node has no Mesh-IF: %s = \'%s\'' % (ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Name']))
+            self.__AddGluonMACs(ffNodeMAC, None)
 
         if 'autoupdater' in NodeDict['nodeinfo']['software']:
             if 'branch' in NodeDict['nodeinfo']['software']['autoupdater'] and 'enabled' in NodeDict['nodeinfo']['software']['autoupdater']:
@@ -579,9 +579,10 @@ class ffNodeInfo:
                 self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_OFFLINE
 
             if 'addresses' in NodeDict['nodeinfo']['network']:
-                for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
-                    if ffsIPv6Template.match(NodeAddress):
-                        self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
+                if NodeDict['nodeinfo']['network']['addresses'] is not None:
+                    for NodeAddress in NodeDict['nodeinfo']['network']['addresses']:
+                        if ffsIPv6Template.match(NodeAddress):
+                            self.ffNodeDict[ffNodeMAC]['IPv6'] = NodeAddress
 
             if NodeDict['statistics'] is not None:
                 if 'gateway_nexthop' in NodeDict['statistics']:
@@ -616,23 +617,20 @@ class ffNodeInfo:
 
             if NodeDict['neighbours'] is not None:
                 if 'batadv' in NodeDict['neighbours']:
-                    self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
+                    if NodeDict['neighbours']['batadv'] is not None:
+                        self.ffNodeDict[ffNodeMAC]['Neighbours'] = []
 
-                    for MeshMAC in NodeDict['neighbours']['batadv']:
-                        if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
-                            for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
-                                if MacAdrTemplate.match(ffNeighbour):
-                                    if GwMacTemplate.match(ffNeighbour):
-                                        if NodeDict['online'] and self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
-#                                            print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-                                            self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
-                                    elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
-                                        self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
+                        for MeshMAC in NodeDict['neighbours']['batadv']:
+                            if 'neighbours' in NodeDict['neighbours']['batadv'][MeshMAC]:
+                                for ffNeighbour in NodeDict['neighbours']['batadv'][MeshMAC]['neighbours']:
+                                    if MacAdrTemplate.match(ffNeighbour):
+                                        if GwMacTemplate.match(ffNeighbour):
+                                            if NodeDict['online'] and self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
+#                                                print('++ Node has GW %s as Neighbour but no VPN: %s = \'%s\'' % (ffNeighbour,ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
+                                                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
+                                        elif ffNeighbour not in self.ffNodeDict[ffNodeMAC]['Neighbours']:
+                                            self.ffNodeDict[ffNodeMAC]['Neighbours'].append(ffNeighbour)
 
-
-        if self.ffNodeDict[ffNodeMAC]['MeshMACs'] == []:
-            print('++ Node has no Mesh-IF: %s = \'%s\'' % (ffNodeMAC,self.ffNodeDict[ffNodeMAC]['Name']))
-            self.__AddGluonMACs(ffNodeMAC,None)
 
         self.ffNodeDict[ffNodeMAC]['Firmware']  = NodeDict['nodeinfo']['software']['firmware']['release']
         self.ffNodeDict[ffNodeMAC]['GluonType'] = self.__SetSegmentAwareness(self.ffNodeDict[ffNodeMAC]['Firmware'])
