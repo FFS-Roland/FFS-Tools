@@ -547,9 +547,14 @@ class ffNodeInfo:
                     self.ffNodeDict[ffNodeMAC]['Owner'] = NodeDict['nodeinfo']['owner']['contact']
 
         if 'mesh' in NodeDict['nodeinfo']['network']:
+            if NodeDict['nodeinfo']['network']['mesh'] is None:
+                self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_UNKNOWN
+                print('    +++ Corrupted Mesh Data on Node %s = \"%s\" !' % (ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Name']))
+                return False	# Corrupted Node network
+
             for InterfaceType in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces']:
                 for MeshMAC in NodeDict['nodeinfo']['network']['mesh']['bat0']['interfaces'][InterfaceType]:
-                    self.__AddGluonMACs(ffNodeMAC,MeshMAC)
+                    self.__AddGluonMACs(ffNodeMAC, MeshMAC)
 
         elif 'mesh_interfaces' in NodeDict['nodeinfo']['network']:
             for MeshMAC in NodeDict['nodeinfo']['network']['mesh_interfaces']:
