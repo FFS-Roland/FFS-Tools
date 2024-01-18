@@ -13,7 +13,7 @@
 #                                                                                         #
 ###########################################################################################
 #                                                                                         #
-#  Copyright (c) 2017-2021, Roland Volkmann <roland.volkmann@t-online.de>                 #
+#  Copyright (c) 2017-2024, Roland Volkmann <roland.volkmann@t-online.de>                 #
 #  All rights reserved.                                                                   #
 #                                                                                         #
 #  Redistribution and use in source and binary forms, with or without                     #
@@ -79,7 +79,7 @@ SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = [ 'gw05n08','gw05n09' ]
+GwIgnoreList        = [ 'gw04n03','gw05n08','gw05n09' ]
 SegmentIgnoreList   = [ 0, 26 ]
 
 InternetTestTargets = ['www.google.de','www.youtube.de','www.ebay.de','www.wikipedia.de','www.heise.de']
@@ -1166,8 +1166,7 @@ class ffGatewayInfo:
                                 DnsUpdate.delete(DnsPeerID,'CNAME')
 
                     else:
-                        CurrentHour = datetime.datetime.now().hour
-                        if DnsUpdate is not None and CurrentHour > 2 and CurrentHour < 6:
+                        if DnsUpdate is not None:
                             self.__alert('++ Unknown Node-Entry - DNS Entry will be deleted: %s' % (DnsPeerID))
                             DnsUpdate.delete(DnsPeerID)
                         else:
