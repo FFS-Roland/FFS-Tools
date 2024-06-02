@@ -496,44 +496,80 @@ class ffGatewayInfo:
 
 
     #--------------------------------------------------------------------------
+    # private function "__GetGwMACfromBatmanTG"
+    #
+    #    Returns Gateway Name via MAC from global Translation Table
+    #
+    #--------------------------------------------------------------------------
+    def __GetGwMACfromBatmanTG(self, Segment, badGwMAC):
+
+        BatctlTgCmd  = ('/usr/sbin/batctl meshif bat%02d tg' % (Segment)).split()
+        GwName = None
+
+        try:
+            BatctlCmd = subprocess.run(BatctlTgCmd, stdout=subprocess.PIPE)
+            BatTgResult = BatctlCmd.stdout.decode('utf-8')
+        except:
+            print('++ ERROR accessing batman TG:',BatctlCmd)
+            BatTgResult = ''
+
+        for BatLine in BatTgResult.split('\n'):
+            BatTgInfo = BatLine.replace('(','').replace(')','').split()
+
+            if len(BatTgInfo) > 6 and BatTgInfo[0] == '*' and BatTgInfo[2] == '-1':
+                GwClientMAC  = BatTgInfo[1]
+
+                if BatTgInfo[5] == badGwMAC and GwMacTemplate.match(GwClientMAC):      # e.g. "02:00:39:12:08:06"
+
+                    if int(GwClientMAC[9:11]) == Segment:
+                        GwName = 'gw'+GwClientMAC[12:14]+'n'+GwClientMAC[15:17]
+                        print('   ... Gateway found by Batctl TG: %s = %s (%s)' % (badGwMAC, GwName, GwClientMAC))
+                        break
+                    else:
+                        self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment, GwClientMAC))
+
+        return GwName
+
+
+
+    #--------------------------------------------------------------------------
     # private function "__GetSegmentGwListFromBatman"
     #
     #    Returns List of Gateways in given Segment
     #
     #--------------------------------------------------------------------------
-    def __GetSegmentGwListFromBatman(self,Segment):
+    def __GetSegmentGwListFromBatman(self, Segment):
 
-        BatResult = None
         GwList    = []
-
-        BatctlCmd = ('/usr/sbin/batctl meshif bat%02d gwl' % (Segment)).split()
+        BatctlGwlCmd = ('/usr/sbin/batctl meshif bat%02d gwl' % (Segment)).split()
 
         try:
-            BatctlGwl = subprocess.run(BatctlCmd, stdout=subprocess.PIPE)
-            BatResult = BatctlGwl.stdout.decode('utf-8')
+            BatctlCmd = subprocess.run(BatctlGwlCmd, stdout=subprocess.PIPE)
+            BatResult = BatctlCmd.stdout.decode('utf-8')
         except:
-            print('++ ERROR accessing batman:',BatctlCmd)
-            BatResult = None
-        else:
-            for BatLine in BatResult.split('\n'):
-                BatctlInfo = BatLine.split()
+            print('++ ERROR accessing batman GWL:',BatctlCmd)
+            BatResult = ''
 
-                if len(BatctlInfo) > 3:
-                    GwMAC  = BatctlInfo[0]
-                    GwName = None
+        for BatLine in BatResult.split('\n'):
+            BatctlInfo = BatLine.split()
 
-                    if GwMacTemplate.match(GwMAC):      # e.g. "02:00:38:12:08:06"
-                        if int(GwMAC[9:11]) == Segment:
-                            GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
-                        else:
-                            self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment,GwMAC))
+            if len(BatctlInfo) > 3:
+                GwMAC  = BatctlInfo[0]
+                GwName = None
 
-                    elif MacAdrTemplate.match(GwMAC):
-                        print('++ Invalid Gateway MAC: bat%02d -> %s' % (Segment,GwMAC))
+                if GwMacTemplate.match(GwMAC):      # e.g. "02:00:35:12:08:06"
+                    if int(GwMAC[9:11]) == Segment:
+                        GwName = 'gw'+GwMAC[12:14]+'n'+GwMAC[15:17]
+                    else:
+                        self.__alert('!! GW-Shortcut detected: bat%02d -> %s' % (Segment, GwMAC))
 
-                    if GwName is not None:
-                        if GwName not in GwList:
-                            GwList.append(GwName)
+                elif MacAdrTemplate.match(GwMAC):
+                    print('++ Invalid Gateway MAC: bat%02d -> %s' % (Segment, GwMAC))
+                    GwName = self.__GetGwMACfromBatmanTG(Segment, GwMAC)
+
+                if GwName is not None:
+                    if GwName not in GwList:
+                        GwList.append(GwName)
 
         return GwList
 
