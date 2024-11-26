@@ -12,30 +12,6 @@
 #       fastd/vpn??.json     -> fastd-Keys (live Data) from Gateways                      #
 #                                                                                         #
 ###########################################################################################
-#                                                                                         #
-#  Copyright (c) 2017-2024, Roland Volkmann <roland.volkmann@t-online.de>                 #
-#  All rights reserved.                                                                   #
-#                                                                                         #
-#  Redistribution and use in source and binary forms, with or without                     #
-#  modification, are permitted provided that the following conditions are met:            #
-#    1. Redistributions of source code must retain the above copyright notice,            #
-#       this list of conditions and the following disclaimer.                             #
-#    2. Redistributions in binary form must reproduce the above copyright notice,         #
-#       this list of conditions and the following disclaimer in the documentation         #
-#       and/or other materials provided with the distribution.                            #
-#                                                                                         #
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"            #
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE              #
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE         #
-#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE           #
-#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL             #
-#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR             #
-#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER             #
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,          #
-#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE          #
-#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                   #
-#                                                                                         #
-###########################################################################################
 
 import os
 import subprocess
@@ -114,7 +90,7 @@ class ffGatewayInfo:
     #==========================================================================
     # Constructor
     #==========================================================================
-    def __init__(self,GitPath,DnsAccDict):
+    def __init__(self, GitPath, DnsAccDict):
 
         # public Attributes
         self.Alerts       = []           # List of  Alert-Messages
@@ -148,7 +124,7 @@ class ffGatewayInfo:
     #   Store and print Message for Alert
     #
     #-----------------------------------------------------------------------
-    def __alert(self,Message):
+    def __alert(self, Message):
 
         self.Alerts.append(Message)
         print(Message)
@@ -241,7 +217,7 @@ class ffGatewayInfo:
     #    Returns True if everything is OK
     #
     #--------------------------------------------------------------------------
-    def __GetIpFromCNAME(self,DnsName):
+    def __GetIpFromCNAME(self, DnsName):
 
         DnsResolver = None
         IpList = []
@@ -283,7 +259,7 @@ class ffGatewayInfo:
     #
     #
     #--------------------------------------------------------------------------
-    def __GetGwInstances(self,GwName,DnsDomain,DnsResult):
+    def __GetGwInstances(self, GwName, DnsDomain, DnsResult):
 
         for rds in DnsResult:
             if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
@@ -316,7 +292,7 @@ class ffGatewayInfo:
     #    Returns List of IPs
     #
     #--------------------------------------------------------------------------
-    def __GetSegmentGwIPs(self,DnsDomain,DnsResult):
+    def __GetSegmentGwIPs(self, DnsDomain, DnsResult):
 
         IpList = []
 
@@ -351,14 +327,15 @@ class ffGatewayInfo:
     #    Returns List of IPs
     #
     #--------------------------------------------------------------------------
-    def __GetDnsZone(self,DnsDomain):
+    def __GetDnsZone(self, DnsDomain):
 
         DnsZone = None
 
         try:
+            DnsKeyRing  = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
             DnsResolver = dns.resolver.Resolver()
             DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'A')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
+            DnsZone     = dns.zone.from_xfr( dns.query.xfr(DnsServerIP, DnsDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512') )
         except:
             self.__alert('!! ERROR on fetching DNS Zone from Primary: %s' % (DnsDomain))
             DnsZone = None
@@ -372,6 +349,7 @@ class ffGatewayInfo:
                 self.__alert('!! ERROR on fetching DNS Zone from Secondary: %s' % (DnsDomain))
                 DnsZone = None
 
+        self.__DnsServerIP = DnsZone
         return DnsZone
 
 
@@ -947,7 +925,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __AnalyseFastdStatus(self,FastdPeersDict,GwName,Segment,HttpTime):
+    def __AnalyseFastdStatus(self, FastdPeersDict, GwName, Segment, HttpTime):
 
         ActiveKeyCount = 0
 
@@ -978,7 +956,7 @@ class ffGatewayInfo:
     # FastdKey -> { URL, KeyFile, MAC }
     #
     #-----------------------------------------------------------------------
-    def __LoadFastdStatusFile(self,GwName,URL,Segment):
+    def __LoadFastdStatusFile(self, GwName, URL, Segment):
 
         ActiveConnections = 0
         jsonFastdDict = None
@@ -1025,7 +1003,7 @@ class ffGatewayInfo:
     #   Get List of fastd-status.json files on Gateway
     #
     #-----------------------------------------------------------------------
-    def __GetFastdStatusFileList(self,URL,ffSeg):
+    def __GetFastdStatusFileList(self, URL, ffSeg):
 
         FileList = None
         Retries  = 5
@@ -1112,7 +1090,9 @@ class ffGatewayInfo:
     #    Returns True if everything is OK
     #
     #--------------------------------------------------------------------------
-    def __CheckDNSvsGit(self,DnsZone):
+    def __CheckDNSvsGit(self, DnsZone):
+
+        print('\nChecking DNS Zone \"segassign\" ...')
 
         DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
         DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
@@ -1147,7 +1127,7 @@ class ffGatewayInfo:
                                     else:
                                         self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
 
-                                        if DnsUpdate is not None:
+                                        if not self.AnalyseOnly:
                                             if EntryCount > 1:
                                                 DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
                                                 EntryCount -= 1
@@ -1157,7 +1137,7 @@ class ffGatewayInfo:
                                 else:  # invalid IPv6-Address for SegAssign
                                     self.__alert('++ Invalid IPv6-Entry for NodeID %s: %s' % (DnsPeerID,IPv6))
 
-                                    if DnsUpdate is not None:
+                                    if not self.AnalyseOnly:
                                         if EntryCount > 1:
                                             DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
                                             EntryCount -= 1
@@ -1179,7 +1159,7 @@ class ffGatewayInfo:
                                     else:
                                         self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
 
-                                        if DnsUpdate is not None:
+                                        if not self.AnalyseOnly:
                                             if EntryCount > 1:
                                                 DnsUpdate.delete(DnsPeerID,'A',IPv4)
                                                 EntryCount -= 1
@@ -1189,7 +1169,7 @@ class ffGatewayInfo:
                                 else:  # invalid IPv4-Address for SegAssign
                                     self.__alert('++ Invalid IPv4-Entry for NodeID %s: %s' % (DnsPeerID,IPv4))
 
-                                    if DnsUpdate is not None:
+                                    if not self.AnalyseOnly:
                                         if EntryCount > 1:
                                             DnsUpdate.delete(DnsPeerID,'A',IPv4)
                                             EntryCount -= 1
@@ -1198,11 +1178,11 @@ class ffGatewayInfo:
 
                         elif DnsRecord.rdtype == dns.rdatatype.CNAME:
                             self.__alert('++ CNAME found - DNS Entry will be deleted: %s' % (DnsPeerID))
-                            if DnsUpdate is not None:
+                            if not self.AnalyseOnly:
                                 DnsUpdate.delete(DnsPeerID,'CNAME')
 
                     else:
-                        if DnsUpdate is not None:
+                        if not self.AnalyseOnly:
                             self.__alert('++ Unknown Node-Entry - DNS Entry will be deleted: %s' % (DnsPeerID))
                             DnsUpdate.delete(DnsPeerID)
                         else:
@@ -1223,7 +1203,7 @@ class ffGatewayInfo:
                 PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,GitSegment)
                 self.__FastdKeyDict[PeerKey]['Dns6Seg'] = GitSegment
 
-                if DnsUpdate is not None:
+                if not self.AnalyseOnly:
                     DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
                     print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv6))
 
@@ -1232,11 +1212,11 @@ class ffGatewayInfo:
                 PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,GitSegment)
                 self.__FastdKeyDict[PeerKey]['Dns4Seg'] = GitSegment
 
-                if DnsUpdate is not None:
+                if not self.AnalyseOnly:
                     DnsUpdate.add(PeerDnsName, 120, 'A',PeerDnsIPv4)
                     print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv4))
 
-        if DnsUpdate is not None:
+        if not self.AnalyseOnly:
             if len(DnsUpdate.index) > 1:
                 dns.query.tcp(DnsUpdate,self.__DnsServerIP)
                 print('... Update launched on DNS-Server',self.__DnsServerIP)
@@ -1255,15 +1235,10 @@ class ffGatewayInfo:
 
         print('\nChecking DNS Zone \"segassign\" ...')
 
-        try:
-            DnsResolver = dns.resolver.Resolver()
-            self.__DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone = dns.zone.from_xfr(dns.query.xfr(self.__DnsServerIP,SegAssignDomain))
-        except:
+        DnsZone = self.__GetDnsZone(SegAssignDomain)
+
+        if DnsZone is None:
             self.__alert('!! ERROR on fetching DNS Zone \"segassign\"!')
-            self.__DnsServerIP = None
-            self.AnalyseOnly = True
-            DnsZone = None
         else:
             self.__CheckDNSvsGit(DnsZone)
 
@@ -1331,7 +1306,7 @@ class ffGatewayInfo:
     #
     #   Moving Nodes in GIT and DNS
     #==============================================================================
-    def MoveNodes(self,NodeMoveDict,GitAccount):
+    def MoveNodes(self, NodeMoveDict, GitAccount):
 
         print('Moving Nodes in GIT and DNS ...')
 
@@ -1343,6 +1318,10 @@ class ffGatewayInfo:
 
         if self.__DnsServerIP is None or self.__GitPath is None or GitAccount is None:
             print('!! Account Data is not available!')
+            return
+
+        if self.AnalyseOnly:
+            print('++ Nodes cannot be moved due to AnalyseOnly-Mode.')
             return
 
 #        exit(1)
