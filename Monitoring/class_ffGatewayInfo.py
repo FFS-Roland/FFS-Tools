@@ -339,9 +339,9 @@ class ffGatewayInfo:
         except:
             self.__alert('!! ERROR on fetching DNS Zone from Primary: %s' % (DnsDomain))
             DnsZone = None
-            self.AnalyseOnly = True
 
         if DnsZone is None:
+            self.AnalyseOnly = True
             try:
                 DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'A')[0].to_text()
                 DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
@@ -349,7 +349,7 @@ class ffGatewayInfo:
                 self.__alert('!! ERROR on fetching DNS Zone from Secondary: %s' % (DnsDomain))
                 DnsZone = None
 
-        self.__DnsServerIP = DnsZone
+        self.__DnsServerIP = DnsServerIP
         return DnsZone
 
 
