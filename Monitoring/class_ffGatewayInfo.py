@@ -24,6 +24,7 @@ import json
 import re
 import fcntl
 import git
+import random
 
 import dns.resolver
 import dns.query
@@ -772,12 +773,12 @@ class ffGatewayInfo:
 
                     while HttpsResult is None and TestIdx < Retries:
                         TestIP = DnsResolver.query('%s.' % (InternetTestTargets[TestIdx]),'A')[0].to_text()
-                        TcpPacket = IP(dst=TestIP,ttl=20)/TCP(dport=443)
+                        TcpPacket = IP(dst=TestIP,ttl=64)/TCP(dport=443,sport=random.randrange(49152,65535))
                         conf.route.resync()
                         conf.route.add(host=TestIP,gw=InternalGwIPv4)
 
                         try:
-                            HttpsResult = sr1(TcpPacket,timeout=1)
+                            HttpsResult = sr1(TcpPacket,timeout=2)
                         except:
                             time.sleep(1)
                             HttpsResult = None
