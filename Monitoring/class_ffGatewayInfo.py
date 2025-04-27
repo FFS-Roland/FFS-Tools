@@ -798,13 +798,13 @@ class ffGatewayInfo:
                     else:
                         HttpsCheckDict[GwName] += 1
 
-        for GwName in PingCheckDict:
-            if PingCheckDict[GwName] < 0:
-                self.__alert('    !!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
+            for GwName in PingCheckDict:
+                if PingCheckDict[GwName] < 0:
+                    self.__alert('    !!! Error on Ping to Internet: Seg.%02d -> %s' % (Segment,GwName))
 
-        for GwName in HttpsCheckDict:
-            if HttpsCheckDict[GwName] < 0:
-                self.__alert('    !!! Error on HTTPS to Internet: Seg.%02d = %s' % (Segment,GwName))
+            for GwName in HttpsCheckDict:
+                if HttpsCheckDict[GwName] < 0:
+                    self.__alert('    !!! Error on HTTPS to Internet: Seg.%02d = %s' % (Segment,GwName))
 
         conf.route.resync()
         print('... done.\n')
