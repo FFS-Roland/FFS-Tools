@@ -56,7 +56,7 @@ SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
-GwIgnoreList        = [ 'gw04n03','gw05n08','gw05n09' ]
+GwIgnoreList        = [ 'gw04n03','gw05n01','gw05n08','gw05n09' ]
 SegmentIgnoreList   = [ 0, 26 ]
 
 InternetTestTargets = ['www.google.de','www.youtube.de','www.ebay.de','www.wikipedia.de','www.heise.de']
@@ -330,6 +330,7 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __GetDnsZone(self, DnsDomain):
 
+        print('Loading DNS Zone \"%s\" ...' % (DnsDomain))
         DnsZone = None
 
         try:
@@ -338,7 +339,7 @@ class ffGatewayInfo:
             DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'A')[0].to_text()
             DnsZone     = dns.zone.from_xfr( dns.query.xfr(DnsServerIP, DnsDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512') )
         except:
-            self.__alert('!! ERROR on fetching DNS Zone from Primary: %s' % (DnsDomain))
+            self.__alert('!! ERROR on fetching DNS Zone \"%s\" from Primary \"%s\" = %s' % (DnsDomain, self.__DnsAccDict['Server'], DnsServerIP))
             DnsZone = None
 
         if DnsZone is None:
@@ -347,7 +348,7 @@ class ffGatewayInfo:
                 DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'A')[0].to_text()
                 DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
             except:
-                self.__alert('!! ERROR on fetching DNS Zone from Secondary: %s' % (DnsDomain))
+                self.__alert('!! ERROR on fetching DNS Zone \"%s\" from Secondary \"%s\" = %s' % (DnsDomain, self.__DnsAccDict['Server2'], DnsServerIP))
                 DnsZone = None
 
         self.__DnsServerIP = DnsServerIP
@@ -1093,8 +1094,6 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckDNSvsGit(self, DnsZone):
 
-        print('\nChecking DNS Zone \"segassign\" ...')
-
         DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
         DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
 
@@ -1234,12 +1233,10 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckNodesInSegassignDNS(self):
 
-        print('\nChecking DNS Zone \"segassign\" ...')
-
         DnsZone = self.__GetDnsZone(SegAssignDomain)
 
         if DnsZone is None:
-            self.__alert('!! ERROR on fetching DNS Zone \"segassign\"!')
+            self.__alert('!! ERROR on fetching DNS Zone \"%s\"!' % (SegAssignDomain))
         else:
             self.__CheckDNSvsGit(DnsZone)
 
