@@ -40,6 +40,7 @@ from scapy.all import conf, sr1, IP, ICMP, TCP
 from glob import glob
 
 from class_ffDHCP import *
+from class_ffDnsServer import *
 
 
 
@@ -100,13 +101,12 @@ class ffGatewayInfo:
         # private Attributes
         self.__GitPath     = GitPath
         self.__DnsAccDict  = DnsAccDict  # DNS Account
-        self.__DnsServerIP = None
 
         self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, DnsSegments, BatmanSegments
         self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
         self.__GwAliasDict = {}          # GwAliasDict[LegacyName]     -> current new Gateway
         self.__FastdKeyDict = {}         # FastdKeyDict[FastdKey]      -> KeyDir,KeyFile,SegMode,PeerMAC,PeerName,VpnMAC,Timestamp,Dns4Seg,Dns6Seg
-        self.__PeerDnsDict = {}          # PeerDnsDict[DNS-ID]         -> Segment
+        self.__PeerDnsDict = {}          # PeerDnsDict[DNS-ID]         -> FastdKey
 
         # Initializations
         socket.setdefaulttimeout(5)
@@ -212,150 +212,6 @@ class ffGatewayInfo:
 
 
 
-    #--------------------------------------------------------------------------
-    # private function "__GetIpFromCNAME"
-    #
-    #    Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __GetIpFromCNAME(self, DnsName):
-
-        DnsResolver = None
-        IpList = []
-
-        try:
-            DnsResolver = dns.resolver.Resolver()
-        except:
-            DnsResolver = None
-
-        if DnsResolver is not None:
-            for DnsType in ['A','AAAA']:
-                try:
-                    DnsResult = DnsResolver.query(DnsName,DnsType)
-                except:
-                    DnsResult = None
-
-                if DnsResult is not None:
-                    for GatewayIP in DnsResult:
-#                        print('>>> GwIP:',GatewayIP)  #................................................
-                        IpList.append(GatewayIP.to_text())
-
-            try:
-                DnsResult = DnsResolver.query(DnsName,'CNAME')
-            except:
-                DnsResult = None
-
-            if DnsResult is not None:
-                for Cname in DnsResult:
-                    GwName = Cname.to_text()
-                    print('>>> GwName/Cname: %s' % (GwName))  #................................................
-                    IpList.append(self.__GetIpFromCNAME(GwName))
-
-        return IpList
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetGwInstances"
-    #
-    #
-    #--------------------------------------------------------------------------
-    def __GetGwInstances(self, GwName, DnsDomain, DnsResult):
-
-        for rds in DnsResult:
-            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
-                for IpRecord in rds:
-                    IpAddress = IpRecord.to_text()
-
-                    if IpAddress not in self.__GatewayDict[GwName]['IPs']:
-                        self.__GatewayDict[GwName]['IPs'].append(IpAddress)
-
-            elif rds.rdtype == dns.rdatatype.CNAME:
-                for CnRecord in rds:
-                    Cname = CnRecord.to_text()
-
-                    if Cname[-1] != '.':
-                        Cname += '.' + DnsDomain
-
-                    IpList = self.__GetIpFromCNAME(Cname)
-
-                    for IpAddress in IpList:
-                        if IpAddress not in self.__GatewayDict[GwName]['IPs']:
-                            self.__GatewayDict[GwName]['IPs'].append(IpAddress)
-
-        return
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetSegmentGwIPs"
-    #
-    #    Returns List of IPs
-    #
-    #--------------------------------------------------------------------------
-    def __GetSegmentGwIPs(self, DnsDomain, DnsResult):
-
-        IpList = []
-
-        for rds in DnsResult:
-            if rds.rdtype == dns.rdatatype.A or rds.rdtype == dns.rdatatype.AAAA:
-                for IpRecord in rds:
-                    IpAddress = IpRecord.to_text()
-
-                    if IpAddress not in IpList:
-                        IpList.append(IpAddress)
-
-            elif rds.rdtype == dns.rdatatype.CNAME:
-                for CnRecord in rds:
-                    Cname = CnRecord.to_text()
-
-                    if Cname[-1] != '.':
-                        Cname += '.' + DnsDomain
-
-                    CnameIpList = self.__GetIpFromCNAME(Cname)
-
-                    for IpAddress in CnameIpList:
-                        if IpAddress not in IpList:
-                            IpList.append(IpAddress)
-
-        return IpList
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__GetDnsZone"
-    #
-    #    Returns List of IPs
-    #
-    #--------------------------------------------------------------------------
-    def __GetDnsZone(self, DnsDomain):
-
-        print('Loading DNS Zone \"%s\" ...' % (DnsDomain))
-        DnsZone = None
-
-        try:
-            DnsKeyRing  = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
-            DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server']),'A')[0].to_text()
-            DnsZone     = dns.zone.from_xfr( dns.query.xfr(DnsServerIP, DnsDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512') )
-        except:
-            self.__alert('!! ERROR on fetching DNS Zone \"%s\" from Primary \"%s\" = %s' % (DnsDomain, self.__DnsAccDict['Server'], DnsServerIP))
-            DnsZone = None
-
-        if DnsZone is None:
-            self.AnalyseOnly = True
-            try:
-                DnsServerIP = DnsResolver.query('%s.' % (self.__DnsAccDict['Server2']),'A')[0].to_text()
-                DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,DnsDomain))
-            except:
-                self.__alert('!! ERROR on fetching DNS Zone \"%s\" from Secondary \"%s\" = %s' % (DnsDomain, self.__DnsAccDict['Server2'], DnsServerIP))
-                DnsZone = None
-
-        self.__DnsServerIP = DnsServerIP
-        return DnsZone
-
-
-
     #==========================================================================
     # private init function "__GetGatewaysFromDNS"
     #
@@ -366,31 +222,24 @@ class ffGatewayInfo:
 
         print('Checking DNS for Gateway Instances: %s ...' % (FreifunkGwDomain))
 
-        Ip2GwDict = {}
-        DnsZone   = self.__GetDnsZone(FreifunkGwDomain)
+        GwDnsServer = ffDnsServer(FreifunkGwDomain, self.__DnsAccDict)
+        dicGwIPs = GwDnsServer.GetDnsZone()
 
-        if DnsZone is None:
-            print('++ DNS Zone is empty: %s' % (FreifunkGwDomain))
-
+        if dicGwIPs is None:
+            print('++ DNS Zone \"%s\" not available !!' % (FreifunkGwDomain))
+            self.AnalyseOnly = True
         else:
+            self.AnalyseOnly = GwDnsServer.ReadOnly
+
             #----- get Gateways from Zone File -----
-            for name, node in DnsZone.nodes.items():
-                GwName = name.to_text()
-
-                if GwInstanceTemplate.match(GwName):
-                    if GwName not in self.__GatewayDict:
-                        self.__GatewayDict[GwName] = { 'IPs':[], 'DnsSegments':[], 'BatmanSegments':[] }
-
-                    self.__GetGwInstances(GwName,FreifunkGwDomain,node.rdatasets)
-
-                if GwSegGroupTemplate.match(GwName):
-                    if len(GwName) == 7:
-                        Segment = int(GwName[5:])
-                    else:
-                        Segment = 99    # legacy names are used for onboarding
+            for GwName in dicGwIPs:
+                if GwInstanceTemplate.match(GwName):      # n
+                    self.__GatewayDict[GwName] = { 'IPs': dicGwIPs[GwName], 'DnsSegments': [], 'BatmanSegments': [] }
+                elif GwSegGroupTemplate.match(GwName):    # s
+                    Segment = int(GwName[5:])
 
                     if Segment == 0 or Segment > 64:
-                        continue    # >>> Onboarder or Quarantine
+                        continue    # >>> Onboarder
 
                     if Segment not in self.__SegmentDict:
                         print('!! Segment in DNS but not in Git: %s' % (GwName))
@@ -402,16 +251,18 @@ class ffGatewayInfo:
                             'GwIPs':[]
                         }
 
-                    self.__SegmentDict[Segment]['GwIPs'] += self.__GetSegmentGwIPs(FreifunkGwDomain,node.rdatasets)
+                    self.__SegmentDict[Segment]['GwIPs'] += dicGwIPs[GwName]
 
             #----- setting up GwIP to GwInstanceName -----
+            Ip2GwDict = {}
+
             for GwName in self.__GatewayDict:
                 for GwIP in self.__GatewayDict[GwName]['IPs']:
                     if GwIP not in Ip2GwDict:
                         Ip2GwDict[GwIP] = GwName
                     else:
                         if Ip2GwDict[GwIP][:4] == GwName[:4] and len(GwName) != len(Ip2GwDict[GwIP]):
-                            print('++ Gateway Alias: %s = %s = %s' % (GwIP,GwName,Ip2GwDict[GwIP]))
+                            print('++ Gateway Alias: %s = %s = %s' % (GwIP,GwName, Ip2GwDict[GwIP]))
 
                             if len(GwName) > len(Ip2GwDict[GwIP]):    # longer name is new name
                                 self.__GwAliasDict[Ip2GwDict[GwIP]] = GwName
@@ -432,12 +283,12 @@ class ffGatewayInfo:
 
             for GwIP in sorted(Ip2GwDict):
                 if '.' in GwIP:
-                    print('%-15s -> %s' % (GwIP,Ip2GwDict[GwIP]))
+                    print('%-15s -> %s' % (GwIP, Ip2GwDict[GwIP]))
 
             print()
             for GwIP in sorted(Ip2GwDict):
                 if ':' in GwIP:
-                    print('%-36s -> %s' % (GwIP,Ip2GwDict[GwIP]))
+                    print('%-36s -> %s' % (GwIP, Ip2GwDict[GwIP]))
 
             #----- setting up Segment to GwInstanceNames -----
             print('\nChecking Segments for Gateways in DNS: %s ...\n' % (FreifunkGwDomain))
@@ -454,21 +305,21 @@ class ffGatewayInfo:
                             if Segment not in self.__GatewayDict[GwName]['DnsSegments']:
                                 self.__GatewayDict[GwName]['DnsSegments'].append(Segment)
                             else:
-                                self.__alert('!! DNS entries are inconsistent: %s -> %02d' % (GwName,Segment))
+                                self.__alert('!! DNS entries are inconsistent: %s -> %02d' % (GwName, Segment))
                     else:
                         self.__alert('!! Unknown Gateway IP: %s' % (GwIP))
 
                 if len(self.__SegmentDict[Segment]['GwGitNames']) > 0:
                     if len(self.__SegmentDict[Segment]['GwDnsNames']) < MinGatewayCount:
-                        self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
+                        self.__alert('!! Too few Gateways in Segment %02d: %s' % (Segment, self.__SegmentDict[Segment]['GwDnsNames']))
                     else:
-                        print('Seg.%02d -> %s' % (Segment,sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
+                        print('Seg.%02d -> %s' % (Segment, sorted(self.__SegmentDict[Segment]['GwDnsNames'])))
                 else:
-                    self.__alert('!! Gateway in DNS but not in Git for Segment %02d: %s' % (Segment,self.__SegmentDict[Segment]['GwDnsNames']))
+                    self.__alert('!! Gateway in DNS but not in Git for Segment %02d: %s' % (Segment, self.__SegmentDict[Segment]['GwDnsNames']))
 
             print()
             for GwName in sorted(self.__GatewayDict):
-                print(GwName.ljust(7),'->',sorted(self.__GatewayDict[GwName]['DnsSegments']))
+                print(GwName.ljust(7), '->', sorted(self.__GatewayDict[GwName]['DnsSegments']))
 
         print('\n... done.\n')
         return
@@ -1087,108 +938,64 @@ class ffGatewayInfo:
 
 
     #--------------------------------------------------------------------------
-    # private function "__CheckDNSvsGit"
-    #
-    #    Returns True if everything is OK
+    # private function "__CheckNodesInSegassignDNS"
     #
     #--------------------------------------------------------------------------
-    def __CheckDNSvsGit(self, DnsZone):
+    def __CheckNodesInSegassignDNS(self):
 
-        DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
-        DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
+        dicSegAssignZone = SegAssignDnsServer.GetDnsZone()
 
-        if DnsUpdate is None:
+        if dicSegAssignZone is None:
+            self.__alert('!! ERROR: DNS Zone not available !!')
+            self.AnalyseOnly = True
+            return
+
+        if SegAssignDnsServer.ReadOnly:
             self.__alert('!! ERROR: DNS cannot be updated if neccessary !!')
             self.AnalyseOnly = True
 
         #---------- Check DNS against Git ----------
         print('Checking SegAssign DNS Entries against KeyFiles in Git ...')
-        for DnsName, NodeData in DnsZone.nodes.items():
-            for DnsRecord in NodeData.rdatasets:
-                DnsPeerID = DnsName.to_text()
+        for DnsPeerID in dicSegAssignZone:
+            if DnsNodeTemplate.match(DnsPeerID):
+                if DnsPeerID in self.__PeerDnsDict:
+                    FastdKey = self.__PeerDnsDict[DnsPeerID]
+                    GitSegment = self.__FastdKeyDict[FastdKey]['PeerSeg']
 
-                if DnsNodeTemplate.match(DnsPeerID):
-                    if DnsPeerID in self.__PeerDnsDict:
-                        FastdKey = self.__PeerDnsDict[DnsPeerID]
-                        GitSegment = self.__FastdKeyDict[FastdKey]['PeerSeg']
-
-                        if DnsRecord.rdtype == dns.rdatatype.AAAA:
+                    for PeerIP in dicSegAssignZone[DnsPeerID]:
+                        if DnsIP6SegTemplate.match(PeerIP):
                             #---------- IPv6 ----------
-                            EntryCount = len(DnsRecord)
+                            DnsSegment = int(PeerIP.split(':')[-1].zfill(1))
+                            self.__FastdKeyDict[FastdKey]['Dns6Seg'] = DnsSegment
 
-                            for DnsEntry in DnsRecord:
-                                IPv6 = DnsEntry.to_text()
+                            if DnsSegment != GitSegment:
+                                self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID, DnsSegment, GitSegment))
+                                SegAssignDnsServer.ReplaceEntry(DnsPeerID, '%s%d' % (SegAssignIPv6Prefix, GitSegment))
 
-                                if DnsIP6SegTemplate.match(IPv6):
-                                    DnsSegment = int(IPv6.split(':')[-1].zfill(1))
-
-                                    if DnsSegment == GitSegment:
-                                        self.__FastdKeyDict[FastdKey]['Dns6Seg'] = DnsSegment
-                                    else:
-                                        self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
-
-                                        if not self.AnalyseOnly:
-                                            if EntryCount > 1:
-                                                DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
-                                                EntryCount -= 1
-                                            else:
-                                                DnsUpdate.replace(DnsPeerID, 120, 'AAAA', '%s%d' % (SegAssignIPv6Prefix,GitSegment))
-
-                                else:  # invalid IPv6-Address for SegAssign
-                                    self.__alert('++ Invalid IPv6-Entry for NodeID %s: %s' % (DnsPeerID,IPv6))
-
-                                    if not self.AnalyseOnly:
-                                        if EntryCount > 1:
-                                            DnsUpdate.delete(DnsPeerID,'AAAA',IPv6)
-                                            EntryCount -= 1
-                                        else:
-                                            DnsUpdate.replace(DnsPeerID, 120, 'AAAA', '%s%d' % (SegAssignIPv6Prefix,GitSegment))
-
-                        elif DnsRecord.rdtype == dns.rdatatype.A:
+                        elif DnsIP4SegTemplate.match(PeerIP):
                             #---------- IPv4 ----------
-                            EntryCount = len(DnsRecord)
+                            DnsSegment = int(PeerIP.split('.')[-1])
+                            self.__FastdKeyDict[FastdKey]['Dns4Seg'] = DnsSegment
 
-                            for DnsEntry in DnsRecord:
-                                IPv4 = DnsEntry.to_text()
+                            if DnsSegment != GitSegment:
+                                self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID, DnsSegment, GitSegment))
+                                SegAssignDnsServer.ReplaceEntry(DnsPeerID, '%s%d' % (SegAssignIPv4Prefix, GitSegment))
 
-                                if DnsIP4SegTemplate.match(IPv4):
-                                    DnsSegment = int(IPv4.split('.')[-1])
+                        else:  # invalid IP-Address for SegAssign
+                            self.__alert('++ Invalid IP-Entry for NodeID %s: %s' % (DnsPeerID, PeerIP))
+                            SegAssignDnsServer.DelEntry(DnsPeerID, PeerIP)
 
-                                    if DnsSegment == GitSegment:
-                                        self.__FastdKeyDict[FastdKey]['Dns4Seg'] = DnsSegment
-                                    else:
-                                        self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID,DnsSegment,GitSegment))
+                else:
+                    ErrorMsg = '++ Unknown DNS Node-Entry \"%s\" - these IPs will be deleted: ' % (DnsPeerID)
+                    for PeerIP in dicSegAssignZone[DnsPeerID]:
+                        SegAssignDnsServer.DelEntry(DnsPeerID, PeerIP)
+                        ErrorMsg += PeerIP + ' | '
 
-                                        if not self.AnalyseOnly:
-                                            if EntryCount > 1:
-                                                DnsUpdate.delete(DnsPeerID,'A',IPv4)
-                                                EntryCount -= 1
-                                            else:
-                                                DnsUpdate.replace(DnsPeerID, 120, 'A', '%s%d' % (SegAssignIPv4Prefix,GitSegment))
+                    self.__alert(ErrorMsg[:-3])
 
-                                else:  # invalid IPv4-Address for SegAssign
-                                    self.__alert('++ Invalid IPv4-Entry for NodeID %s: %s' % (DnsPeerID,IPv4))
-
-                                    if not self.AnalyseOnly:
-                                        if EntryCount > 1:
-                                            DnsUpdate.delete(DnsPeerID,'A',IPv4)
-                                            EntryCount -= 1
-                                        else:
-                                            DnsUpdate.replace(DnsPeerID, 120, 'A', '%s%d' % (SegAssignIPv4Prefix,GitSegment))
-
-                        elif DnsRecord.rdtype == dns.rdatatype.CNAME:
-                            self.__alert('++ CNAME found - DNS Entry will be deleted: %s' % (DnsPeerID))
-                            if not self.AnalyseOnly:
-                                DnsUpdate.delete(DnsPeerID,'CNAME')
-
-                    else:
-                        if not self.AnalyseOnly:
-                            self.__alert('++ Unknown Node-Entry - DNS Entry will be deleted: %s' % (DnsPeerID))
-                            DnsUpdate.delete(DnsPeerID)
-                        else:
-                            self.__alert('++ Unknown Node DNS-Entry: %s' % (DnsPeerID))
-                elif DnsPeerID != '@' and DnsPeerID != '*':
-                    self.__alert('!! Invalid DNS Entry: '+DnsPeerID)
+            elif DnsPeerID != '@' and DnsPeerID != '*':
+                self.__alert('!! Invalid DNS Entry: \"%s\"' % (DnsPeerID))
 
 
         #---------- Check Git for missing DNS entries ----------
@@ -1200,12 +1007,12 @@ class ffGatewayInfo:
 
             if self.__FastdKeyDict[PeerKey]['Dns6Seg'] is None:
                 self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
-                PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,GitSegment)
+                PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix, GitSegment)
                 self.__FastdKeyDict[PeerKey]['Dns6Seg'] = GitSegment
 
                 if not self.AnalyseOnly:
-                    DnsUpdate.add(PeerDnsName, 120, 'AAAA',PeerDnsIPv6)
-                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv6))
+                    SegAssignDnsServer.AddEntry(DnsPeerID, PeerDnsIPv6)
+                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName, PeerDnsIPv6))
 
             if self.__FastdKeyDict[PeerKey]['Dns4Seg'] is None:
                 self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
@@ -1213,36 +1020,14 @@ class ffGatewayInfo:
                 self.__FastdKeyDict[PeerKey]['Dns4Seg'] = GitSegment
 
                 if not self.AnalyseOnly:
-                    DnsUpdate.add(PeerDnsName, 120, 'A',PeerDnsIPv4)
-                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName,PeerDnsIPv4))
+                    SegAssignDnsServer.AddEntry(DnsPeerID, PeerDnsIPv4)
+                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName, PeerDnsIPv4))
 
-        if not self.AnalyseOnly:
-            if len(DnsUpdate.index) > 1:
-                dns.query.tcp(DnsUpdate,self.__DnsServerIP)
-                print('... Update launched on DNS-Server',self.__DnsServerIP)
+
+        if not SegAssignDnsServer.CommitChanges():
+            self.__alert('!! ERROR on updating DNS Zone \"%s\" !!' % (SegAssignDomain))
 
         return
-
-
-
-    #--------------------------------------------------------------------------
-    # private function "__CheckNodesInSegassignDNS"
-    #
-    #   Returns True if everything is OK
-    #
-    #--------------------------------------------------------------------------
-    def __CheckNodesInSegassignDNS(self):
-
-        DnsZone = self.__GetDnsZone(SegAssignDomain)
-
-        if DnsZone is None:
-            self.__alert('!! ERROR on fetching DNS Zone \"%s\"!' % (SegAssignDomain))
-        else:
-            self.__CheckDNSvsGit(DnsZone)
-
-        print('... done.\n')
-        return
-
 
 
     #--------------------------------------------------------------------------
@@ -1314,9 +1099,15 @@ class ffGatewayInfo:
             print('++ There are no Peers to be moved.')
             return
 
-        if self.__DnsServerIP is None or self.__GitPath is None or GitAccount is None:
-            print('!! Account Data is not available!')
+        if  self.__GitPath is None or GitAccount is None:
+            print('!! Git Account Data is not available!')
             return
+
+        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
+
+        if SegAssignDnsServer.ReadOnly:
+            self.__alert('!! ERROR: DNS cannot be updated !!')
+            self.AnalyseOnly = True
 
         if self.AnalyseOnly:
             print('++ Nodes cannot be moved due to AnalyseOnly-Mode.')
@@ -1327,17 +1118,14 @@ class ffGatewayInfo:
         try:
             GitLockName = os.path.join('/tmp','.'+os.path.basename(self.__GitPath)+'.lock')
             LockFile = open(GitLockName, mode='w+')
-            fcntl.lockf(LockFile,fcntl.LOCK_EX)
-
-            DnsKeyRing = dns.tsigkeyring.from_text( {self.__DnsAccDict['ID'] : self.__DnsAccDict['Key']} )
-            DnsUpdate  = dns.update.Update(SegAssignDomain, keyring = DnsKeyRing, keyname = self.__DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
+            fcntl.lockf(LockFile, fcntl.LOCK_EX)
 
             GitRepo   = git.Repo(self.__GitPath)
             GitIndex  = GitRepo.index
             GitOrigin = GitRepo.remotes.origin
 
-            if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or DnsUpdate is None:
-                self.__alert('!! The Git Repository and/or DNS are not clean - cannot move Nodes!')
+            if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0:
+                self.__alert('!! The Git Repository ist clean - cannot move Nodes!')
             else:
                 self.__alert('++ The following Nodes will be moved automatically:')
                 GitCommitMessage = "Automatic move by FFS-Monitor:\n\n"
@@ -1353,24 +1141,24 @@ class ffGatewayInfo:
                         PeerDnsName = self.__FastdKeyDict[FastdKey]['DnsName']
 
 #                        print(SourceFile,'->',DestFile)
-                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[FastdKey]['PeerName'],self.__FastdKeyDict[FastdKey]['KeyDir'],DestSegment)
+                        MoveTextLine = '%s = \"%s\": %s -> vpn%02d' % (KeyFileName, self.__FastdKeyDict[FastdKey]['PeerName'], self.__FastdKeyDict[FastdKey]['KeyDir'], DestSegment)
                         print(MoveTextLine)
 
                         if os.path.exists(os.path.join(self.__GitPath,SourceFile)):
                             MoveCount += 1
                             GitCommitMessage += MoveTextLine+'\n'
-                            GitIndex.remove([os.path.join(self.__GitPath,SourceFile)])
+                            GitIndex.remove([os.path.join(self.__GitPath, SourceFile)])
                             print('... Git remove of old location done.')
 
-                            os.rename(os.path.join(self.__GitPath,SourceFile), os.path.join(self.__GitPath,DestFile))
+                            os.rename(os.path.join(self.__GitPath, SourceFile), os.path.join(self.__GitPath, DestFile))
                             print('... File moved.')
-                            GitIndex.add([os.path.join(self.__GitPath,DestFile)])
+                            GitIndex.add([os.path.join(self.__GitPath, DestFile)])
                             print('... Git add of new location done.')
-                            DnsUpdate.replace(PeerDnsName, 120, 'AAAA', '%s%d' % (SegAssignIPv6Prefix,NodeMoveDict[FastdKey]))
-                            DnsUpdate.replace(PeerDnsName, 120, 'A',    '%s%d' % (SegAssignIPv4Prefix,NodeMoveDict[FastdKey]))
+                            SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv6Prefix, DestSegment))
+                            SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv4Prefix, DestSegment))
 
 #                            self.__alert('   '+SourceFile+' -> '+DestFile)
-                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName,self.__FastdKeyDict[FastdKey]['PeerName'],self.__FastdKeyDict[FastdKey]['KeyDir'],DestSegment))
+                            self.__alert('   %s = %s: %s -> vpn%02d' % (KeyFileName, self.__FastdKeyDict[FastdKey]['PeerName'], self.__FastdKeyDict[FastdKey]['KeyDir'], DestSegment))
 
                         else:
                             print('... Key File was already moved by other process.')
@@ -1388,9 +1176,8 @@ class ffGatewayInfo:
                     print('... doing Git push ...')
                     GitOrigin.push()
 
-                    if len(DnsUpdate.index) > 1:
-                        dns.query.tcp(DnsUpdate,self.__DnsServerIP)
-                        print('DNS Update committed.')
+                    if not SegAssignDnsServer.CommitChanges():
+                        self.__alert('!! ERROR on updating DNS Zone \"%s\" !!' % (SegAssignDomain))
                 else:
                     self.__alert('>>> No valid movements available!')
 
