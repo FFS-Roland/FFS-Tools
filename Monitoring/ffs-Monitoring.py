@@ -19,30 +19,6 @@
 #       vpyXX.json           -> fastd Status-Files from Gateways                          #
 #                                                                                         #
 ###########################################################################################
-#                                                                                         #
-#  Copyright (c) 2017-2023, Roland Volkmann <roland.volkmann@t-online.de>                 #
-#  All rights reserved.                                                                   #
-#                                                                                         #
-#  Redistribution and use in source and binary forms, with or without                     #
-#  modification, are permitted provided that the following conditions are met:            #
-#    1. Redistributions of source code must retain the above copyright notice,            #
-#       this list of conditions and the following disclaimer.                             #
-#    2. Redistributions in binary form must reproduce the above copyright notice,         #
-#       this list of conditions and the following disclaimer in the documentation         #
-#       and/or other materials provided with the distribution.                            #
-#                                                                                         #
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"            #
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE              #
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE         #
-#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE           #
-#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL             #
-#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR             #
-#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER             #
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,          #
-#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE          #
-#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                   #
-#                                                                                         #
-###########################################################################################
 
 import os
 import time
@@ -139,7 +115,7 @@ parser.add_argument('--data', dest='DATAPATH', action='store', required=True, he
 parser.add_argument('--logs', dest='LOGPATH', action='store', required=True, help='Path to LogFiles')
 args = parser.parse_args()
 
-AccountsDict = __LoadAccounts(os.path.join(args.DATAPATH,AccountsFileName))  # All needed Accounts for Accessing resricted Data
+AccountsDict = __LoadAccounts(os.path.join(args.DATAPATH, AccountsFileName))  # All needed Accounts for Accessing resricted Data
 
 if AccountsDict is None:
     print('!! FATAL ERROR: Accounts not available!')
@@ -148,7 +124,7 @@ if AccountsDict is None:
 
 
 print('====================================================================================\n\nSetting up Gateway Data ...\n')
-ffsGWs = ffGatewayInfo(args.GITREPO,AccountsDict['DNS'])
+ffsGWs = ffGatewayInfo(args.GITREPO, AccountsDict['DNS'])
 
 ffsGWs.CheckGatewayDnsServer()
 ffsGWs.CheckGatewayDhcpServer()
@@ -159,14 +135,14 @@ GwUplinkInfos = ffsGWs.GetNodeUplinkInfos()
 
 
 print('====================================================================================\n\nSetting up Node Data ...\n')
-ffsNodes = ffNodeInfo(AccountsDict,args.GITREPO,args.DATAPATH)
+ffsNodes = ffNodeInfo(AccountsDict, args.GITREPO, args.DATAPATH)
 
 ffsNodes.AddUplinkInfos(GwUplinkInfos)
-ffsNodes.DumpMacTable(os.path.join(args.LOGPATH,MacTableFile))
+ffsNodes.DumpMacTable(os.path.join(args.LOGPATH, MacTableFile))
 
 
 print('====================================================================================\n\nSetting up Location Data ...\n')
-ffsLocationInfo = ffLocation(args.GITREPO,args.DATAPATH)
+ffsLocationInfo = ffLocation(args.GITREPO, args.DATAPATH)
 
 if not ffsNodes.SetDesiredSegments(ffsLocationInfo):
     print('!! FATAL ERROR: Regions / Segments not available!')
@@ -182,7 +158,7 @@ ffsNet.CreateMeshCloudList()
 ffsNet.CheckMeshClouds()
 ffsNet.CheckSingleNodes()
 
-ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH,MeshCloudListFile))
+ffsNet.WriteMeshCloudList(os.path.join(args.LOGPATH, MeshCloudListFile))
 
 
 #---------- Actions ----------
@@ -190,19 +166,19 @@ NodeMoveDict = ffsNet.GetMoveDict()
 MailBody = ''
 
 if NodeMoveDict is None:
-    ffsNodes.CheckNodesInNodesDNS(AccountsDict['DNS'])
+    ffsNodes.CheckNodesInDNS()
 
     if not ffsNodes.AnalyseOnly and not ffsGWs.AnalyseOnly and not ffsNet.AnalyseOnly:
         ffsNodes.WriteNodeDict()
     else:
-        print('\n!!! Analyse only: Nodes = %s, GWs = %s, Net = %s\n' % (ffsNodes.AnalyseOnly,ffsGWs.AnalyseOnly,ffsNet.AnalyseOnly))
+        print('\n!!! Analyse only: Nodes = %s, GWs = %s, Net = %s\n' % (ffsNodes.AnalyseOnly, ffsGWs.AnalyseOnly, ffsNet.AnalyseOnly))
 else:
     print('\nMoving Nodes ...')
 
     if ffsNodes.AnalyseOnly or ffsGWs.AnalyseOnly or ffsNet.AnalyseOnly:
         MailBody = '!! There are Nodes to be moved but cannot due to inconsistent Data !!\n'
     else:
-        ffsGWs.MoveNodes(NodeMoveDict,AccountsDict['Git'])
+        ffsGWs.MoveNodes(NodeMoveDict, AccountsDict['Git'])
         ffsNodes.WriteNodeDict()
 
 print('\nChecking for Alerts ...')

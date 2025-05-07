@@ -27,18 +27,10 @@ import re
 import hashlib
 import zlib
 
-import dns.resolver
-import dns.query
-import dns.zone
-import dns.tsigkeyring
-import dns.update
-
 from glob import glob
 
-from dns.rdataclass import *
-from dns.rdatatype import *
-
 from class_ffLocation import *
+from class_ffDnsServer import *
 
 
 
@@ -56,6 +48,7 @@ BatmanMinTQ        =  2             # Minimum Batman TQ for respondd Request
 BatmanMaxSegment   = 64             # Highest Segment Number for regular Batman Traffic
 
 MinNodesCount      = 1000           # Minimum number of Nodes
+MaxDnsUpdates      = 100
 
 FreifunkNodeDomain = 'nodes.freifunk-stuttgart.de'
 
@@ -63,9 +56,6 @@ NodeDbName     = 'NodeDict.json'      # Node Database
 NodeBackupName = 'NodeBackupDB.json'  # Backup of Node Database
 
 MacDictName    = 'MacDict.json'       # MAC Translation Dictionary
-Region2ZipName = 'Region2ZIP.json'    # Regions with ZIP Codes of Baden-Wuerttemberg
-Zip2GpsName    = 'ZipLocations.json'  # GPS location of ZIP-Areas based on OpenStreetMap and OpenGeoDB
-ZipGridName    = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 
 ffsIPv6Template        = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
@@ -114,7 +104,7 @@ class ffNodeInfo:
     #==========================================================================
     # Constructor
     #==========================================================================
-    def __init__(self,AccountsDict,GitPath,DatabasePath):
+    def __init__(self, AccountsDict, GitPath, DatabasePath):
 
         # public Attributes
         self.ffNodeDict     = {}          # Dictionary of Nodes [MainMAC] with their Name, VPN-Uplink
@@ -315,7 +305,7 @@ class ffNodeInfo:
                     if self.ffNodeDict[MainMAC]['last_online'] > self.ffNodeDict[StoredNodeMAC]['last_online']:
                         self.ffNodeDict[StoredNodeMAC]['MeshMACs'].remove(BatmanMAC)
                         self.MAC2NodeIDDict[BatmanMAC] = MainMAC
-                        print('    >> New Node stored:  %s = \'%s\' (%d)\n' % (MainMAC,self.ffNodeDict[MainMAC]['Name'], self.ffNodeDict[MainMAC]['last_online']))
+                        print('    >> New Node stored:  %s = \'%s\' (%d)\n' % (MainMAC, self.ffNodeDict[MainMAC]['Name'], self.ffNodeDict[MainMAC]['last_online']))
                     else:
                         print('    >> Keeping current stored Node.\n')
 
@@ -336,9 +326,9 @@ class ffNodeInfo:
     #=========================================================================
     def WriteNodeDict(self):
 
-        print('Writing',NodeDbName,'...')
-        JsonFile = open(os.path.join(self.__DatabasePath,NodeDbName), mode='w+')
-        json.dump(self.ffNodeDict,JsonFile)
+        print('Writing', NodeDbName, '...')
+        JsonFile = open(os.path.join(self.__DatabasePath, NodeDbName), mode='w+')
+        json.dump(self.ffNodeDict, JsonFile)
         JsonFile.close()
 
         print('... done.\n')
@@ -432,11 +422,11 @@ class ffNodeInfo:
 
         if NodeDict['statistics'] is not None:
             if 'node_id' not in NodeDict['statistics']:
-                print('    +++ Missing node_id of statistics!',NodeDict['statistics'])
+                print('    +++ Missing node_id of statistics!', NodeDict['statistics'])
                 return False
             elif NodeDict['statistics']['node_id'] != NodeDict['nodeinfo']['node_id']:
                 print('++ NodeID-Mismatch: nodeinfo = %s / statistics = %s\n' %
-                         (NodeDict['nodeinfo']['node_id'],NodeDict['statistics']['node_id']))
+                         (NodeDict['nodeinfo']['node_id'], NodeDict['statistics']['node_id']))
                 return False
 
         if NodeDict['neighbours'] is not None:
@@ -450,7 +440,7 @@ class ffNodeInfo:
         if (('software' not in NodeDict['nodeinfo']) or
             ('hostname' not in NodeDict['nodeinfo']) or
             ('network' not in NodeDict['nodeinfo'])):
-            print('+++ NodeInfo broken!',NodeDict['nodeinfo'])
+            print('+++ NodeInfo broken!', NodeDict['nodeinfo'])
             return False
 
         if GwIdTemplate.match(ffNodeID):
@@ -469,7 +459,7 @@ class ffNodeInfo:
         ffNodeMAC = NodeDict['nodeinfo']['network']['mac'].strip().lower()
 
         if not MacAdrTemplate.match(ffNodeMAC):
-            print('!! Invalid MAC Format: %s -> %s' % (ffNodeID,ffNodeMAC))
+            print('!! Invalid MAC Format: %s -> %s' % (ffNodeID, ffNodeMAC))
             return False
 
         if GwMacTemplate.match(ffNodeMAC):
@@ -533,7 +523,7 @@ class ffNodeInfo:
 
         if 'autoupdater' in NodeDict['nodeinfo']['software']:
             if 'branch' in NodeDict['nodeinfo']['software']['autoupdater'] and 'enabled' in NodeDict['nodeinfo']['software']['autoupdater']:
-                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '%s (%s)' % (NodeDict['nodeinfo']['software']['autoupdater']['branch'],NodeDict['nodeinfo']['software']['autoupdater']['enabled'])
+                self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = '%s (%s)' % (NodeDict['nodeinfo']['software']['autoupdater']['branch'], NodeDict['nodeinfo']['software']['autoupdater']['enabled'])
             else:
                 self.ffNodeDict[ffNodeMAC]['AutoUpdate'] = None
 
@@ -649,7 +639,7 @@ class ffNodeInfo:
                 opener = urllib.request.build_opener(authhandler)
                 urllib.request.install_opener(opener)
 
-                RawJsonHTTP = urllib.request.urlopen(YanicAccessDict['URL'],timeout=15)
+                RawJsonHTTP = urllib.request.urlopen(YanicAccessDict['URL'], timeout=15)
                 print('... is open ...')
                 RawJsonDict = json.loads(RawJsonHTTP.read().decode('utf-8'))
                 RawJsonHTTP.close()
@@ -668,11 +658,11 @@ class ffNodeInfo:
             return False
 
         if RawJsonDict['version'] not in YANIC_VERSIONS:
-            self.__alert('++ Bad Version of Yanic raw.json: %s (expecting %s)!' % (RawJsonDict['version'],YANIC_VERSION))
+            self.__alert('++ Bad Version of Yanic raw.json: %s (expecting %s)!' % (RawJsonDict['version'], YANIC_VERSION))
             return False
 
         if 'updated_at' in RawJsonDict:
-            InfoTime = int(calendar.timegm(time.strptime( RawJsonDict['updated_at'],'%Y-%m-%dT%H:%M:%S%z') ))
+            InfoTime = int(calendar.timegm(time.strptime( RawJsonDict['updated_at'], '%Y-%m-%dT%H:%M:%S%z') ))
 
         if (CurrentTime - InfoTime) > MaxStatusAge:
             self.__alert('++ Yanic raw.json is too old: %d Sec.!' % (CurrentTime - InfoTime))
@@ -729,9 +719,9 @@ class ffNodeInfo:
     #-----------------------------------------------------------------------
     def __InfoFromRespondd(self, NodeMAC, NodeIF, Request):
 
-        NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:]+NodeMAC[3:8]+'ff:fe'+NodeMAC[9:14]+NodeMAC[15:17] + '%'+NodeIF
+        NodeIPv6 = 'fe80::' + hex(int(NodeMAC[0:2],16) ^ 0x02)[2:] + NodeMAC[3:8] + 'ff:fe' + NodeMAC[9:14] + NodeMAC[15:17] + '%' + NodeIF
 
-#        print('    >> Requesting %s via respondd from %s ...' % (Request,NodeIPv6))
+#        print('    >> Requesting %s via respondd from %s ...' % (Request, NodeIPv6))
         Retries = 3
         NodeResponse = None
 
@@ -755,7 +745,7 @@ class ffNodeInfo:
                 time.sleep(1)
 
         if NodeResponse is None:
-            print('    +++ Error on respondd \'%s\' from %s ...' % (Request,NodeIPv6))
+            print('    +++ Error on respondd \'%s\' from %s ...' % (Request, NodeIPv6))
 
         return NodeResponse
 
@@ -871,7 +861,7 @@ class ffNodeInfo:
                                         else:  # Data of known Node with non-Gluon MAC
                                             print('    !! Special Node in Batman TG: %s -> %s = \'%s\'' % (ffMeshMAC, ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Name']))
                                     else:
-                                        self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                                        self.__AddGluonMACs(ffNodeMAC, ffMeshMAC)
 
                                 elif ffMeshMAC in BatmanMacList:
                                     #---------- Node without current data available ----------
@@ -906,7 +896,7 @@ class ffNodeInfo:
 
                                         if ffNodeMAC in self.ffNodeDict:
                                             self.ffNodeDict[ffNodeMAC]['Segment'] = ffSeg
-                                            self.__AddGluonMACs(ffNodeMAC,ffMeshMAC)
+                                            self.__AddGluonMACs(ffNodeMAC, ffMeshMAC)
 
                                             if not self.__IsOnline(ffNodeMAC):
                                                 self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_MESH
@@ -965,7 +955,7 @@ class ffNodeInfo:
 
         try:
             print('Loading Database \'%s\' ...' % (NodeDbName))
-            JsonFile = open(os.path.join(self.__DatabasePath,NodeDbName), mode='r')
+            JsonFile = open(os.path.join(self.__DatabasePath, NodeDbName), mode='r')
             NodeDbDict = json.load(JsonFile)
             JsonFile.close()
         except:
@@ -975,15 +965,15 @@ class ffNodeInfo:
         NodeCount = len(NodeDbDict)
 
         if NodeCount >= MinNodesCount:
-            JsonFile = open(os.path.join(self.__DatabasePath,NodeBackupName), mode='w+')
-            json.dump(NodeDbDict,JsonFile)
+            JsonFile = open(os.path.join(self.__DatabasePath, NodeBackupName), mode='w+')
+            json.dump(NodeDbDict, JsonFile)
             JsonFile.close()
         else:
             self.WriteNodeDict()  # create new DB based on current Node Info
 
             try:
                 print('Loading Backup-Database \'%s\' ...' % (NodeBackupName))
-                JsonFile = open(os.path.join(self.__DatabasePath,NodeBackupName), mode='r')
+                JsonFile = open(os.path.join(self.__DatabasePath, NodeBackupName), mode='r')
                 NodeDbDict = json.load(JsonFile)
                 JsonFile.close()
             except:
@@ -1061,14 +1051,14 @@ class ffNodeInfo:
 
                 if ffVpnMAC is not None:   # Node has VPN-Connection to Gateway ...
                     fastdNodes += 1
-                    self.__AddGluonMACs(ffNodeMAC,ffVpnMAC)
+                    self.__AddGluonMACs(ffNodeMAC, ffVpnMAC)
                     self.ffNodeDict[ffNodeMAC]['FastdGW'] = FastdKeyInfo['VpnGW']
 
                     if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_ONLINE_VPN:
                         print('++ Node has VPN-Connection: %s = \'%s\'' % (ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Name']))
                         self.ffNodeDict[ffNodeMAC]['Status'] = NODESTATE_ONLINE_VPN
 
-        print('... %d Keys added (%d VPN connections).\n' % (addedInfos,fastdNodes))
+        print('... %d Keys added (%d VPN connections).\n' % (addedInfos, fastdNodes))
         return
 
 
@@ -1081,8 +1071,8 @@ class ffNodeInfo:
     def DumpMacTable(self, FileName):
 
         print('Write MAC-Table ...')
-        JsonFile = open(os.path.join(self.__DatabasePath,MacDictName), mode='w+')
-        json.dump(self.MAC2NodeIDDict,JsonFile)
+        JsonFile = open(os.path.join(self.__DatabasePath, MacDictName), mode='w+')
+        json.dump(self.MAC2NodeIDDict, JsonFile)
         JsonFile.close()
 
         print('Dump MAC-Table ...')
@@ -1187,7 +1177,7 @@ class ffNodeInfo:
             if self.ffNodeDict[ffNodeMAC]['Status'] != NODESTATE_UNKNOWN:
 
                 if self.ffNodeDict[ffNodeMAC]['Name'] is None:
-                    print('!! Hostname is None: %s %s' % (self.ffNodeDict[ffNodeMAC]['Status'],ffNodeMAC))
+                    print('!! Hostname is None: %s %s' % (self.ffNodeDict[ffNodeMAC]['Status'], ffNodeMAC))
                 elif BadNameTemplate.match(self.ffNodeDict[ffNodeMAC]['Name']):
                     print('!! Invalid ffNode Hostname: %s = %s -> \'%s\'' % (ffNodeMAC, self.ffNodeDict[ffNodeMAC]['Status'], self.ffNodeDict[ffNodeMAC]['Name']))
 
@@ -1257,70 +1247,78 @@ class ffNodeInfo:
 
 
     #=========================================================================
-    # public function "CheckNodesInNodesDNS"
+    # public function "CheckNodesInDNS"
     #
-    #   Returns True if everything is OK
     #
     #=========================================================================
-    def CheckNodesInNodesDNS(self, DnsAccDict):
+    def CheckNodesInDNS(self):
 
-        DnsZone     = None
-        DnsUpdate   = None
+        print('\nChecking DNS Zone \"%s\" ...' % (FreifunkNodeDomain))
         NodeDnsDict = {}
 
-        print('\nChecking DNS Zone \'nodes\' ...')
+        NodesDnsServer = ffDnsServer(FreifunkNodeDomain, self.__AccountsDict['DNS'])
+        dicNodesZone = NodesDnsServer.GetDnsZone()
 
-        try:
-            DnsResolver = dns.resolver.Resolver()
-            DnsServerIP = DnsResolver.query('%s.' % (DnsAccDict['Server']),'a')[0].to_text()
-            DnsZone     = dns.zone.from_xfr(dns.query.xfr(DnsServerIP,FreifunkNodeDomain))
-            DnsKeyRing  = dns.tsigkeyring.from_text( {DnsAccDict['ID'] : DnsAccDict['Key']} )
-            DnsUpdate   = dns.update.Update(FreifunkNodeDomain, keyring = DnsKeyRing, keyname = DnsAccDict['ID'], keyalgorithm = 'hmac-sha512')
-        except:
-            self.__alert('!! ERROR on accessing DNS Zone: '+FreifunkNodeDomain)
+        if dicNodesZone is None:
+            self.__alert('!! ERROR accessing DNS Zone \"%s\" !!' % (FreifunkNodeDomain))
         else:
-            #---------- Loading Node DNS Entries ----------
-            print('Loading Node DNS Entries ...')
-            for DnsName, NodeData in DnsZone.nodes.items():
-                for DnsRecord in NodeData.rdatasets:
-                    DnsNodeID = DnsName.to_text()
+            #---------- Analysing Node DNS Entries ----------
+            print('Analysing Node DNS Entries ...')
+            iChanged = 0
 
-                    if PeerTemplate.match(DnsNodeID) and DnsRecord.rdtype == dns.rdatatype.AAAA:
-                        NodeIPv6 = None
+            for NodeDnsName in dicNodesZone:
+                if PeerTemplate.match(NodeDnsName):
+                    ffNodeMAC = NodeDnsName[4:6] + ':' + NodeDnsName[6:8] + ':' + NodeDnsName[8:10] + ':' + NodeDnsName[10:12] + ':' + NodeDnsName[12:14] + ':' + NodeDnsName[14:16]
 
-                        for DnsAnswer in DnsRecord:
-                            IPv6 = DnsAnswer.to_text()
-
-                            if ffsIPv6Template.match(IPv6):
-                                if NodeIPv6 is None:
-                                    NodeIPv6 = IPv6
+                    if ffNodeMAC in self.ffNodeDict:
+                        for PeerIP in dicNodesZone[NodeDnsName]:
+                            if ffsIPv6Template.match(PeerIP):
+                                if NodeDnsName not in NodeDnsDict:
+                                    NodeDnsDict[NodeDnsName] = PeerIP
                                 else:
-                                    self.__alert('!! Duplicate DNS Result: '+DnsNodeID+' = '+NodeIPv6+' + '+IPv6)
+                                    self.__alert('!! Duplicate DNS result for \"%s\": %s + %s' % (NodeDnsName, NodeDnsDict[NodeDnsName], PeerIP))
+                                    NodesDnsServer.DelEntry(NodeDnsName, PeerIP)
                             else:
-                                self.__alert('!! Invalid DNS IPv6 result: '+DnsNodeID+' = '+IPv6)
+                                self.__alert('!! Invalid DNS result for \"%s\": %s' % (NodeDnsName, PeerIP))
+                                NodesDnsServer.DelEntry(NodeDnsName, PeerIP)
+                    else:
+                        self.__alert('!! Unknown Node in DNS: %s' % (NodeDnsName))
+                        for PeerIP in dicNodesZone[NodeDnsName]:
+                            NodesDnsServer.DelEntry(NodeDnsName, PeerIP)
+                            iChanged += 1
 
-                        if NodeIPv6 is not None:
-                            NodeDnsDict[DnsNodeID] = NodeIPv6
+                elif NodeDnsName != '@' and NodeDnsName != '*':
+                    self.__alert('!! Invalid Node entry in DNS: \"%s\"' % (NodeDnsName))
+                    for PeerIP in dicNodesZone[NodeDnsName]:
+                        NodesDnsServer.DelEntry(NodeDnsName, PeerIP)
+
+                if iChanged > MaxDnsUpdates:
+                    if not NodesDnsServer.CommitChanges():
+                        self.__alert('!! ERROR on updating DNS Zone \"%s\" !!' % (FreifunkNodeDomain))
+                    iChanged = 0
 
             #---------- Check ffNodeDict for missing DNS entries ----------
             print('Checking ffNodeDict against DNS ...')
-            iChanged = 0
 
             for ffNodeMAC in self.ffNodeDict:
                 if self.ffNodeDict[ffNodeMAC]['IPv6'] is not None:
                     DnsNodeID = 'ffs-' + ffNodeMAC.replace(':','')
 
                     if DnsNodeID in NodeDnsDict:
-                        if (NodeDnsDict[DnsNodeID] != self.ffNodeDict[ffNodeMAC]['IPv6'].replace('::',':0:')) and (iChanged < 100):
-                            DnsUpdate.replace(DnsNodeID, 120, 'AAAA', self.ffNodeDict[ffNodeMAC]['IPv6'])
-                            print(DnsNodeID,NodeDnsDict[DnsNodeID],'->',self.ffNodeDict[ffNodeMAC]['IPv6'])
+                        if NodeDnsDict[DnsNodeID] != self.ffNodeDict[ffNodeMAC]['IPv6'].replace('::',':0:'):
+                            NodesDnsServer.ReplaceEntry(DnsNodeID, self.ffNodeDict[ffNodeMAC]['IPv6'])
+                            print(DnsNodeID,NodeDnsDict[DnsNodeID], '->', self.ffNodeDict[ffNodeMAC]['IPv6'])
                             iChanged += 1
                     else:
-                        DnsUpdate.add(DnsNodeID, 120, 'AAAA', self.ffNodeDict[ffNodeMAC]['IPv6'])
+                         NodesDnsServer.AddEntry(DnsNodeID, self.ffNodeDict[ffNodeMAC]['IPv6'])
 
-            if len(DnsUpdate.index) > 1:
-                dns.query.tcp(DnsUpdate,DnsServerIP)
-                print('DNS-Updates =',iChanged)
+                if iChanged > MaxDnsUpdates:
+                    if not NodesDnsServer.CommitChanges():
+                        self.__alert('!! ERROR on updating DNS Zone \"%s\" !!' % (FreifunkNodeDomain))
+                    iChanged = 0
+
+            if not NodesDnsServer.CommitChanges():
+                self.__alert('!! ERROR on updating DNS Zone \"%s\" !!' % (FreifunkNodeDomain))
 
         print('... done.\n')
         return
