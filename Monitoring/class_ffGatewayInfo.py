@@ -957,45 +957,49 @@ class ffGatewayInfo:
 
         #---------- Check DNS against Git ----------
         print('Checking SegAssign DNS Entries against KeyFiles in Git ...')
-        for DnsPeerID in dicSegAssignZone:
-            if DnsNodeTemplate.match(DnsPeerID):
-                if DnsPeerID in self.__PeerDnsDict:
-                    FastdKey = self.__PeerDnsDict[DnsPeerID]
+        for PeerDnsName in dicSegAssignZone:
+            if DnsNodeTemplate.match(PeerDnsName):
+                if PeerDnsName in self.__PeerDnsDict:
+                    FastdKey = self.__PeerDnsDict[PeerDnsName]
                     GitSegment = self.__FastdKeyDict[FastdKey]['PeerSeg']
 
-                    for PeerIP in dicSegAssignZone[DnsPeerID]:
+                    for PeerIP in dicSegAssignZone[PeerDnsName]:
                         if DnsIP6SegTemplate.match(PeerIP):
                             #---------- IPv6 ----------
                             DnsSegment = int(PeerIP.split(':')[-1].zfill(1))
-                            self.__FastdKeyDict[FastdKey]['Dns6Seg'] = DnsSegment
 
-                            if DnsSegment != GitSegment:
-                                self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (DnsPeerID, DnsSegment, GitSegment))
-                                SegAssignDnsServer.ReplaceEntry(DnsPeerID, '%s%d' % (SegAssignIPv6Prefix, GitSegment))
+                            if self.__FastdKeyDict[FastdKey]['Dns6Seg'] is None:
+                                self.__FastdKeyDict[FastdKey]['Dns6Seg'] = GitSegment
+
+                                if DnsSegment != GitSegment:
+                                    self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
+                                    SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv6Prefix, GitSegment))
 
                         elif DnsIP4SegTemplate.match(PeerIP):
                             #---------- IPv4 ----------
                             DnsSegment = int(PeerIP.split('.')[-1])
-                            self.__FastdKeyDict[FastdKey]['Dns4Seg'] = DnsSegment
 
-                            if DnsSegment != GitSegment:
-                                self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (DnsPeerID, DnsSegment, GitSegment))
-                                SegAssignDnsServer.ReplaceEntry(DnsPeerID, '%s%d' % (SegAssignIPv4Prefix, GitSegment))
+                            if self.__FastdKeyDict[FastdKey]['Dns4Seg'] is None:
+                                self.__FastdKeyDict[FastdKey]['Dns4Seg'] = GitSegment
+
+                                if DnsSegment != GitSegment:
+                                    self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
+                                    SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv4Prefix, GitSegment))
 
                         else:  # invalid IP-Address for SegAssign
-                            self.__alert('++ Invalid IP-Entry for NodeID %s: %s' % (DnsPeerID, PeerIP))
-                            SegAssignDnsServer.DelEntry(DnsPeerID, PeerIP)
+                            self.__alert('++ Invalid IP-Entry for NodeID %s: %s' % (PeerDnsName, PeerIP))
+                            SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
 
                 else:
-                    ErrorMsg = '++ Unknown DNS Node-Entry \"%s\" - these IPs will be deleted: ' % (DnsPeerID)
-                    for PeerIP in dicSegAssignZone[DnsPeerID]:
-                        SegAssignDnsServer.DelEntry(DnsPeerID, PeerIP)
+                    ErrorMsg = '++ Unknown DNS Node-Entry \"%s\" - these IPs will be deleted: ' % (PeerDnsName)
+                    for PeerIP in dicSegAssignZone[PeerDnsName]:
+                        SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
                         ErrorMsg += PeerIP + ' | '
 
                     self.__alert(ErrorMsg[:-3])
 
-            elif DnsPeerID != '@' and DnsPeerID != '*':
-                self.__alert('!! Invalid DNS Entry: \"%s\"' % (DnsPeerID))
+            elif PeerDnsName != '@' and PeerDnsName != '*':
+                self.__alert('!! Invalid DNS Entry: \"%s\"' % (PeerDnsName))
 
 
         #---------- Check Git for missing DNS entries ----------
@@ -1006,22 +1010,20 @@ class ffGatewayInfo:
             GitSegment = int(self.__FastdKeyDict[PeerKey]['KeyDir'][3:])
 
             if self.__FastdKeyDict[PeerKey]['Dns6Seg'] is None:
-                self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
+                self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'], self.__FastdKeyDict[PeerKey]['PeerMAC'], self.__FastdKeyDict[PeerKey]['PeerName']))
                 PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix, GitSegment)
                 self.__FastdKeyDict[PeerKey]['Dns6Seg'] = GitSegment
 
                 if not self.AnalyseOnly:
-                    SegAssignDnsServer.AddEntry(DnsPeerID, PeerDnsIPv6)
-                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName, PeerDnsIPv6))
+                    SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv6)
 
             if self.__FastdKeyDict[PeerKey]['Dns4Seg'] is None:
-                self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'],self.__FastdKeyDict[PeerKey]['PeerMAC'],self.__FastdKeyDict[PeerKey]['PeerName']))
-                PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,GitSegment)
+                self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'], self.__FastdKeyDict[PeerKey]['PeerMAC'], self.__FastdKeyDict[PeerKey]['PeerName']))
+                PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix, GitSegment)
                 self.__FastdKeyDict[PeerKey]['Dns4Seg'] = GitSegment
 
                 if not self.AnalyseOnly:
-                    SegAssignDnsServer.AddEntry(DnsPeerID, PeerDnsIPv4)
-                    print('>>> Adding Peer to DNS: %s -> %s' % (PeerDnsName, PeerDnsIPv4))
+                    SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv4)
 
 
         if not SegAssignDnsServer.CommitChanges():
@@ -1037,13 +1039,13 @@ class ffGatewayInfo:
     def __SetupPeerDnsDict(self):
 
         for PeerKey in self.__FastdKeyDict:
-       	    PeerDnsID = self.__FastdKeyDict[PeerKey]['DnsName']
+       	    PeerDnsName = self.__FastdKeyDict[PeerKey]['DnsName']
 
-            if PeerDnsID in self.__PeerDnsDict:
-                self.__alert('!! Duplicate DNS-ID: %s' % (PeerDnsID))
+            if PeerDnsName in self.__PeerDnsDict:
+                self.__alert('!! Duplicate DNS-ID: %s' % (PeerDnsName))
                 self.AnalyseOnly = True
 
-            self.__PeerDnsDict[PeerDnsID] = PeerKey
+            self.__PeerDnsDict[PeerDnsName] = PeerKey
 
         return
 

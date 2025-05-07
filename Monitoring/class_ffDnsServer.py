@@ -256,6 +256,8 @@ class ffDnsServer:
                 self.__DnsUpdate.add(sName, DnsCacheTime, 'AAAA', sIP)
             else:
                 self.__DnsUpdate.add(sName, DnsCacheTime, 'A', sIP)
+
+            print('>>> Adding Peer to DNS: %s -> %s' % (sName, sIP))
         return
 
 
@@ -273,6 +275,7 @@ class ffDnsServer:
             else:
                 self.__DnsUpdate.delete(sName, 'A', sIP)
 
+            print('>>> Deleting Peer from DNS: %s -> %s' % (sName, sIP))
         return
 
 
@@ -290,6 +293,7 @@ class ffDnsServer:
             else:
                 self.__DnsUpdate.replace(sName, DnsCacheTime, 'A', sIP)
 
+            print('>>> Replacing IP of Peer in DNS: %s -> %s' % (sName, sIP))
         return
 
 
