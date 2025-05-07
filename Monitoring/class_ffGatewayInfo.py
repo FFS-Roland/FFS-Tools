@@ -968,23 +968,21 @@ class ffGatewayInfo:
                             #---------- IPv6 ----------
                             DnsSegment = int(PeerIP.split(':')[-1].zfill(1))
 
-                            if self.__FastdKeyDict[FastdKey]['Dns6Seg'] is None:
-                                self.__FastdKeyDict[FastdKey]['Dns6Seg'] = GitSegment
-
-                                if DnsSegment != GitSegment:
-                                    self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
-                                    SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv6Prefix, GitSegment))
+                            if DnsSegment == GitSegment:
+                                self.__FastdKeyDict[FastdKey]['Dns6Seg'] = DnsSegment
+                            else:
+                                self.__alert('++ Segment mismatch for NodeID %s: DNSv6 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
+                                SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
 
                         elif DnsIP4SegTemplate.match(PeerIP):
                             #---------- IPv4 ----------
                             DnsSegment = int(PeerIP.split('.')[-1])
 
-                            if self.__FastdKeyDict[FastdKey]['Dns4Seg'] is None:
-                                self.__FastdKeyDict[FastdKey]['Dns4Seg'] = GitSegment
-
-                                if DnsSegment != GitSegment:
-                                    self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
-                                    SegAssignDnsServer.ReplaceEntry(PeerDnsName, '%s%d' % (SegAssignIPv4Prefix, GitSegment))
+                            if DnsSegment == GitSegment:
+                                self.__FastdKeyDict[FastdKey]['Dns4Seg'] = DnsSegment
+                            else:
+                                self.__alert('++ Segment mismatch for NodeID %s: DNSv4 = %d / Git = %d' % (PeerDnsName, DnsSegment, GitSegment))
+                                SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
 
                         else:  # invalid IP-Address for SegAssign
                             self.__alert('++ Invalid IP-Entry for NodeID %s: %s' % (PeerDnsName, PeerIP))
@@ -1000,6 +998,7 @@ class ffGatewayInfo:
 
             elif PeerDnsName != '@' and PeerDnsName != '*':
                 self.__alert('!! Invalid DNS Entry: \"%s\"' % (PeerDnsName))
+#                SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
 
 
         #---------- Check Git for missing DNS entries ----------
@@ -1012,18 +1011,14 @@ class ffGatewayInfo:
             if self.__FastdKeyDict[PeerKey]['Dns6Seg'] is None:
                 self.__alert('!! DNSv6 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'], self.__FastdKeyDict[PeerKey]['PeerMAC'], self.__FastdKeyDict[PeerKey]['PeerName']))
                 PeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix, GitSegment)
+                SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv6)
                 self.__FastdKeyDict[PeerKey]['Dns6Seg'] = GitSegment
-
-                if not self.AnalyseOnly:
-                    SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv6)
 
             if self.__FastdKeyDict[PeerKey]['Dns4Seg'] is None:
                 self.__alert('!! DNSv4 Entry missing: %s -> %s = %s' % (self.__FastdKeyDict[PeerKey]['KeyFile'], self.__FastdKeyDict[PeerKey]['PeerMAC'], self.__FastdKeyDict[PeerKey]['PeerName']))
                 PeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix, GitSegment)
+                SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv4)
                 self.__FastdKeyDict[PeerKey]['Dns4Seg'] = GitSegment
-
-                if not self.AnalyseOnly:
-                    SegAssignDnsServer.AddEntry(PeerDnsName, PeerDnsIPv4)
 
 
         if not SegAssignDnsServer.CommitChanges():
