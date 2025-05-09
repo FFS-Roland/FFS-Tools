@@ -989,16 +989,12 @@ class ffGatewayInfo:
                             SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
 
                 else:
-                    ErrorMsg = '++ Unknown DNS Node-Entry \"%s\" - these IPs will be deleted: ' % (PeerDnsName)
-                    for PeerIP in dicSegAssignZone[PeerDnsName]:
-                        SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
-                        ErrorMsg += PeerIP + ' | '
-
-                    self.__alert(ErrorMsg[:-3])
+                    self.__alert('++ Unknown DNS Node-Entry will be deleted: %s' % (PeerDnsName))
+                    SegAssignDnsServer.DelName(PeerDnsName)
 
             elif PeerDnsName != '@' and PeerDnsName != '*':
-                self.__alert('!! Invalid DNS Entry: \"%s\"' % (PeerDnsName))
-#                SegAssignDnsServer.DelEntry(PeerDnsName, PeerIP)
+                self.__alert('!! Invalid DNS Entry: %s' % (PeerDnsName))
+#                SegAssignDnsServer.DelName(PeerDnsName)
 
 
         #---------- Check Git for missing DNS entries ----------

@@ -280,6 +280,21 @@ class ffDnsServer:
 
 
     #==============================================================================
+    # public function "DelName"
+    #
+    #    Delete all DNS-Entries related to sName
+    #
+    #==============================================================================
+    def DelName(self, sName):
+
+        if self.__DnsUpdate is not None:
+            self.__DnsUpdate.delete(sName)
+
+            print('>>> Deleting all Peer \"%s\" from DNS.' % (sName))
+        return
+
+
+    #==============================================================================
     # public function "ReplaceEntry"
     #
     #    Replace DNS-Entry
