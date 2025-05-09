@@ -18,30 +18,6 @@
 #      --blacklist = Path to Blacklisting Files                                           #
 #                                                                                         #
 ###########################################################################################
-#                                                                                         #
-#  Copyright (c) 2017-2023, Roland Volkmann <roland.volkmann@t-online.de>                 #
-#  All rights reserved.                                                                   #
-#                                                                                         #
-#  Redistribution and use in source and binary forms, with or without                     #
-#  modification, are permitted provided that the following conditions are met:            #
-#    1. Redistributions of source code must retain the above copyright notice,            #
-#       this list of conditions and the following disclaimer.                             #
-#    2. Redistributions in binary form must reproduce the above copyright notice,         #
-#       this list of conditions and the following disclaimer in the documentation         #
-#       and/or other materials provided with the distribution.                            #
-#                                                                                         #
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"            #
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE              #
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE         #
-#  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE           #
-#  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL             #
-#  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR             #
-#  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER             #
-#  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,          #
-#  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE          #
-#  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                   #
-#                                                                                         #
-###########################################################################################
 
 import os
 import subprocess
@@ -56,15 +32,6 @@ import smtplib
 
 from email.mime.text import MIMEText
 
-import dns.resolver
-import dns.query
-import dns.zone
-import dns.tsigkeyring
-import dns.update
-
-from dns.rdataclass import *
-from dns.rdatatype import *
-
 import urllib.request
 import json
 import re
@@ -72,14 +39,14 @@ import hashlib
 import fcntl
 import argparse
 
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
 from glob import glob
+
+from class_ffLocation import *
+from class_ffDnsServer import *
 
 
 #----- Needed Data-Files -----
 AccountFileName = '.Accounts.json'
-ZipGridName     = 'ZipGrid.json'       # Grid of ZIP Codes from Baden-Wuerttemberg
 
 #----- Global Constants -----
 CPE_SAFE_GLUON           = '1.4+2018-06-24'
@@ -93,9 +60,6 @@ NODETYPE_MTU_1340        = 4    # Gluon >= 1.3+2017-09-13
 NODETYPE_MCAST_ff05      = 5    # Gluon >= 1.4+2017-12-12
 
 SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
-SegAssignIPv4Prefix = '198.18.190.'
-SegAssignIPv6Prefix = '2001:2:0:711::'
-
 
 RESPONDD_PORT    = 1001
 RESPONDD_TIMEOUT = 5.0
@@ -106,8 +70,6 @@ GwMacTemplate    = re.compile('^02:00:((0a)|(3[1-9]))(:[0-9a-f]{2}){3}')
 LocationTemplate = re.compile('[0-9]{1,2}[.][0-9]{1,}')
 ZipTemplate      = re.compile('^[0-9]{5}$')
 DnsNodeTemplate  = re.compile('^ffs(-[0-9a-f]{12}){2}$')
-DnsIP4SegTemplate   = re.compile('^'+SegAssignIPv4Prefix+'[0-9]{1,2}$')
-DnsIP6SegTemplate   = re.compile('^'+SegAssignIPv6Prefix+'(([0-9a-f]{1,4}:){1,2})?[0-9]{1,2}$')
 
 
 BadNameTemplate  = re.compile('.*[|/\\<>]+.*')
@@ -681,193 +643,58 @@ def getBatmanSegment(BatmanIF):
     return BatSeg
 
 
-
-#-------------------------------------------------------------
-# function "SetupZipAreaData"
-#
-#     ZipFileDict -> Dictionary of ZIP-Area Files
-#
-#-------------------------------------------------------------
-def SetupZipAreaData(GitPath):
-
-    print('Setting up ZIP-Area Data ...')
-
-    ZipAreaFiles = glob(os.path.join(GitPath,'vpn*/zip-areas/?????_*.json'))
-    ZipFileDict  = {}
-
-    for FileName in ZipAreaFiles:
-        ZipCode = os.path.basename(FileName)[:5]
-        ZipFileDict[ZipCode] = { 'FileName':FileName, 'Area':os.path.basename(FileName).split(".")[0], 'Segment':int(FileName.split("/")[-3][3:]) }
-
-    if len(ZipFileDict) < 10:
-        print('!! ERROR on registering ZIP-Areas:',len(ZipFileDict),'\n')
-        ZipFileDict = None
-    else:
-        print('... ZIP-Areas registered: %d' % (len(ZipFileDict)))
-
-    return ZipFileDict
-
-
-
-#-------------------------------------------------------------
-# function "SetupZipGridData"
-#
-#     ZipGridDict -> Grid with ZIP-Codes
-#
-#-------------------------------------------------------------
-def SetupZipGridData(DatabasePath):
-
-    print('Setting up ZIP-Grid Data ...')
-
-    ZipGridDict = None
-    FieldCount  = 0
-
-    try:
-        with open(os.path.join(DatabasePath,ZipGridName), mode='r') as ZipGridFile:
-            ZipGridDict = json.load(ZipGridFile)
-    except:
-        print('!! ERROR on setting up ZIP-Grid Data')
-        ZipGridDict = None
-    else:
-        FieldCount = len(ZipGridDict['Fields'])
-
-        lon_min = float(ZipGridDict['Meta']['lon_min'])
-        lon_max = float(ZipGridDict['Meta']['lon_max'])
-        lat_min = float(ZipGridDict['Meta']['lat_min'])
-        lat_max = float(ZipGridDict['Meta']['lat_max'])
-
-        ZipGridDict['Meta']['lon_scale'] = float(ZipGridDict['Meta']['lon_fields']) / (lon_max - lon_min)
-        ZipGridDict['Meta']['lat_scale'] = float(ZipGridDict['Meta']['lat_fields']) / (lat_max - lat_min)
-
-    print('... ZIP-Fields loaded: %d' % (FieldCount))
-    return ZipGridDict
-
-
-
-#-------------------------------------------------------------
-# function "GetZipSegmentFromGPS"
-#
-#     Get Segment from GPS using ZIP-Areas
-#
-#-------------------------------------------------------------
-def GetZipSegmentFromGPS(lon, lat, ZipAreaDict, ZipGridDict):
-
-    ZipSegment = None
-
-    if lat is not None and lon is not None:
-        x = int((lon - float(ZipGridDict['Meta']['lon_min'])) * ZipGridDict['Meta']['lon_scale'])
-        y = int((lat - float(ZipGridDict['Meta']['lat_min'])) * ZipGridDict['Meta']['lat_scale'])
-
-        if ((x >= 0 and x < ZipGridDict['Meta']['lon_fields']) and
-            (y >= 0 and y < ZipGridDict['Meta']['lat_fields'])):
-
-            NodeLocation = Point(lon,lat)
-            FieldIndex = str(y*ZipGridDict['Meta']['lon_fields'] + x)
-
-            for ZipCode in ZipGridDict['Fields'][FieldIndex]:
-                ZipFileName = ZipAreaDict[ZipCode]['FileName']
-                ZipAreaJson = None
-
-                with open(ZipFileName,"r") as fp:
-                    ZipAreaJson = json.load(fp)
-
-                if "geometries" in ZipAreaJson:
-                    TrackBase = ZipAreaJson["geometries"][0]["coordinates"]
-                elif "coordinates" in ZipAreaJson:
-                    TrackBase = ZipJson["coordinates"]
-                else:
-                    TrackBase = None
-                    print('Problem parsing %s' % ZipFileName)
-                    continue
-
-                AreaMatch = 0
-
-                for Track in TrackBase:
-                    Shape = []
-
-                    for t in Track[0]:
-                        Shape.append( (t[0],t[1]) )
-
-                    ZipPolygon = Polygon(Shape)
-
-                    if ZipPolygon.intersects(NodeLocation):
-                        AreaMatch += 1
-
-                if AreaMatch == 1:
-                    ZipSegment = ZipAreaDict[ZipCode]['Segment']
-                    break
-
-    return ZipSegment
-
-
-
 #-----------------------------------------------------------------------
 # function "GetGeoSegment"
 #
 #   Get Segment from Regions
 #-----------------------------------------------------------------------
-def GetGeoSegment(Location, GitPath, DatabasePath):
+def GetGeoSegment(NodeLocation, GitPath, DatabasePath):
 
-    print('Get Segment from Position ...',Location)
+    print('Get Segment from Geo Position ...', NodeLocation)
 
-    ZipAreaDict = None
-    ZipGridDict = None
     GpsSegment  = None
     ZipSegment  = None
 
-    if Location is None:
-        print('... No Location available.')
-    else:
-#        print('*** Location =',Location)
-        ZipAreaDict = SetupZipAreaData(GitPath)
-        ZipGridDict = SetupZipGridData(DatabasePath)
+    if NodeLocation is None:
+        print('... No Geo Position available.')
+        return None
 
-        if ZipAreaDict is None or ZipGridDict is None:
-            print('!! No Region Data available !!!')
-            Location = None
+    ffLocationInfo = ffLocation(GitPath, DatabasePath)
 
-    if Location is not None:
-        if 'longitude' in Location and 'latitude' in Location:
-            lon = Location['longitude']
-            lat = Location['latitude']
+    if not ffLocationInfo.LocationDataOK():
+        print('!! No Region Data available !!!')
+        return None
 
-            if LocationTemplate.match(str(lat)) and LocationTemplate.match(str(lon)):
-                if lat < lon:
-                    lon = Location['latitude']
-                    lat = Location['longitude']
+    if 'longitude' in NodeLocation and 'latitude' in NodeLocation:
+        lon = NodeLocation['longitude']
+        lat = NodeLocation['latitude']
+        print('... Checking GPS Data (lat | lon):', str(lat), '|', str(lon))
 
-                while lat > 90.0:    # missing decimal separator
-                    lat /= 10.0
+        if LocationTemplate.match(str(lat)) and LocationTemplate.match(str(lon)):
+            (GpsZipCode, GpsRegion, GpsSegment) = ffLocationInfo.GetLocationDataFromGPS(lon, lat)
 
-                while lon > 70.0:    # missing decimal separator
-                    lon /= 10.0
+        if GpsSegment is None:
+            print('** Bad GPS Data - no GpsSegment available !!')
+        else:
+            print('>>> GpsSegment =', GpsSegment)
 
-                GpsSegment = GetZipSegmentFromGPS(lon,lat,ZipAreaDict,ZipGridDict)
+    if 'zip' in NodeLocation:
+        ZipCode = str(NodeLocation['zip'])[:5]
+        print('... Checking ZIP-Code', ZipCode)
 
-            else:
-                print('** Bad GPS Data:',str(lat),'|',str(lon))
+        if ZipTemplate.match(ZipCode):
+            (ZipRegion, ZipSegment) = ffLocationInfo.GetLocationDataFromZIP(ZipCode)
 
-        if 'zip' in Location:
-            ZipCode = str(Location['zip'])[:5]
-            print('... Checking ZIP-Code',ZipCode)
+            print('>>> ZipSegment =', ZipSegment)
 
-            if ZipTemplate.match(ZipCode):
-                if ZipCode in ZipAreaDict:
-                    ZipSegment = ZipAreaDict[ZipCode]['Segment']
-
-                print('>>> GpsSegment / ZipSegment =',GpsSegment,'/',ZipSegment)
-
-                if GpsSegment is not None:
-                    if ZipSegment is not None and ZipSegment != GpsSegment:
-                        print('!! Segment Mismatch GPS <> ZIP:',GpsSegment,'<>',ZipSegment)
-                elif ZipSegment is not None:
-                    GpsSegment = ZipSegment
-                    print('++ Segment set by ZIP-Code:',ZipSegment)
-            else:
-                print('... invalid ZIP-Code Format:',ZipCode)
-
-        if ZipSegment is None:
-            print('>>> GpsSegment =',GpsSegment)
+            if GpsSegment is not None:
+                if ZipSegment is not None and ZipSegment != GpsSegment:
+                    print('!! Segment Mismatch GPS <> ZIP:', GpsSegment, '<>', ZipSegment)
+            elif ZipSegment is not None:
+                GpsSegment = ZipSegment
+                print('++ Segment set by ZIP-Code:', ZipSegment)
+        else:
+            print('*** Invalid ZIP-Code Format:', ZipCode)
 
     return GpsSegment
 
@@ -937,7 +764,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 
     if PeerKey in GitInfo['Key']:
         if GitInfo['Key'][PeerKey] != NodeID:
-            print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'],GitInfo['Key'][PeerKey]))
+            print('++ Key already in use by other Node: vpn%02d / ffs-%s\n' % (GitInfo['NodeID'][GitInfo['Key'][PeerKey]]['Segment'], GitInfo['Key'][PeerKey]))
             return 0
 
     if NodeID in GitInfo['NodeID']:    # Node is known in Git ...
@@ -946,7 +773,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
         GitFixSeg   = GitInfo['NodeID'][NodeID]['fixed']
         GitNodeName = GitInfo['NodeID'][NodeID]['Hostname']
 
-        print('*** NodeID already in Git: vpn%02d / %s' % (GitSegment,NodeID))
+        print('>>> NodeID already in Git: vpn%02d / %s\n' % (GitSegment, NodeID))
 
         if GitFixSeg is not None:
             if PeerKey != GitKey and NodeInfo['Hostname'].lower() != GitNodeName.lower():
@@ -969,11 +796,11 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 print('... keeping current Segment = %02d ...' % (GitSegment))
 
             if NodeInfo['NodeType'] < NODETYPE_DNS_SEGASSIGN and NewSegment > 8:
-                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment,DEFAULT_SEGMENT))
+                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment, DEFAULT_SEGMENT))
                 NewSegment = DEFAULT_SEGMENT
 
         if PeerKey == GitKey and NewSegment == GitSegment:
-            print('++ Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment,NodeID,GitKey[:12]))
+            print('... Node is already registered: vpn%02d / ffs-%s-%s\n' % (GitSegment, NodeID, GitKey[:12]))
             return 0
 
         if PeerKey != GitKey:
@@ -986,7 +813,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 Action = 'NEW_KEY + NEW_SEGMENT'
 
     else:  # NodeID is not in Git ...
-        print('*** NodeID not in Git: %s' % (NodeID))
+        print('*** NodeID not in Git: %s\n' % (NodeID))
         Action = 'NEW_NODE'
 
         GitKey      = None
@@ -1001,20 +828,20 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                 NewSegment = DEFAULT_SEGMENT
                 print('... setting default Segment = %02d ...' % (DEFAULT_SEGMENT))
             elif NodeInfo['NodeType'] < NODETYPE_DNS_SEGASSIGN and NewSegment > 8:
-                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment,DEFAULT_SEGMENT))
+                print('... replacing regular Segment %02d with default = %02d ...' % (NewSegment, DEFAULT_SEGMENT))
                 NewSegment = DEFAULT_SEGMENT
         else:
             print('>>> Node is meshing in segment %02d.' % (NewSegment))
 
 
     #========== Actions depending of Situation ==========
-    NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment,NodeInfo['NodeID'])
-    NewPeerDnsName = 'ffs-%s-%s' % (NodeID,PeerKey[:12])
-    NewPeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix,NewSegment)
-    NewPeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix,NewSegment)
+    NewPeerFile    = 'vpn%02d/peers/ffs-%s' % (NewSegment, NodeInfo['NodeID'])
+    NewPeerDnsName = 'ffs-%s-%s' % (NodeID, PeerKey[:12])
+    NewPeerDnsIPv6 = '%s%d' % (SegAssignIPv6Prefix, NewSegment)
+    NewPeerDnsIPv4 = '%s%d' % (SegAssignIPv4Prefix, NewSegment)
 
     print('\n>>> Action = %s' % (Action))
-    print('>>> New Peer Data: %s = %s -> %s' % (NewPeerDnsName,NewPeerFile,NewPeerDnsIPv6))
+    print('>>> New Peer Data: %s = %s -> %s' % (NewPeerDnsName, NewPeerFile, NewPeerDnsIPv6))
 
     try:
         #----- Synchronizing Git Acccess -----
@@ -1025,82 +852,77 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
 #        print('>>> lock is set.')
 
         #----- Handling registration -----
-        DnsResolver = dns.resolver.Resolver()
-        DnsServerIP = DnsResolver.query('%s.' % (AccountsDict['DNS']['Server']),'a')[0].to_text()
-#        print('... DNS-Server IP =',DnsServerIP)
-
-        DnsKeyRing = dns.tsigkeyring.from_text( {AccountsDict['DNS']['ID'] : AccountsDict['DNS']['Key']} )
-        DnsUpdate  = dns.update.Update(SEGASSIGN_DOMAIN, keyring = DnsKeyRing, keyname = AccountsDict['DNS']['ID'], keyalgorithm = 'hmac-sha512')
-
         GitRepo   = git.Repo(GitPath)
         GitIndex  = GitRepo.index
         GitOrigin = GitRepo.remotes.origin
 
-        if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or DnsUpdate is None:
+        SegAssignDnsServer = ffDnsServer(SEGASSIGN_DOMAIN, AccountsDict['DNS'])
+
+        if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or SegAssignDnsServer.ReadOnly:
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
 
         else:  # Git and DNS ready for registering node ...
 
             if GitKey is None:    # new Node
-                if not os.path.exists(os.path.join(GitPath,NewPeerFile)):
-                    WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, None, PeerKey)
+                if not os.path.exists(os.path.join(GitPath, NewPeerFile)):
+                    WriteNodeKeyFile(os.path.join(GitPath, NewPeerFile), NodeInfo, None, PeerKey)
                     GitIndex.add([NewPeerFile])
-                    DnsUpdate.replace(NewPeerDnsName, 120,'AAAA',NewPeerDnsIPv6)
-                    DnsUpdate.replace(NewPeerDnsName, 120,'A',   NewPeerDnsIPv4)
 
-                    print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment,NodeInfo['NodeID'],NodeInfo['Hostname'],PeerKey[:12]))
+                    SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv6)
+                    SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv4)
+
+                    print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment, NodeInfo['NodeID'], NodeInfo['Hostname'], PeerKey[:12]))
                     NeedCommit = True
 
                 else:
                     print('... Key File was already added by other process.')
 
             else:    # existing Node
-                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment,NodeID)
-                OldPeerDnsName = 'ffs-%s-%s' % (NodeID,GitKey[:12])
-                print('>>> Existing Peer Data: %s = %s' %(OldPeerDnsName,OldPeerFile))
+                OldPeerFile    = 'vpn%02d/peers/ffs-%s' % (GitSegment, NodeID)
+                OldPeerDnsName = 'ffs-%s-%s' % (NodeID, GitKey[:12])
+                print('>>> Existing Peer Data: %s = %s' %(OldPeerDnsName, OldPeerFile))
 
-                if os.path.exists(os.path.join(GitPath,OldPeerFile)):
+                if os.path.exists(os.path.join(GitPath, OldPeerFile)):
                     if NewSegment != GitSegment:
                         GitIndex.remove([OldPeerFile])
-                        os.rename(os.path.join(GitPath,OldPeerFile), os.path.join(GitPath,NewPeerFile))
-                        print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment,NodeInfo['MAC'],NodeInfo['Hostname']))
+                        os.rename(os.path.join(GitPath, OldPeerFile), os.path.join(GitPath, NewPeerFile))
+                        print('*** New Segment for existing Node: vpn%02d -> vpn%02d / %s = \"%s\"' % (GitSegment, NewSegment, NodeInfo['MAC'], NodeInfo['Hostname']))
 
                     if PeerKey != GitKey:
-                        print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey[:12]))
+                        print('*** New Key for existing Node: vpn%02d / %s = \"%s\" -> %s...' % (NewSegment, NodeInfo['MAC'], NodeInfo['Hostname'], PeerKey[:12]))
 
                     WriteNodeKeyFile(os.path.join(GitPath,NewPeerFile), NodeInfo, GitFixSeg, PeerKey)
                     GitIndex.add([NewPeerFile])
                     NeedCommit = True
 
                     if NewPeerDnsName != OldPeerDnsName:
-                        DnsUpdate.delete(OldPeerDnsName)
-                        DnsUpdate.add(NewPeerDnsName, 120, 'AAAA', NewPeerDnsIPv6)
-                        DnsUpdate.add(NewPeerDnsName, 120, 'A',    NewPeerDnsIPv4)
+                        SegAssignDnsServer.DelName(OldPeerDnsName)
+                        SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv6)
+                        SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv4)
                     else:
-                        DnsUpdate.replace(NewPeerDnsName, 120, 'AAAA', NewPeerDnsIPv6)
-                        DnsUpdate.replace(NewPeerDnsName, 120, 'A',    NewPeerDnsIPv4)
+                        SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv6)
+                        SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv4)
                 else:
                     print('... Key File was already changed by other process.')
 
             if NeedCommit:
-                GitIndex.commit('Onboarding (%s) of %s = \"%s\" in Segment %02d' % (Action,NodeInfo['MAC'],NodeInfo['Hostname'],NewSegment))
-                GitOrigin.config_writer.set('url',AccountsDict['Git']['URL'])
+                GitIndex.commit('Onboarding (%s) of %s = \"%s\" in Segment %02d' % (Action, NodeInfo['MAC'], NodeInfo['Hostname'], NewSegment))
+                GitOrigin.config_writer.set('url', AccountsDict['Git']['URL'])
                 print('... doing Git pull ...')
                 GitOrigin.pull()
                 print('... doing Git push ...')
                 GitOrigin.push()
 
-                if len(DnsUpdate.index) > 1:
-                    print('... doing DNS update ...')
-                    dns.query.tcp(DnsUpdate,DnsServerIP)
+                if not SegAssignDnsServer.CommitChanges():
+                    print('+++ DNS update failed !!')
 
-                MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action,NewSegment,NodeInfo['MAC'],NodeInfo['Hostname'],PeerKey)
+                MailBody = 'Automatic Onboarding (%s) in Segment %02d:\n\n#MAC: %s\n#Hostname: %s\nkey \"%s\";\n' % (Action, NewSegment, NodeInfo['MAC'], NodeInfo['Hostname'], PeerKey)
                 print(MailBody)
 
-                SendEmail('Onboarding of Node \"%s\" by %s' % (NodeInfo['Hostname'],socket.gethostname()), MailBody, AccountsDict['KeyMail'])
+                SendEmail('Onboarding of Node \"%s\" by %s' % (NodeInfo['Hostname'], socket.gethostname()), MailBody, AccountsDict['KeyMail'])
 
     except:
-        print('!!! ERROR on registering Node:',Action)
+        print('!!! ERROR on registering Node:', Action)
         ErrorCode = 1
 
     finally:
@@ -1153,18 +975,18 @@ def SendEmail(Subject, MailBody, Account):
             Email['To']      = Account['MailTo']
             Email['Bcc']     = Account['MailBCC']
 
-            server = smtplib.SMTP(host=Account['Server'],port=Account['Port'],timeout=5)
+            server = smtplib.SMTP(host=Account['Server'], port=Account['Port'], timeout=5)
 
             if (Account['Password'] != ''):
                 server.starttls()
-                server.login(Account['Username'],Account['Password'])
+                server.login(Account['Username'], Account['Password'])
 
             server.send_message(Email)
             server.quit()
-            print('\nEmail was sent to',Account['MailTo'])
+            print('\nEmail was sent to', Account['MailTo'])
 
         except:
-            print('!! ERROR on sending Email to',Account['MailTo'])
+            print('!! ERROR on sending Email to', Account['MailTo'])
 
     return
 
@@ -1176,13 +998,13 @@ def SendEmail(Subject, MailBody, Account):
 #
 #=======================================================================
 parser = argparse.ArgumentParser(description='Add or Modify Freifunk Node Registration')
-parser.add_argument('--pid', dest='FASTDPID', action='store', required=True, help='Fastd PID')
-parser.add_argument('--mtu', dest='FASTDMTU', action='store', required=True, help='Fastd MTU')
-parser.add_argument('--fastd', dest='VPNIF', action='store', required=True, help='Fastd Interface')
-parser.add_argument('--batman', dest='BATIF', action='store', required=True, help='Batman Interface')
-parser.add_argument('--peerkey', dest='PEERKEY', action='store', required=True, help='Fastd PeerKey')
-parser.add_argument('--gitrepo', dest='GITREPO', action='store', required=True, help='Git Repository with KeyFiles')
-parser.add_argument('--data', dest='DATAPATH', action='store', required=True, help='Path to Databases')
+parser.add_argument('--pid',       dest='FASTDPID',  action='store', required=True, help='Fastd PID')
+parser.add_argument('--mtu',       dest='FASTDMTU',  action='store', required=True, help='Fastd MTU')
+parser.add_argument('--fastd',     dest='VPNIF',     action='store', required=True, help='Fastd Interface')
+parser.add_argument('--batman',    dest='BATIF',     action='store', required=True, help='Batman Interface')
+parser.add_argument('--peerkey',   dest='PEERKEY',   action='store', required=True, help='Fastd PeerKey')
+parser.add_argument('--gitrepo',   dest='GITREPO',   action='store', required=True, help='Git Repository with KeyFiles')
+parser.add_argument('--data',      dest='DATAPATH',  action='store', required=True, help='Path to Databases')
 parser.add_argument('--blacklist', dest='BLACKLIST', action='store', required=True, help='Blacklist Folder')
 
 args = parser.parse_args()
@@ -1191,15 +1013,15 @@ FastdPID = int(args.FASTDPID)
 FastdMTU = int(args.FASTDMTU)
 RetCode  = 0
 
-print('Onboarding of',PeerKey,'started with PID =',psutil.Process().pid,'/ MTU =',FastdMTU,'...')
-BlacklistFile = os.path.join(args.BLACKLIST,PeerKey)
+print('Onboarding of', PeerKey, 'started with PID =', psutil.Process().pid, '/ MTU =', FastdMTU, '...')
+BlacklistFile = os.path.join(args.BLACKLIST, PeerKey)
 
 if os.path.exists(BlacklistFile):
-    print('!! ERROR: Node is blacklisted:',PeerKey)
+    print('!! ERROR: Node is blacklisted:', PeerKey)
 else:
     setBlacklistFile(BlacklistFile)
 
-    AccountsDict = LoadAccounts(os.path.join(args.DATAPATH,AccountFileName))
+    AccountsDict = LoadAccounts(os.path.join(args.DATAPATH, AccountFileName))
     GitDataDict = LoadGitInfo(args.GITREPO)
     FastdStatusSocket = getFastdStatusSocket(FastdPID)
 
@@ -1211,17 +1033,17 @@ else:
         if FastdMAC is None:
             print('++ fastd-MAC is not available!')
         else:
-            print('... fastd-MAC =',FastdMAC)
+            print('... fastd-MAC =', FastdMAC)
 
-            BatmanVpnMAC = ActivateBatman(args.BATIF,args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
+            BatmanVpnMAC = ActivateBatman(args.BATIF, args.VPNIF)    # using "batctl n" (Neighbor) to get VPN-MAC
 
             if BatmanVpnMAC is None:
                 print('++ No valid Batman connection to Node!')
             elif BatmanVpnMAC != FastdMAC:
-                print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):',BatmanVpnMAC,'<>',FastdMAC)
+                print('++ Invalid Node due to mismatch of mesh-vpn MAC (Batman <> Fastd):', BatmanVpnMAC, '<>', FastdMAC)
             else:
-                print('... Batman and fastd match on mesh-vpn MAC:',BatmanVpnMAC)
-                NodeInfoDict = getNodeInfos(FastdMAC,args.VPNIF,FastdMTU,args.BATIF)    # Info of Node via Respondd
+                print('... Batman and fastd match on mesh-vpn MAC:', BatmanVpnMAC)
+                NodeInfoDict = getNodeInfos(FastdMAC, args.VPNIF, FastdMTU, args.BATIF)    # Info of Node via Respondd
 
                 if NodeInfoDict is None:
                     print('++ Node information not available or inconsistent!')
@@ -1241,8 +1063,8 @@ else:
 
                     RetCode = RegisterNode(PeerKey, NodeInfoDict, GitDataDict, args.GITREPO, args.DATAPATH, AccountsDict)
 
-            DeactivateBatman(args.BATIF,args.VPNIF)
+            DeactivateBatman(args.BATIF, args.VPNIF)
 
-os.kill(FastdPID,signal.SIGUSR2)    # reset fastd connections
+os.kill(FastdPID, signal.SIGUSR2)    # reset fastd connections
 
 exit(RetCode)
