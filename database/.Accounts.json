@@ -4,11 +4,6 @@
       "Username": "<user>",
       "Password": "<password>"
   },
-  "HopglassData":{
-      "URL": "<URL to raw.json>",
-      "Username": "<user>",
-      "Password": "<password>"
-  },
   "StatusMail":{
       "Server": "<SMTP-Server>",
       "Port": <Port>,
@@ -29,8 +24,10 @@
       "URL": "https://<user>:<password>@<URL to Git Repository>"
   },
   "DNS":{
-      "Server": "<DNS-Server>",
-      "ID": "<DNS-ID>",
-      "Key": "<DNS-Key>"
+      "GwDomain": "gw.freifunk-stuttgart.de",
+      "SegAssignDomain": "segassign.freifunk-stuttgart.de",
+      "NodeDomain": "nodes.freifunk-stuttgart.de",
+      "ID": "<DNS-Server ID>",
+      "Key": "<DNS-Server Key>"
   }
 }
