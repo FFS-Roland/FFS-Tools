@@ -63,8 +63,24 @@ def __LoadAccounts(AccountFile):
         AccountJsonFile.close()
 
     except:
-        print('\n!! Error on Reading Accounts json-File!\n')
+        print('\n++ Error on Reading Accounts json-File!\n')
         AccountsDict = None
+
+    else:
+        if ('YanicData' not in AccountsDict
+         or 'StatusMail' not in AccountsDict
+         or 'Git' not in AccountsDict
+         or 'DNS' not in AccountsDict):
+            print('\n++ Missing entries in Accounts json-File!\n')
+            AccountsDict = None
+
+        elif ('GwDomain' not in AccountsDict['DNS']
+         or 'SegAssignDomain' not in AccountsDict['DNS']
+         or 'NodeDomain' not in AccountsDict['DNS']
+         or 'ID' not in AccountsDict['DNS']
+         or 'Key' not in AccountsDict['DNS']):
+            print('\n++ Missing DNS-Server entries in Accounts json-File!\n')
+            AccountsDict = None
 
     return AccountsDict
 
@@ -123,7 +139,9 @@ if AccountsDict is None:
 
 
 
-print('====================================================================================\n\nSetting up Gateway Data ...\n')
+print('====================================================================================\n')
+print('Setting up Gateway Data ...\n')
+
 ffsGWs = ffGatewayInfo(args.GITREPO, AccountsDict['DNS'])
 
 ffsGWs.CheckGatewayDnsServer()
@@ -134,14 +152,18 @@ GwSegmentList = ffsGWs.GetSegmentList()
 GwUplinkInfos = ffsGWs.GetNodeUplinkInfos()
 
 
-print('====================================================================================\n\nSetting up Node Data ...\n')
+print('====================================================================================\n')
+print('Setting up Node Data ...\n')
+
 ffsNodes = ffNodeInfo(AccountsDict, args.GITREPO, args.DATAPATH)
 
 ffsNodes.AddUplinkInfos(GwUplinkInfos)
 ffsNodes.DumpMacTable(os.path.join(args.LOGPATH, MacTableFile))
 
 
-print('====================================================================================\n\nSetting up Location Data ...\n')
+print('====================================================================================\n')
+print('Setting up Location Data ...\n')
+
 ffsLocationInfo = ffLocation(args.GITREPO, args.DATAPATH)
 
 if not ffsNodes.SetDesiredSegments(ffsLocationInfo):
@@ -151,7 +173,9 @@ if not ffsNodes.SetDesiredSegments(ffsLocationInfo):
 ffsNodes.CheckConsistency(GwSegmentList)
 
 
-print('====================================================================================\n\nSetting up Mesh Net Info ...\n')
+print('====================================================================================\n')
+print('Setting up Mesh Net Info ...\n')
+
 ffsNet = ffMeshNet(ffsNodes)
 
 ffsNet.CreateMeshCloudList()

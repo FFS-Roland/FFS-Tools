@@ -257,7 +257,7 @@ class ffDnsServer:
             else:
                 self.__DnsUpdate.add(sName, DnsCacheTime, 'A', sIP)
 
-            print('>>> Adding Peer to DNS: %s -> %s' % (sName, sIP))
+            print('>>> Adding DNS-Entry: %s -> %s' % (sName, sIP))
         return
 
 
@@ -270,27 +270,16 @@ class ffDnsServer:
     def DelEntry(self, sName, sIP):
 
         if self.__DnsUpdate is not None:
-            if ':' in sIP:
-                self.__DnsUpdate.delete(sName, 'AAAA', sIP)
+            if sIP is None:
+                self.__DnsUpdate.delete(sName)
+                print('>>> Deleting DNS-Name with all IPs: %s' % (sName))
             else:
-                self.__DnsUpdate.delete(sName, 'A', sIP)
+                if ':' in sIP:
+                    self.__DnsUpdate.delete(sName, 'AAAA', sIP)
+                else:
+                    self.__DnsUpdate.delete(sName, 'A', sIP)
 
-            print('>>> Deleting Peer from DNS: %s -> %s' % (sName, sIP))
-        return
-
-
-    #==============================================================================
-    # public function "DelName"
-    #
-    #    Delete all DNS-Entries related to sName
-    #
-    #==============================================================================
-    def DelName(self, sName):
-
-        if self.__DnsUpdate is not None:
-            self.__DnsUpdate.delete(sName)
-
-            print('>>> Deleting all Peer \"%s\" from DNS.' % (sName))
+                print('>>> Deleting DNS-Entry: %s -> %s' % (sName, sIP))
         return
 
 
@@ -308,7 +297,7 @@ class ffDnsServer:
             else:
                 self.__DnsUpdate.replace(sName, DnsCacheTime, 'A', sIP)
 
-            print('>>> Replacing IP of Peer in DNS: %s -> %s' % (sName, sIP))
+            print('>>> Replacing IP of DNS-Entry: %s -> %s' % (sName, sIP))
         return
 
 

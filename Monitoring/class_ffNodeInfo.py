@@ -50,12 +50,10 @@ BatmanMaxSegment   = 64             # Highest Segment Number for regular Batman 
 MinNodesCount      = 1000           # Minimum number of Nodes
 MaxDnsUpdates      = 100
 
-FreifunkNodeDomain = 'nodes.freifunk-stuttgart.de'
+NodeDbName         = 'NodeDict.json'      # Node Database
+NodeBackupName     = 'NodeBackupDB.json'  # Backup of Node Database
 
-NodeDbName     = 'NodeDict.json'      # Node Database
-NodeBackupName = 'NodeBackupDB.json'  # Backup of Node Database
-
-MacDictName    = 'MacDict.json'       # MAC Translation Dictionary
+MacDictName        = 'MacDict.json'       # MAC Translation Dictionary
 
 
 ffsIPv6Template        = re.compile('^fd21:b4dc:4b[0-9]{2}:0?:')
@@ -611,11 +609,6 @@ class ffNodeInfo:
     def __LoadYanicData(self):
 
         print('Loading raw.json from Yanic Server ...')
-
-        if 'YanicData' not in self.__AccountsDict:
-            self.__alert('++ Missing Account Data to access Yanic raw.json !!!\n')
-            self.AnalyseOnly = True
-            return False
 
         CurrentTime = int(time.time())
         InfoTime = 0
@@ -1253,6 +1246,7 @@ class ffNodeInfo:
     #=========================================================================
     def CheckNodesInDNS(self):
 
+        FreifunkNodeDomain = self.__AccountsDict['DNS']['NodeDomain']
         print('\nChecking DNS Zone \"%s\" ...' % (FreifunkNodeDomain))
         NodeDnsDict = {}
 

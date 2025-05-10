@@ -750,9 +750,6 @@ def WriteNodeKeyFile(KeyFileName, NodeInfo, GitFixSeg, PeerKey):
 #-----------------------------------------------------------------------
 def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict):
 
-    DnsKeyRing = None
-    DnsUpdate  = None
-
     NeedCommit = False
     Action     = None
     ErrorCode  = 0
@@ -896,7 +893,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     NeedCommit = True
 
                     if NewPeerDnsName != OldPeerDnsName:
-                        SegAssignDnsServer.DelName(OldPeerDnsName)
+                        SegAssignDnsServer.DelEntry(OldPeerDnsName, None)
                         SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv6)
                         SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv4)
                     else:

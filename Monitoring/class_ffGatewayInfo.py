@@ -51,9 +51,6 @@ from class_ffDnsServer import *
 MaxStatusAge        = 15 * 60        # 15 Minutes (in Seconds)
 MinGatewayCount     = 1              # minimum number of Gateways per Segment
 
-FreifunkGwDomain    = 'gw.freifunk-stuttgart.de'
-
-SegAssignDomain     = 'segassign.freifunk-stuttgart.de'
 SegAssignIPv4Prefix = '198.18.190.'
 SegAssignIPv6Prefix = '2001:2:0:711::'
 
@@ -219,6 +216,8 @@ class ffGatewayInfo:
     #
     #--------------------------------------------------------------------------
     def __GetGatewaysFromDNS(self):
+
+        FreifunkGwDomain = self.__DnsAccDict['GwDomain']
 
         print('Checking DNS for Gateway Instances: %s ...' % (FreifunkGwDomain))
 
@@ -943,6 +942,8 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckNodesInSegassignDNS(self):
 
+        SegAssignDomain = self.__DnsAccDict['SegAssignDomain']
+
         SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
         dicSegAssignZone = SegAssignDnsServer.GetDnsZone()
 
@@ -990,11 +991,11 @@ class ffGatewayInfo:
 
                 else:
                     self.__alert('++ Unknown DNS Node-Entry will be deleted: %s' % (PeerDnsName))
-                    SegAssignDnsServer.DelName(PeerDnsName)
+                    SegAssignDnsServer.DelEntry(PeerDnsName, None)
 
             elif PeerDnsName != '@' and PeerDnsName != '*':
                 self.__alert('!! Invalid DNS Entry: %s' % (PeerDnsName))
-#                SegAssignDnsServer.DelName(PeerDnsName)
+#                SegAssignDnsServer.DelEntry(PeerDnsName, None)
 
 
         #---------- Check Git for missing DNS entries ----------
@@ -1096,6 +1097,7 @@ class ffGatewayInfo:
             print('!! Git Account Data is not available!')
             return
 
+        SegAssignDomain = self.__DnsAccDict['SegAssignDomain']
         SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
 
         if SegAssignDnsServer.ReadOnly:
