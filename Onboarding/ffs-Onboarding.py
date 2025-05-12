@@ -1,23 +1,38 @@
 #!/usr/bin/python3
 
-###########################################################################################
-#                                                                                         #
-#  ffs-Onboarding.py                                                                      #
-#                                                                                         #
-#  Automatically registering unknown Nodes, and updating existing but changed Nodes.      #
-#                                                                                         #
-#  Parameter:                                                                             #
-#                                                                                         #
-#      --pid       = fastd-PID                                                            #
-#      --fastd     = fastd-Interface (e.g. vpnWW)                                         #
-#      --mtu       = fastd-MTU (e.g. 1340)                                                #
-#      --batman    = batman-Interface (e.g. batWW)                                        #
-#      --peerkey   = fastd-Key from Peer                                                  #
-#      --gitrepo   = Git Repository with KeyFiles                                         #
-#      --data      = Path to Databases                                                    #
-#      --blacklist = Path to Blacklisting Files                                           #
-#                                                                                         #
-###########################################################################################
+#################################################################################################
+#                                                                                               #
+#   ffs-Onboarding.py                                                                           #
+#                                                                                               #
+#   Automatically registering unknown Nodes, and updating existing but changed Nodes.           #
+#                                                                                               #
+#   Parameter:                                                                                  #
+#                                                                                               #
+#       --pid       = fastd-PID                                                                 #
+#       --fastd     = fastd-Interface (e.g. vpnWW)                                              #
+#       --mtu       = fastd-MTU (e.g. 1340)                                                     #
+#       --batman    = batman-Interface (e.g. batWW)                                             #
+#       --peerkey   = fastd-Key from Peer                                                       #
+#       --gitrepo   = Git Repository with KeyFiles                                              #
+#       --data      = Path to Databases                                                         #
+#       --blacklist = Path to Blacklisting Files                                                #
+#                                                                                               #
+#################################################################################################
+#                                                                                               #
+#   Copyright (C) 2025  Freifunk Stuttgart e.V.                                                 #
+#                                                                                               #
+#   This program is free software: you can redistribute it and/or modify it under the terms     #
+#   of the GNU General Public License as published by the Free Software Foundation, either      #
+#   version 3 of the License, or (at your option) any later version.                            #
+#                                                                                               #
+#   This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;   #
+#   without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.   #
+#   See the GNU General Public License for more details.                                        #
+#                                                                                               #
+#   You should have received a copy of the GNU General Public License along with this program.  #
+#   If not, see <https://www.gnu.org/licenses/>.                                                #
+#                                                                                               #
+#################################################################################################
 
 import os
 import subprocess
@@ -100,7 +115,6 @@ def LoadAccounts(AccountFile):
     return AccountsDict
 
 
-
 #-----------------------------------------------------------------------
 # function "LoadGitInfo"
 #
@@ -176,7 +190,6 @@ def LoadGitInfo(GitPath):
     return GitDataDict
 
 
-
 #-----------------------------------------------------------------------
 # function "getFastdStatusSocket"
 #
@@ -198,7 +211,6 @@ def getFastdStatusSocket(pid):
                 break
 
     return fastdSocket
-
 
 
 #-----------------------------------------------------------------------
@@ -244,7 +256,6 @@ def getNodeFastdMAC(FastdStatusSocket):
             print('++ Error on getting fastd-MAC !!')
 
     return FastdMAC
-
 
 
 #-----------------------------------------------------------------------
@@ -295,7 +306,6 @@ def ActivateBatman(BatmanIF, FastdIF):
     return NeighborMAC
 
 
-
 #-----------------------------------------------------------------------
 # function "DeactivateBatman"
 #
@@ -313,7 +323,6 @@ def DeactivateBatman(BatmanIF, FastdIF):
         pass
 
     return
-
 
 
 #-----------------------------------------------------------------------
@@ -368,47 +377,6 @@ def GenerateGluonMACs(MainMAC):
     return GluonMacList
 
 
-
-#-----------------------------------------------------------------------
-# function "getNodeMACviaBatman"
-#
-#    -> NodeMAC
-#-----------------------------------------------------------------------
-def getNodeMACviaBatman(BatmanIF, FastdMAC):
-
-    print('Find Node MAC via Batman TG ...')
-    NodeMAC = None
-
-    try:
-        BatctlTG = subprocess.run(['/usr/sbin/batctl','meshif',BatmanIF,'tg'], stdout=subprocess.PIPE)
-        BatmanTransTable = BatctlTG.stdout.decode('utf-8')
-    except:
-        print('!! ERROR on Batman Translation Table of',BatmanIF)
-        BatmanTransTable = []
-
-    for TransItem in BatmanTransTable:
-        BatctlInfo = TransItem.replace('(',' ').replace(')',' ').split()
-
-        if len(BatctlInfo) == 9 and MacAdrTemplate.match(BatctlInfo[1]) and not GwMacTemplate.match(BatctlInfo[1]) and BatctlInfo[2] == '-1':
-            BatNodeMAC = BatctlInfo[1]
-            BatMeshMAC = BatctlInfo[5]
-
-            if BatMeshMAC[:16] == FastdMAC[:16]:
-                BatmanMacList = GenerateGluonMACs(BatNodeMAC)
-
-                if BatMeshMAC in BatmanMacList and FastdMAC in BatmanMacList:  # Data is from current Node
-                    if NodeMAC is None:
-                        print('++ Node found in Batman Translation Table: %s' % (BatNodeMAC))
-                        NodeMAC = BatNodeMAC
-                    else:
-                        print('!! Unknown MACs in Batman Translation Table: %s -> %s + %s' % (BatMeshMAC,NodeMAC,BatNodeMAC))
-                        NodeMAC = None
-                        break
-
-    return NodeMAC
-
-
-
 #-----------------------------------------------------------------------
 # function "InfoFromRespondd"
 #
@@ -445,7 +413,6 @@ def InfoFromRespondd(NodeMAC, NodeIF):
     return NodeJsonDict
 
 
-
 #-----------------------------------------------------------------------
 # function "GetNodeType"
 #
@@ -471,7 +438,6 @@ def GetNodeType(GluonVersion, FastdMTU):
             NodeType = NODETYPE_LEGACY
 
     return NodeType
-
 
 
 #-----------------------------------------------------------------------
@@ -571,7 +537,6 @@ def AnalyseNodeJson(NodeJson, NodeVpnMAC, FastdMTU):
     return NodeInfoDict
 
 
-
 #-----------------------------------------------------------------------
 # function "getNodeInfos"
 #
@@ -582,20 +547,12 @@ def getNodeInfos(FastdMAC, FastdIF, FastdMTU, BatmanIF):
     NodeJson = InfoFromRespondd(FastdMAC,FastdIF)
 
     if NodeJson is None:
-        print('++ No info via Respondd from VPN-Interface - Fallback to Batman TG ...')
-        NodeMAC = getNodeMACviaBatman(BatmanIF,FastdMAC)
-
-        if NodeMAC is not None:
-            NodeJson = InfoFromRespondd(NodeMAC,BatmanIF)
-
-    if NodeJson is None:
         print('++ No info via Respondd!')
         NodeInfoDict = None
     else:
         NodeInfoDict = AnalyseNodeJson(NodeJson,FastdMAC,FastdMTU)
 
     return NodeInfoDict
-
 
 
 #-----------------------------------------------------------------------
@@ -699,7 +656,6 @@ def GetGeoSegment(NodeLocation, GitPath, DatabasePath):
     return GpsSegment
 
 
-
 #-----------------------------------------------------------------------
 # function "WriteNodeKeyFile"
 #
@@ -718,7 +674,6 @@ def WriteNodeKeyFile(KeyFileName, NodeInfo, GitFixSeg, PeerKey):
     KeyFile.close()
     print('... done.')
     return
-
 
 
 #-----------------------------------------------------------------------
@@ -931,7 +886,6 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
         LockFile.close()
 
     return ErrorCode
-
 
 
 #-----------------------------------------------------------------------

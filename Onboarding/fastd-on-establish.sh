@@ -1,19 +1,35 @@
 #!/bin/bash
 
-###########################################################################################
-#                                                                                         #
-#  fastd-on-establis.sh                                                                   #
-#                                                                                         #
-#  This shell script is launched by fastd whenever a new connection is established.       #
-#  It will run python script "ffs-Onboarding.py" to handle unknown peers.                 #
-#                                                                                         #
-#  Available Environment Variables from fastd:                                            #
-#                                                                                         #
-#      $FASTD_PID  = PID of fastd Process launching this script                           #
-#      $INTERFACE  = fastd-Interface (e.g. vpn00)                                         #
-#      $PEER_KEY   = fastd-Key of Peer which is connected                                 #
-#                                                                                         #
-###########################################################################################
+#################################################################################################
+#                                                                                               #
+#   fastd-on-establis.sh                                                                        #
+#                                                                                               #
+#   This shell script is launched by fastd whenever a new connection is established.            #
+#   It will run python script "ffs-Onboarding.py" to handle unknown peers.                      #
+#                                                                                               #
+#   Available Environment Variables from fastd:                                                 #
+#                                                                                               #
+#       $FASTD_PID  = PID of fastd Process launching this script                                #
+#       $INTERFACE  = fastd-Interface (e.g. vpn00)                                              #
+#       $PEER_KEY   = fastd-Key of Peer which is connected                                      #
+#                                                                                               #
+#################################################################################################
+#                                                                                               #
+#   Copyright (C) 2025  Freifunk Stuttgart e.V.                                                 #
+#                                                                                               #
+#   This program is free software: you can redistribute it and/or modify it under the terms     #
+#   of the GNU General Public License as published by the Free Software Foundation, either      #
+#   version 3 of the License, or (at your option) any later version.                            #
+#                                                                                               #
+#   This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;   #
+#   without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.   #
+#   See the GNU General Public License for more details.                                        #
+#                                                                                               #
+#   You should have received a copy of the GNU General Public License along with this program.  #
+#   If not, see <https://www.gnu.org/licenses/>.                                                #
+#                                                                                               #
+#################################################################################################
+
 
 LOGDIR=/var/log/ffs/onboarder
 LOGFILE=${LOGDIR}/${INTERFACE}_$(date +%y%m%d)_established.log

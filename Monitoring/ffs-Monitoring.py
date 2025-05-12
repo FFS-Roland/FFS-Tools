@@ -1,24 +1,38 @@
 #!/usr/bin/python3
 
-###########################################################################################
-#                                                                                         #
-#  ffs-Monitoring.py                                                                      #
-#                                                                                         #
-#  Segment-Assignment of Nodes is monitored and corrected automatically if neccessary.    #
-#                                                                                         #
-#  Parameter:                                                                             #
-#                                                                                         #
-#       --gitrepo  = Git Repository with fastd KeyFiles                                   #
-#       --data     = Path to Databases                                                    #
-#       --logs     = Path to LogFiles                                                     #
-#                                                                                         #
-#  Needed json-Files from Webservers:                                                     #
-#                                                                                         #
-#       raw.json (Yanic)     -> Node Names and Information from Yanic                     #
-#       raw.json (Hopglass)  -> Node Names and Information from Hopglass-Server           #
-#       vpyXX.json           -> fastd Status-Files from Gateways                          #
-#                                                                                         #
-###########################################################################################
+#################################################################################################
+#                                                                                               #
+#   ffs-Monitoring.py                                                                           #
+#                                                                                               #
+#   Segment-Assignment of Nodes is monitored and corrected automatically if neccessary.         #
+#                                                                                               #
+#   Parameter:                                                                                  #
+#                                                                                               #
+#       --gitrepo  = Git Repository with fastd KeyFiles                                         #
+#       --data     = Path to Databases                                                          #
+#       --logs     = Path to LogFiles                                                           #
+#                                                                                               #
+#   Needed json-Files from Webservers:                                                          #
+#                                                                                               #
+#       raw.json    -> Node Names and Information from Yanic                                    #
+#       vpyXX.json  -> fastd Status-Files from Gateways                                         #
+#                                                                                               #
+#################################################################################################
+#                                                                                               #
+#   Copyright (C) 2025  Freifunk Stuttgart e.V.                                                 #
+#                                                                                               #
+#   This program is free software: you can redistribute it and/or modify it under the terms     #
+#   of the GNU General Public License as published by the Free Software Foundation, either      #
+#   version 3 of the License, or (at your option) any later version.                            #
+#                                                                                               #
+#   This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;   #
+#   without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.   #
+#   See the GNU General Public License for more details.                                        #
+#                                                                                               #
+#   You should have received a copy of the GNU General Public License along with this program.  #
+#   If not, see <https://www.gnu.org/licenses/>.                                                #
+#                                                                                               #
+#################################################################################################
 
 import os
 import time
