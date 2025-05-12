@@ -74,7 +74,10 @@ NODETYPE_DNS_SEGASSIGN   = 3    # Gluon >= 1.0+2017-02-14
 NODETYPE_MTU_1340        = 4    # Gluon >= 1.3+2017-09-13
 NODETYPE_MCAST_ff05      = 5    # Gluon >= 1.4+2017-12-12
 
-SEGASSIGN_DOMAIN = 'segassign.freifunk-stuttgart.de'
+SEGASSIGN_DOMAIN    = 'segassign.freifunk-stuttgart.de'
+SegAssignIPv4Prefix = '198.18.190.'
+SegAssignIPv6Prefix = '2001:2:0:711::'
+
 
 RESPONDD_PORT    = 1001
 RESPONDD_TIMEOUT = 5.0
