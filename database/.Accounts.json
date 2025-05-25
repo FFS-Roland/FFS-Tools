@@ -23,11 +23,20 @@
   "Git":{
       "URL": "https://<user>:<password>@<URL to Git Repository>"
   },
-  "DNS":{
+  "DNS":[
+    {
       "GwDomain": "gw.freifunk-stuttgart.de",
       "SegAssignDomain": "segassign.freifunk-stuttgart.de",
       "NodeDomain": "nodes.freifunk-stuttgart.de",
       "ID": "<DNS-Server ID>",
       "Key": "<DNS-Server Key>"
-  }
+    },
+    {
+      "GwDomain": "gw.freifunk-stuttgart.net",
+      "SegAssignDomain": "segassign.freifunk-stuttgart.net",
+      "NodeDomain": "nodes.freifunk-stuttgart.net",
+      "ID": "<DNS-Server ID>",
+      "Key": "<DNS-Server Key>"
+    }
+  ]
 }
