@@ -84,15 +84,16 @@ def __LoadAccounts(AccountFile):
         if ('YanicData' not in AccountsDict
          or 'StatusMail' not in AccountsDict
          or 'Git' not in AccountsDict
-         or 'DNS' not in AccountsDict):
+         or 'DNS' not in AccountsDict
+         or len(AccountsDict['DNS']) < 1):
             print('\n++ Missing entries in Accounts json-File!\n')
             AccountsDict = None
 
-        elif ('GwDomain' not in AccountsDict['DNS']
-         or 'SegAssignDomain' not in AccountsDict['DNS']
-         or 'NodeDomain' not in AccountsDict['DNS']
-         or 'ID' not in AccountsDict['DNS']
-         or 'Key' not in AccountsDict['DNS']):
+        elif ('GwDomain' not in AccountsDict['DNS'][0]
+         or 'SegAssignDomain' not in AccountsDict['DNS'][0]
+         or 'NodeDomain' not in AccountsDict['DNS'][0]
+         or 'ID' not in AccountsDict['DNS'][0]
+         or 'Key' not in AccountsDict['DNS'][0]):
             print('\n++ Missing DNS-Server entries in Accounts json-File!\n')
             AccountsDict = None
 
@@ -150,7 +151,6 @@ AccountsDict = __LoadAccounts(os.path.join(args.DATAPATH, AccountsFileName))  # 
 if AccountsDict is None:
     print('!! FATAL ERROR: Accounts not available!')
     exit(1)
-
 
 
 print('====================================================================================\n')

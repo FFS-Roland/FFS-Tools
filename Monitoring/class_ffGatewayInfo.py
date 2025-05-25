@@ -104,7 +104,7 @@ class ffGatewayInfo:
     #==========================================================================
     # Constructor
     #==========================================================================
-    def __init__(self, GitPath, DnsAccDict):
+    def __init__(self, GitPath, DnsAccDicts):
 
         # public Attributes
         self.Alerts       = []           # List of  Alert-Messages
@@ -112,7 +112,7 @@ class ffGatewayInfo:
 
         # private Attributes
         self.__GitPath     = GitPath
-        self.__DnsAccDict  = DnsAccDict  # DNS Account
+        self.__DnsAccDicts = DnsAccDicts # DNS Accounts
 
         self.__GatewayDict = {}          # GatewayDict[GwInstanceName] -> IPs, DnsSegments, BatmanSegments
         self.__SegmentDict = {}          # SegmentDict[SegmentNumber]  -> GwGitNames, GwDnsNames, GwBatNames, GwIPs
@@ -232,11 +232,11 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __GetGatewaysFromDNS(self):
 
-        FreifunkGwDomain = self.__DnsAccDict['GwDomain']
+        FreifunkGwDomain = self.__DnsAccDicts[0]['GwDomain']
 
         print('Checking DNS for Gateway Instances: %s ...' % (FreifunkGwDomain))
 
-        GwDnsServer = ffDnsServer(FreifunkGwDomain, self.__DnsAccDict)
+        GwDnsServer = ffDnsServer(FreifunkGwDomain, self.__DnsAccDicts[0])
         dicGwIPs = GwDnsServer.GetDnsZone()
 
         if dicGwIPs is None:
@@ -957,9 +957,9 @@ class ffGatewayInfo:
     #--------------------------------------------------------------------------
     def __CheckNodesInSegassignDNS(self):
 
-        SegAssignDomain = self.__DnsAccDict['SegAssignDomain']
+        SegAssignDomain = self.__DnsAccDicts[0]['SegAssignDomain']
 
-        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
+        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDicts[0])
         dicSegAssignZone = SegAssignDnsServer.GetDnsZone()
 
         if dicSegAssignZone is None:
@@ -1112,8 +1112,8 @@ class ffGatewayInfo:
             print('!! Git Account Data is not available!')
             return
 
-        SegAssignDomain = self.__DnsAccDict['SegAssignDomain']
-        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDict)
+        SegAssignDomain = self.__DnsAccDicts[0]['SegAssignDomain']
+        SegAssignDnsServer = ffDnsServer(SegAssignDomain, self.__DnsAccDicts[0])
 
         if SegAssignDnsServer.ReadOnly:
             self.__alert('!! ERROR: DNS cannot be updated !!')

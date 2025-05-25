@@ -1261,11 +1261,11 @@ class ffNodeInfo:
     #=========================================================================
     def CheckNodesInDNS(self):
 
-        FreifunkNodeDomain = self.__AccountsDict['DNS']['NodeDomain']
+        FreifunkNodeDomain = self.__AccountsDict['DNS'][0]['NodeDomain']
         print('\nChecking DNS Zone \"%s\" ...' % (FreifunkNodeDomain))
         NodeDnsDict = {}
 
-        NodesDnsServer = ffDnsServer(FreifunkNodeDomain, self.__AccountsDict['DNS'])
+        NodesDnsServer = ffDnsServer(FreifunkNodeDomain, self.__AccountsDict['DNS'][0])
         dicNodesZone = NodesDnsServer.GetDnsZone()
 
         if dicNodesZone is None:

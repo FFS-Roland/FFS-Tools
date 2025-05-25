@@ -811,7 +811,7 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
         GitIndex  = GitRepo.index
         GitOrigin = GitRepo.remotes.origin
 
-        SegAssignDnsServer = ffDnsServer(SEGASSIGN_DOMAIN, AccountsDict['DNS'])
+        SegAssignDnsServer = ffDnsServer(SEGASSIGN_DOMAIN, AccountsDict['DNS'][0])
 
         if GitRepo.is_dirty() or len(GitRepo.untracked_files) > 0 or SegAssignDnsServer.ReadOnly:
             print('!! The Git Repository and/or DNS are not clean - cannot register Node!')
@@ -823,8 +823,8 @@ def RegisterNode(PeerKey, NodeInfo, GitInfo, GitPath, DatabasePath, AccountsDict
                     WriteNodeKeyFile(os.path.join(GitPath, NewPeerFile), NodeInfo, None, PeerKey)
                     GitIndex.add([NewPeerFile])
 
-                    SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv6)
-                    SegAssignDnsServer.ReplaceEntry(NewPeerDnsName, NewPeerDnsIPv4)
+                    SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv6)
+                    SegAssignDnsServer.AddEntry(NewPeerDnsName, NewPeerDnsIPv4)
 
                     print('*** New Node: vpn%02d / ffs-%s = \"%s\" (%s...)' % (NewSegment, NodeInfo['NodeID'], NodeInfo['Hostname'], PeerKey[:12]))
                     NeedCommit = True
